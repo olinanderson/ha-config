@@ -1,0 +1,1147 @@
+###############################################################################
+#  A8-PRO ESPHome firmware – roof-fan / IR hub
+#  board: esp32dev  –  IR TX GPIO2  –  IR RX GPIO23
+###############################################################################
+
+esphome:
+  name: ag-pro
+  friendly_name: AG Pro
+
+esp32:
+  board: esp32dev
+  framework:
+    type: arduino
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Core
+# ─────────────────────────────────────────────────────────────────────────────
+logger:
+api:
+  encryption:
+    key: "eAfqYMbU14k/xiU515AOQpr2WZuqm863nUA/10X4MMg="
+ota:
+  - platform: esphome
+    password: "bf7d55d33d30d31978cd24480bfebecf"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  manual_ip:
+    static_ip: 192.168.10.61
+    gateway: 192.168.10.1
+    subnet: 255.255.255.0
+  ap:
+    ssid: "AG-Pro Fallback Hotspot"
+    password: "c0N3J6gZyR1w"
+
+captive_portal:
+
+# ─────────────────────────────────────────────────────────────────────────────
+# IR
+# ─────────────────────────────────────────────────────────────────────────────
+remote_receiver:
+  - pin: GPIO23
+    tolerance: 25%
+    filter: 50us
+    idle: 10000us
+    dump: all
+
+remote_transmitter:
+  - id: transmitter_main
+    pin: GPIO2         # <- warning: strapping pin – use at your own risk
+    carrier_duty_percent: 50%
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Globals
+# ─────────────────────────────────────────────────────────────────────────────
+globals:
+  - id: fan_output_float
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+
+  # ---- A/C shadow-state ------------------------------------------------------
+  - id: ac_power_on          # true = unit believed ON
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: ac_set_temp          # current set-point we *think* the unit has (°C)
+    type: int
+    restore_value: no
+    initial_value: '26'      # the A/C boots at 26 °C
+
+  - id: ac_fan_speed         # 1 … 6 (A/C boots at speed 4)
+    type: int
+    restore_value: no
+    initial_value: '4'
+
+number:
+  - platform: template
+    id: ac_setpoint_num
+    name: "AC Set-Point"
+    min_value: 16
+    max_value: 32
+    step: 1
+    restore_value: yes
+    optimistic: true
+    on_value:
+      - script.execute:
+          id: _ac_setpoint_handler
+          x: !lambda 'return x;'
+
+###############################################################################
+# External **indoor temperature** coming from the other ESPHome node
+###############################################################################
+sensor:
+  - platform: homeassistant
+    id: cabin_temp
+    entity_id: sensor.a32_pro_bme280_1_temperature
+    accuracy_decimals: 1        # keep 0.1 °C resolution
+    unit_of_measurement: "°C"   # keep HA happy
+    device_class: "temperature"
+    state_class: "measurement"
+    internal: false             # export it back if you want to see it in HA
+
+###############################################################################
+# 24 V Air-Conditioner – thermostat climate object
+###############################################################################
+climate:
+  - platform: thermostat
+    id: ac_thermostat
+    name: "24 V Air-Conditioner"
+
+    # ------------------------------------------------------------------------
+    # INPUT SENSOR (indoor temperature)
+    # ------------------------------------------------------------------------
+    sensor: cabin_temp                 # <-- your BME-280 sensor from HA
+
+    # ------------------------------------------------------------------------
+    # UI look & feel
+    # ------------------------------------------------------------------------
+    visual:
+      min_temperature: 16
+      max_temperature: 32
+      temperature_step: 1
+
+    # ------------------------------------------------------------------------
+    # SAFETY TIMERS (required when you define *_action blocks)
+    # ------------------------------------------------------------------------
+    min_idle_time:              5s
+    min_cooling_off_time:       5s
+    min_cooling_run_time:       5s
+    min_fanning_off_time:       5s
+    min_fanning_run_time:       5s
+
+    # ------------------------------------------------------------------------
+    # CORE ACTIONS – what to do when the thermostat changes state
+    # ------------------------------------------------------------------------
+    cool_action:
+      - switch.turn_on: ac_cool_sw     # start compressor + blower relay
+    fan_only_action:
+      - switch.turn_on: ac_cool_sw     # just the blower
+      - number.set:                    # push set-point far away (prevent cool)
+          id: ac_setpoint_num
+          value: 32
+    idle_action:
+      - switch.turn_off: ac_cool_sw    # stop everything
+
+    # ------------------------------------------------------------------------
+    # MODE CHANGE HOOKS (manual mode buttons)
+    # ------------------------------------------------------------------------
+    off_mode:
+      - switch.turn_off: ac_cool_sw
+    cool_mode:
+      - switch.turn_on: ac_cool_sw
+    fan_only_mode:
+      - switch.turn_on: ac_cool_sw
+      - number.set:
+          id: ac_setpoint_num
+          value: 32
+
+    # ------------------------------------------------------------------------
+    # SYNCHRONISE THE FAN SPEED DIAL
+    # ------------------------------------------------------------------------
+    target_temperature_change_action:
+      # whenever the set-point is nudged (HA card, rotary encoder, …)
+      - lambda: |-
+          /* pass the new target temperature to our helper script */
+          id(_ac_setpoint_handler)->execute(
+            id(ac_thermostat).target_temperature
+          );
+
+    # ------------------------------------------------------------------------
+    # GLUE: keep the six-step fan in-sync with climate power
+    # ------------------------------------------------------------------------
+    on_state:
+      - if:
+          condition:
+            lambda: 'return x.mode != climate::CLIMATE_MODE_OFF;'
+          then:
+            - fan.turn_on: ac_speed_fan      # climate ON  → fan ON
+          else:
+            - fan.turn_off: ac_speed_fan     # climate OFF → fan OFF
+
+substitutions:
+  MAX_SPEED: "6"          # easy tweak later
+
+fan:
+  # ──────────────────────────────────────────────
+  # A/C blower – 6-step template fan
+  # ──────────────────────────────────────────────
+  - platform: template
+    id: ac_speed_fan
+    name: "A/C Fan"
+    speed_count: 6
+    restore_mode: RESTORE_DEFAULT_OFF
+
+    # called every time the dial/slider changes
+    on_speed_set:
+      - script.execute:
+          id: _ac_fan_handler
+          # build the string "SPEED1" … "SPEED6" from **x**
+          x: !lambda |-
+            char buf[8];
+            snprintf(buf, sizeof(buf), "SPEED%d", x);   // <-- no macro clash
+            return std::string(buf);
+
+    # Block people from switching the fan off while the climate object is on
+    on_turn_off:
+      - if:
+          condition:
+            lambda: 'return id(ac_thermostat).mode != climate::CLIMATE_MODE_OFF;'
+          then:
+            - logger.log: "Fan OFF denied (climate running)"
+            - fan.turn_on: ac_speed_fan
+
+    # Block people from switching the fan on while the climate object is off
+    on_turn_on:
+      - if:
+          condition:
+            lambda: 'return id(ac_thermostat).mode == climate::CLIMATE_MODE_OFF;'
+          then:
+            - logger.log: "Fan ON denied (climate off)"
+            - fan.turn_off: ac_speed_fan
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Fan entity (10-step speed fan)
+# ─────────────────────────────────────────────────────────────────────────────
+  - platform: speed
+    name: "Roof Fan"
+    id: roof_fan
+    speed_count: 10
+    direction_output: roof_fan_direction
+    output: roof_fan_speed_out
+    restore_mode: RESTORE_DEFAULT_OFF
+    on_turn_off:
+      - switch.template.publish:
+          id: ceiling_fan_mode
+          state: OFF
+      - cover.template.publish:
+          id: roof_fan_lid
+          state: CLOSED
+    on_turn_on:
+      - if:
+          condition:
+            - switch.is_off: ceiling_fan_mode
+          then:
+            - cover.template.publish:
+                id: roof_fan_lid
+                state: OPEN
+
+output:
+  - platform: ledc
+    pin: GPIO4
+    id: buzzer
+    frequency: 2000 Hz
+    channel: 0
+
+  - platform: template          # direction (FORWARD = exhaust, REVERSE = intake)
+    id: roof_fan_direction
+    type: float
+    write_action:
+      - if:
+          condition:
+            lambda: |-
+              return id(roof_fan).direction == FanDirection::FORWARD;
+          then:
+            - switch.template.publish:
+                id: ceiling_fan_mode
+                state: OFF
+  - platform: template          # speed – captures the float sent by the fan
+    id: roof_fan_speed_out
+    type: float
+    write_action:
+      - lambda: id(fan_output_float) = state;
+      - if:
+          condition:
+            lambda: 'return state > 0.0f;'
+          then:
+            - script.execute: roof_fan_dispatch
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Cover  (lid sensor is only virtual/optimistic for now)
+# ─────────────────────────────────────────────────────────────────────────────
+cover:
+  - platform: template
+    id: roof_fan_lid
+    name: "Roof Fan Lid"
+    assumed_state: true
+    optimistic: true
+    on_open:
+      - if:
+          condition:
+            lambda: 'return id(roof_fan_lid).position > 0.5f;'
+          then:
+            - if:
+                condition:
+                  fan.is_off: roof_fan
+                then:
+                  # fan off – lid open IR code
+                  - remote_transmitter.transmit_raw:
+                      transmitter_id: transmitter_main
+                      carrier_frequency: 38kHz
+                      code: [1815,-743,893,-1527,846,-787,895,-1526,845,-789,894,-716,1717,-716,849,-2402,6515,-2403,893,-5584,851,-1593,5715,-785,888,-1533,847,-4812,913,-2342,4954,-724,1711,-1533,847,-4007,912,-3154,4159,-725,2468,-1593,2511,-1536,1708,-3154,2472,-1594,3332,-1536,1706,-728,846,-785,3267,-1596,1646,-786,1644,-789,850,-762,844,-1579,869,-8061,845,-1577,2494,-763,1670,-1572,3265,-794,2491]
+            - if:
+                condition:
+                  and:
+                    - fan.is_on: roof_fan
+                    - switch.is_on: ceiling_fan_mode
+                then:
+                  - switch.template.publish:
+                      id: ceiling_fan_mode
+                      state: OFF
+    on_closed:
+      - if:
+          condition:
+            and:
+              - fan.is_on: roof_fan
+              - switch.is_off: ceiling_fan_mode
+          then:
+            - switch.template.publish:
+                id: ceiling_fan_mode
+                state: ON
+      - if:
+          condition:
+            fan.is_off: roof_fan
+          then:
+            # fan off – lid closed IR code
+            - remote_transmitter.transmit_raw:
+                transmitter_id: transmitter_main
+                carrier_frequency: 38kHz
+                code: [1604,-834,778,-1646,800,-835,779,-1645,802,-834,780,-836,1601,-834,800,-2455,6474,-2457,802,-5710,805,-1620,5651,-858,779,-1645,803,-4899,779,-2458,4875,-834,1604,-1645,780,-4083,804,-3265,4025,-835,2397,-1670,2401,-1647,1602,-3294,7270,-1646,1604,-3270,2398,-1671,3228,-859,1577,-833,803,-1644,778,-8145,800,-1646,2402,-836,1626,-1623,1599,-835,774,-861,2400]
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Misc switches
+# ─────────────────────────────────────────────────────────────────────────────
+switch:
+  - platform: template                # A/C cooling “power”
+    id: ac_cool_sw
+    name: "AC Cooling Dummy"
+    optimistic: true
+    turn_on_action:
+      - script.execute: ac_turn_on
+    turn_off_action:
+      - script.execute: ac_turn_off
+
+  - platform: template
+    id: ceiling_fan_mode
+    name: "Ceiling Fan Mode"
+    icon: mdi:ceiling-fan
+    optimistic: true
+    on_turn_on:
+      - lambda: |-
+          auto call = id(roof_fan).make_call();
+          call.set_speed(id(roof_fan).speed);
+          call.set_direction(FanDirection::REVERSE);
+          call.perform();
+      - if:
+          condition:
+            fan.is_off: roof_fan
+          then:
+            - fan.turn_on: roof_fan
+      - cover.template.publish:
+          id: roof_fan_lid
+          state: CLOSED
+    on_turn_off:
+      - if:
+          condition:
+            fan.is_on: roof_fan
+          then:
+            - cover.template.publish:
+                id: roof_fan_lid
+                state: OPEN
+
+script:
+  - id: ac_turn_on
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(ac_power_on);'   # only if we think it’s OFF
+          then:
+            - script.execute: air_conditioner_on_off   # send IR toggle
+            - lambda: 'id(ac_power_on) = true;'        # remember new state
+
+  - id: ac_turn_off
+    mode: queued
+    then:
+      - if:
+          condition:
+            lambda: 'return id(ac_power_on);'    # only if we think it’s ON
+          then:
+            - script.execute: air_conditioner_on_off   # send IR toggle
+            - lambda: 'id(ac_power_on) = false;'       # remember new state
+
+  # walk set-point up/down until the real unit matches
+  - id: _ac_setpoint_handler
+    mode: queued
+    parameters:
+      x: float
+    then:
+      - lambda: |-
+          int wanted = int(roundf(x));
+          while (wanted > id(ac_set_temp)) {
+            id(air_conditioner_temp_up).execute();
+            id(ac_set_temp)++;
+            delay(450);
+          }
+          while (wanted < id(ac_set_temp)) {
+            id(air_conditioner_temp_down).execute();
+            id(ac_set_temp)--;
+            delay(450);
+          }
+
+  # react to fan-speed changes
+  - id: _ac_fan_handler
+    mode: queued
+    parameters:
+      x: string
+    then:
+      - lambda: |-
+          int target_speed = id(ac_fan_speed);
+          if (x == "LOW")    target_speed = 1;
+          if (x == "MEDIUM") target_speed = 3;
+          if (x == "HIGH")   target_speed = 6;
+
+          while (target_speed > id(ac_fan_speed)) {
+            id(air_conditioner_speed_up).execute();
+            id(ac_fan_speed)++;
+            delay(350);
+          }
+          while (target_speed < id(ac_fan_speed)) {
+            id(air_conditioner_speed_down).execute();
+            id(ac_fan_speed)--;
+            delay(350);
+          }
+  
+# ─────────────────────────────────────────────────────────────────────────────
+# Dispatcher script – chooses the correct IR command
+# ─────────────────────────────────────────────────────────────────────────────
+  - id: roof_fan_dispatch
+    mode: restart
+    then:
+      - lambda: |-
+          using Scr = esphome::script::SingleScript<>*;
+
+          const bool pwr     = id(roof_fan).state;                       // ON / OFF
+          const bool lidOpen = id(roof_fan_lid).position > 0.5f;
+          const bool exhaust = id(roof_fan).direction == FanDirection::FORWARD;
+          const int  step    = std::max(1, std::min(10, id(roof_fan).speed)) - 1;
+
+          /* -----  OFF  --------------------------------------------------- */
+          if (!pwr) {
+            (lidOpen ? id(roof_fan_off_and_open)
+                     : id(roof_fan_off_and_closed))->execute();
+            return;
+          }
+
+          /* -----  ON  ---------------------------------------------------- */
+          static Scr const tbl_closed[10] = {
+            id(roof_fan_on_closed_speed_10), id(roof_fan_on_closed_speed_20),
+            id(roof_fan_on_closed_speed_30), id(roof_fan_on_closed_speed_40),
+            id(roof_fan_on_closed_speed_50), id(roof_fan_on_closed_speed_60),
+            id(roof_fan_on_closed_speed_70), id(roof_fan_on_closed_speed_80),
+            id(roof_fan_on_closed_speed_90), id(roof_fan_on_closed_speed_100)
+          };
+
+          static Scr const tbl_out[10] = {
+            id(roof_fan_on_open_air_out_speed_10),  id(roof_fan_on_open_air_out_speed_20),
+            id(roof_fan_on_open_air_out_speed_30),  id(roof_fan_on_open_air_out_speed_40),
+            id(roof_fan_on_open_air_out_speed_50),  id(roof_fan_on_open_air_out_speed_60),
+            id(roof_fan_on_open_air_out_speed_70),  id(roof_fan_on_open_air_out_speed_80),
+            id(roof_fan_on_open_air_out_speed_90),  id(roof_fan_on_open_air_out_speed_100)
+          };
+          static Scr const tbl_in[10] = {
+            id(roof_fan_on_open_air_in_speed_10),   id(roof_fan_on_open_air_in_speed_20),
+            id(roof_fan_on_open_air_in_speed_30),   id(roof_fan_on_open_air_in_speed_40),
+            id(roof_fan_on_open_air_in_speed_50),   id(roof_fan_on_open_air_in_speed_60),
+            id(roof_fan_on_open_air_in_speed_70),   id(roof_fan_on_open_air_in_speed_80),
+            id(roof_fan_on_open_air_in_speed_90),   id(roof_fan_on_open_air_in_speed_100)
+          };
+
+          Scr next = nullptr;
+          if (!lidOpen)         next = tbl_closed[step];
+          else if (exhaust)     next = tbl_out[step];
+          else                  next = tbl_in[step];
+
+          if (next) next->execute();
+
+
+###############################################################################
+# Creality T100 Speakers Scripts
+###############################################################################
+  - id: creality_t100_speakers_standby
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AD 0016 0016 0017 0015 0017 0015 0017 0015 0016 0016 0017 003F 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0017 0015 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0017 0015 0016 0016 0017 0015 0017 003F 0017 003F 0016 0016 0016 0040 0016 0040 0017 003F 0016 0040 0017 0181"
+  - id: creality_t100_speakers_input
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015C 00AA 0018 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 003E 0018 0015 0017 0015 0017 003E 0018 003E 0018 003E 0018 003F 0017 003F 0016 0016 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_reset
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015C 00AB 0018 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 003E 0018 0015 0017 0015 0017 003F 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_bt_pair
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AC 0018 0015 0016 0016 0017 0015 0016 0016 0017 0015 0016 0040 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_eq_music
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015C 00AA 0018 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 003E 0018 0015 0017 0015 0017 003E 0018 003E 0018 003E 0018 003E 0018 003F 0017 0015 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_eq_cinema
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015C 00AA 0018 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 003E 0018 0015 0017 0015 0017 003E 0018 003E 0018 003E 0018 003F 0017 003F 0016 0016 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0040 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_eq_concert
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015C 00AB 0018 0015 0017 0015 0017 0015 0017 0015 0017 0015 0016 0040 0017 0015 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0016 0017 003F 0016 0016 0016 0016 0017 0015 0016 0016 0016 0040 0016 0016 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_eq_gaming
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015C 00AA 0018 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 003E 0018 0015 0017 0015 0017 003E 0018 003E 0018 003E 0018 003F 0017 003F 0016 0016 0016 0040 0016 0040 0016 0016 0016 0040 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_bt_usb_stop
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AD 0016 0016 0016 0016 0016 0016 0017 0015 0016 0016 0016 0040 0017 0015 0016 0016 0016 0040 0017 003F 0016 0040 0016 0040 0017 003F 0016 0016 0016 0040 0017 003F 0016 0040 0016 0040 0017 003F 0017 003F 0016 0040 0016 0016 0017 0015 0016 0016 0017 0015 0017 0015 0016 0016 0016 0016 0017 0015 0016 0040 0016 0040 0016 0040 0017 0181"
+  - id: creality_t100_speakers_bt_usb_play_pause
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015C 00AA 0018 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 003E 0018 0015 0017 0015 0017 003E 0018 003E 0018 003E 0018 003E 0018 003E 0018 0015 0017 003F 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_bt_usb_next_song
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AC 0018 0015 0017 0015 0016 0016 0017 0015 0017 0015 0017 003F 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0040 0016 0040 0017 003F 0016 0181"
+  - id: creality_t100_speakers_bt_usb_previous_song
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015C 00AB 0018 0015 0017 0015 0017 0015 0017 0015 0016 0016 0017 003F 0017 0015 0017 0015 0017 003F 0016 0040 0016 0040 0016 0040 0016 0040 0017 0015 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_treble_down
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AD 0017 0015 0016 0016 0017 0015 0016 0016 0017 0015 0016 0040 0016 0016 0016 0016 0016 0040 0017 003F 0016 0040 0016 0040 0017 003F 0017 0015 0016 0040 0017 003F 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0017 0015 0016 0016 0016 0016 0016 0016 0016 0040 0017 003F 0016 0040 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_treble_up
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015C 00AB 0018 0015 0017 0015 0016 0016 0017 0015 0016 0016 0016 0040 0017 0015 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0017 003F 0016 0040 0017 0015 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_bass_down
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015C 00AB 0018 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 003E 0018 0015 0017 0015 0017 003F 0016 0040 0017 003F 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0016 0017 003F 0016 0016 0017 003F 0016 0040 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0040 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_bass_up
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015C 00AB 0018 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 003E 0017 0016 0017 0015 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_volume_down
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015C 00AB 0018 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 003E 0018 0015 0017 0015 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_volume_mute
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AC 0018 0015 0016 0016 0016 0016 0017 0015 0016 0016 0016 0040 0016 0016 0017 0015 0017 003F 0017 003F 0016 0040 0016 0040 0016 0040 0016 0016 0017 003F 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: creality_t100_speakers_volume_up
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AD 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0017 003F 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0017 0015 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0017 0015 0016 0040 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0017 0181"
+
+###############################################################################
+# 24V Air Conditioner Scripts
+###############################################################################
+  - id: air_conditioner_on_off
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015A 00AB 0017 0016 0017 0015 0016 0016 0016 0016 0016 0016 0017 0015 0016 0016 0016 0016 0017 003F 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0016 0016 0040 0016 0017 0015 0017 0015 0017 0015 0016 0016 0041 0015 0017 0014 0041 0015 0017 0015 0041 0015 0042 0014 0042 0014 0042 0014 0181"
+  - id: air_conditioner_swing_flap
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AB 0018 0014 0017 0014 0017 0014 0017 0014 0017 0014 0017 0014 0017 0014 0017 0014 0017 003E 0018 003E 0018 003E 0018 003E 0018 003F 0017 003F 0017 003F 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0181"
+  - id: air_conditioner_temp_up
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AB 0018 0014 0017 0014 0017 0014 0017 0014 0017 0014 0017 0015 0017 0015 0017 0015 0017 003E 0018 003E 0018 003F 0017 003F 0017 003F 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0016 0016 0040 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: air_conditioner_temp_down
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015A 00AC 0017 0015 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 003F 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0040 0017 003F 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0017 003F 0017 0015 0016 0016 0017 003F 0017 003F 0016 0040 0016 0040 0016 0181"
+  - id: air_conditioner_speed_down
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AB 0018 0014 0017 0014 0017 0014 0017 0014 0017 0014 0017 0014 0017 0014 0017 0014 0017 003E 0018 003E 0018 003E 0018 003F 0017 003F 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0016 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0040 0016 0181"
+  - id: air_conditioner_speed_up
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AB 0018 0014 0017 0014 0017 0014 0017 0014 0017 0014 0017 0015 0017 0015 0017 0015 0017 003E 0018 003F 0017 003F 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: air_conditioner_fresh_air
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015A 00AB 0018 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 0015 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0017 003F 0017 0015 0017 003F 0016 0016 0017 003F 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0017 0015 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0181"
+  - id: air_conditioner_strong
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AB 0018 0014 0017 0014 0017 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 003E 0018 003F 0017 003F 0017 003F 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0181"
+  - id: air_conditioner_eco
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AB 0018 0014 0017 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 003F 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0017 003F 0016 0040 0016 0016 0016 0040 0016 0181"
+  - id: air_conditioner_sleep
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0022 0000 015B 00AB 0018 0014 0017 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 0015 0016 0016 0016 0040 0017 003F 0016 0040 0016 0040 0017 003F 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0017 0015 0017 003F 0017 003F 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0181"
+
+###############################################################################
+# IR Fan Control Scripts
+###############################################################################
+
+  # Off commands (with roof fan open or closed)
+  - id: roof_fan_off_and_open
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0027 0000 0041 001E 0021 003F 0021 001F 0020 003F 0021 001F 0020 001F 0040 001F 0021 005F 00FF 005F 0021 00DF 0020 003F 00E0 001F 0020 003F 0021 00BF 0020 005F 00C1 001F 0040 003F 0020 009F 0021 007F 009F 001F 0060 003F 0060 003F 0040 0080 0080 001F 0080 003F 0060 001F 0040 003F 0021 003F 0020 001F 0021 005F 0060 003F 0021 013E 0020 0040 0060 001F 0040 003F 0020 0020 0020 003F 0021 001F 0020 0181"
+  - id: roof_fan_off_and_closed
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0026 0000 0040 001F 0021 003E 0021 001F 0021 003F 0020 001F 0021 001F 0040 001F 0020 005F 0100 005F 0020 00DE 0021 003F 00DF 001F 0021 003F 0020 00BE 0020 0060 00BF 001F 0040 003F 0021 009F 0020 007E 00A0 001F 005F 003F 0060 003F 0040 007E 011E 0040 005F 001F 0041 003F 0020 003F 0020 0020 0020 005F 0060 003F 0020 013D 0021 003F 005F 001F 0040 003F 0021 001F 0020 001F 0040 001F 0020 0181"
+
+  # On, Roof Fan Closed (Ceiling Fan) – speed control
+  - id: roof_fan_on_closed_speed_10
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0026 0000 0041 001E 0021 003F 0021 001E 0021 003F 0021 001F 0021 001E 0041 001F 0020 005F 00FF 005F 0021 00DE 0020 003F 00E0 001F 0021 003F 0020 00BE 0021 005F 00BF 001F 0040 003F 0020 009E 0021 007F 009F 0020 005F 003F 005F 0040 0040 007F 0020 003F 005F 0020 003F 0040 0040 001F 0020 001F 0080 003F 0021 001F 0020 0060 0060 003F 0021 013E 0020 003F 0060 001F 0040 003F 0080 001F 0020 0181"
+  - id: roof_fan_on_closed_speed_20
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0026 0000 0042 001E 0021 003F 0021 001E 0021 003F 0021 001E 0021 001F 0041 001F 0021 005E 0100 005E 0021 00DE 0021 003E 00E0 0020 0020 003F 0020 00C0 0020 005F 00BF 0020 003F 0040 001F 00A0 0020 007F 009F 0020 005F 0040 005F 0040 003F 007F 001F 0040 00BF 0040 005E 0020 0020 0020 005F 0040 0020 0020 001F 0060 005F 0040 001F 013F 0020 0040 005E 0020 003F 0040 0040 0040 001F 0020 0020 0181"
+  - id: roof_fan_on_closed_speed_30
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0024 0000 0040 001F 0021 003E 0021 001F 0021 003E 0021 001F 0021 001F 0040 001F 0020 005E 0100 005D 0021 00DE 0021 003E 00E0 001F 0020 0040 0020 00BE 0020 0060 00BF 001F 0040 0040 001F 00A0 0020 007F 009E 0020 005F 0040 005E 0040 0040 007F 001F 0040 00BE 0040 003F 0080 005F 0040 001F 0020 0020 0060 005E 0040 0020 013E 001F 0040 005F 0020 003F 0040 005F 0060 001F 0181"
+  - id: roof_fan_on_closed_speed_40
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0026 0000 0041 001E 0021 003F 0021 001E 0021 003F 0021 001F 0020 001F 0040 001F 0021 005F 00FF 005F 0021 00DE 0020 003F 00DF 001F 0020 003F 0020 00BF 0020 005F 00C0 001F 0040 003F 0021 009E 0021 007F 009F 001F 005F 0040 0060 003F 0040 007F 0020 003F 00BF 003F 0080 001F 0021 001F 0040 003F 0020 001F 0021 005F 0060 003F 0020 013D 0021 003F 005F 001F 0040 003F 0040 001F 0021 001F 0020 0181"
+  - id: roof_fan_on_closed_speed_50
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0024 0000 0040 001F 0021 003F 0020 0020 0020 003F 0021 001F 0020 001F 0040 001F 0021 005D 0100 005E 0021 00DE 0021 003F 00DF 0020 0020 003F 0020 00BF 0020 005F 00BF 001F 0040 003F 0020 00A0 0020 007E 00A0 0020 005E 0040 005F 0040 003F 007F 001F 0040 00BE 0040 0040 0020 003F 0040 003F 0040 001F 0020 0020 0060 005E 0040 0020 013E 001F 0040 005F 0020 003F 0040 009F 0181"
+  - id: roof_fan_on_closed_speed_60
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0023 0000 0040 001F 0021 003E 0021 001F 0021 003E 0021 001F 0021 001F 0040 001F 0020 005F 0100 005F 0020 00DE 0020 0040 00DF 001F 0021 003F 0020 00BE 0021 005F 00BF 001F 0040 003F 0021 009F 0020 007E 009F 0020 005F 003F 0060 003F 003F 0080 0020 0040 00BE 0040 005F 007E 0040 003F 0020 0020 0020 005F 005F 0040 0020 013D 0021 003F 005F 001F 0041 003F 0040 0181"
+  - id: roof_fan_on_closed_speed_70
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0025 0000 0040 001F 0020 0040 0020 001F 0021 003F 0020 001F 0020 0020 0040 001F 0020 005F 0100 005F 0020 00DE 0020 0040 00DF 0020 001F 0040 0020 00BF 0020 005F 00C0 001F 0040 0040 0020 009F 0020 007F 009F 0020 0060 003F 0060 0040 003F 007F 0020 0040 00BF 0040 003F 0040 0060 0020 0020 003F 0020 0020 009F 001F 0021 003F 0020 013E 001F 0040 005F 0020 003F 0040 007F 0040 001F 0181"
+  - id: roof_fan_on_closed_speed_80
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0025 0000 0040 0020 0020 0040 0020 001F 0020 0040 0020 001F 0021 001F 0040 001F 0020 005F 00FF 005F 0021 00DF 0020 003F 00E0 001F 0020 0040 0020 00BE 0021 005F 00C0 001F 003F 0040 0020 009F 0021 007F 00A0 001F 0060 003F 0060 0040 0040 007F 0020 003F 00C0 003F 00A0 001F 0021 001F 0020 003F 0020 0020 009F 001F 0021 003F 0020 013E 0020 0040 0060 001F 0040 003F 0040 005F 0040 0181"
+  - id: roof_fan_on_closed_speed_90
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0026 0000 0040 001F 0020 003F 0020 0020 0020 003F 0020 0020 0020 0020 003F 001F 0021 005F 00FF 005F 0020 00E0 0020 003F 00DF 0020 0020 003F 0021 00BF 0020 0060 00C0 001F 003F 0040 0020 00A0 0020 007F 009F 0020 0060 003F 0060 003F 0040 007F 0021 0040 00BF 0040 003F 001F 0020 0040 0020 0020 0020 003F 0020 0020 009E 0020 0020 0040 0020 013E 0020 0040 005F 0020 0040 0040 005F 0020 0060 0181"
+  - id: roof_fan_on_closed_speed_100
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0025 0000 003F 001F 0020 0040 0020 001F 0020 0040 0021 001E 0020 0020 0040 001F 0020 005F 00FF 0060 0020 00DE 0021 003F 00DF 0020 001F 0040 0020 00BE 0021 005F 00C0 001F 0040 003F 0021 009F 0020 007F 009F 0020 0060 003F 0061 003F 0040 007F 0021 003F 00BF 0040 0060 0020 003F 0040 0020 003F 0020 0020 009F 001F 0021 003F 0020 013F 0020 003F 0060 0020 003F 0040 003F 001F 0020 0181"
+
+  # On and Roof Fan Open, All Speeds – Air Out mode
+  - id: roof_fan_on_open_air_out_speed_10
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0028 0000 0041 001F 0021 003F 0020 001F 0021 003F 0020 001F 0021 001F 0040 001F 0020 005F 0101 005F 0020 00E1 0020 003F 00E1 001F 0021 0040 0020 00BF 0021 0060 00C0 0021 0041 0040 0020 009F 0021 0080 00A0 0021 0060 003F 0060 0041 003F 0080 0020 0020 0021 0040 0020 0020 0040 0040 0040 0020 0020 0021 0080 003F 0040 003F 0060 0021 0020 003F 0020 0140 0020 0040 0060 0020 0040 0040 0020 0021 0020 0080 0020 0181"
+  - id: roof_fan_on_open_air_out_speed_20
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0026 0000 0041 001F 0020 0040 0020 001F 0021 003F 0020 001F 0021 001F 0040 001F 0021 0060 00FF 0060 0020 00DF 0021 0040 00E1 0020 0020 003F 0020 00C1 0020 005F 00C0 0020 0040 0040 0020 00A0 0020 007F 00A1 0020 005F 0040 0060 003F 0040 007F 0021 0020 0020 003F 0080 003F 0060 0021 0020 001F 0061 0040 0040 0040 0060 001F 0020 003F 0021 0140 0020 0040 0060 0021 0040 0040 0020 0040 00A1 0181"
+  - id: roof_fan_on_open_air_out_speed_30
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0026 0000 0041 001F 0021 003E 0021 001F 0021 003E 0021 001F 0021 001F 0040 001F 0020 005F 0100 005F 0021 00DF 0020 0040 00E0 001F 0020 0040 0020 00BF 0021 005F 00C0 001F 0040 003F 0020 009F 0021 007F 00A1 001F 0060 003F 0061 003F 003F 0080 0020 001F 0020 0040 0080 003F 0040 007F 0060 0040 0040 003F 0060 001F 0021 003F 0020 013E 0021 0040 0060 001F 0040 003F 0021 0020 003F 0020 0061 0181"
+  - id: roof_fan_on_open_air_out_speed_40
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0026 0000 0040 001F 0020 0040 0020 0020 0020 003F 0020 0020 0020 001F 0040 001F 0020 005F 0100 005F 0020 00DE 0021 003F 00DF 001F 0020 0040 0020 00BE 0020 0060 00BF 001F 0040 003F 0020 00A0 0020 007F 009F 001F 005F 003F 0060 003F 0040 007F 0021 001F 0020 0040 007F 0040 007F 001F 0021 001F 003F 0040 0020 001F 00A0 001F 0021 003F 0020 013E 001F 0040 005F 001F 0040 003F 0080 0060 0020 0181"
+  - id: roof_fan_on_open_air_out_speed_50
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0028 0000 0041 001F 0021 003F 0020 001F 0021 003F 0020 001F 0021 001F 0040 001F 0020 005F 0101 005F 0020 00DF 0020 0040 00E0 001F 0021 003F 0020 00BF 0021 005F 00C0 001F 0040 0040 0020 009F 0020 007F 00A0 0020 0060 003F 0061 003F 0040 0080 001F 0021 0020 0040 007F 003F 0040 0020 0040 003F 0040 003F 0040 003F 0060 0020 0020 0040 0020 013F 0020 0041 0060 0020 003F 0040 0020 0020 0020 0020 003F 0020 0020 0181"
+  - id: roof_fan_on_open_air_out_speed_60
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0026 0000 0040 0020 0020 003F 0020 001F 0021 003F 0021 001F 0020 001F 0040 001F 0020 0060 00FF 005F 0020 00DF 0020 003F 00DF 0020 0020 003F 0020 00C0 0020 005F 00BF 0020 003F 003F 0021 009F 0020 0080 009F 001F 0060 003F 0060 0040 003F 007F 0020 0020 0020 0040 0080 003F 005F 0080 003F 003F 0021 001F 009F 0020 001F 0040 0020 013E 0020 003F 0060 0020 003F 003F 0060 0040 001F 0020 0020 0181"
+  - id: roof_fan_on_open_air_out_speed_70
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0027 0000 0040 001F 0020 0040 0020 001F 0021 003E 0021 001F 0021 001F 0040 001F 0020 005F 0100 005F 0020 00DE 0020 0040 00DF 001F 0021 003F 0020 00BF 001F 0060 00BF 001F 0040 003F 0021 009F 0020 007F 009E 0020 0060 0040 0060 003F 0040 007F 001F 0020 0020 003F 0080 0040 003F 003F 005F 0020 0020 003F 0020 001F 00A0 001F 0020 0040 0020 013D 0021 003F 0060 001F 003F 0040 003F 0040 0020 001F 0021 0181"
+  - id: roof_fan_on_open_air_out_speed_80
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0025 0000 0040 001F 0020 003F 0021 001F 0020 003F 0021 001F 0020 001F 0040 001F 0021 005F 00FF 0060 001F 00DF 0020 003F 00E0 001F 0020 003F 0021 00BF 001F 0060 00BE 0020 003F 0040 0020 009E 0020 0080 009F 0020 005F 0040 005F 003F 0040 007F 0020 0020 0020 003F 007F 0040 009F 001F 0020 0020 0020 003F 0020 0020 009F 0020 0020 0040 001F 013E 0020 003F 005F 0020 003F 0040 00DF 0181"
+  - id: roof_fan_on_open_air_out_speed_90
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0028 0000 0042 001F 0020 003F 0021 001F 0020 003F 0021 001F 0020 001F 0040 001F 0021 005F 0100 005F 0021 00E0 0020 003F 00E1 001F 0020 003F 0021 00BF 0020 005F 00C0 0020 0040 003F 0020 009F 0021 007F 00A0 001F 0061 003F 0060 003F 0040 0080 0020 0020 0021 0040 0080 003F 0040 0020 0020 003F 0021 0020 0020 003F 0040 003F 0061 0020 0020 003F 0021 013F 0020 003F 0060 0020 0040 003F 0021 0020 0020 003F 0040 0181"
+  - id: roof_fan_on_open_air_out_speed_100
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0026 0000 0041 001F 0021 003E 0021 001F 0021 003F 0020 001F 0021 001F 0040 001F 0020 005F 0101 005F 0020 00DF 0021 003F 00E0 001F 0021 003F 0020 00BF 0021 005F 00C0 001F 0040 003F 0021 009F 0020 007F 00A1 001F 0060 003F 0061 003F 0040 007F 0021 0020 0020 003F 0080 003F 0061 001F 003F 0040 0020 003F 0040 003F 0060 0020 0020 003F 0021 013F 0021 0040 0060 001F 0040 003F 0021 0040 0040 0181"
+
+  # On and Roof Fan Open, All Speeds – Air In mode
+  - id: roof_fan_on_open_air_in_speed_10
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0027 0000 0041 001F 0021 0040 0020 001F 0021 0040 0020 0020 0021 0020 0041 0020 0020 005F 0101 005F 0021 00E0 0020 0040 00E0 0020 0020 0040 0020 00C0 0021 0060 00C1 0020 0041 0040 0020 00A1 0020 0080 00A0 0021 0060 0040 0060 0041 0041 0080 0020 0020 0041 0020 0020 0021 0041 0040 0041 0020 0021 0020 0080 0041 0020 0040 0041 0040 0040 0040 001F 0141 0020 0040 0060 0021 0040 0040 0060 0040 0040 0181"
+  - id: roof_fan_on_open_air_in_speed_20
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0026 0000 0042 001F 0020 003F 0021 001F 0020 003F 0021 0020 0020 0020 0041 0020 0021 0060 0101 005F 0021 00E0 0020 0040 00E1 0020 0020 0041 0020 00C0 0020 0060 00C1 0020 0041 0040 0021 00A0 0021 0080 00A0 0020 0060 0041 0060 0040 0040 0080 0021 0020 0041 0020 0081 0040 0060 0020 0020 0020 0061 0040 0020 0040 0041 0041 0040 0041 0020 0140 0020 0041 0060 0020 0040 0041 0041 0021 0040 0181"
+  - id: roof_fan_on_open_air_in_speed_30
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0024 0000 0041 001F 0021 003F 0021 001F 0021 003E 0021 001F 0021 001F 0040 001F 0020 005F 0101 0060 0020 00DF 0020 0041 00E0 0020 0020 0041 0020 00BF 0020 0061 00C1 001F 0040 003F 0020 00A1 0020 007F 00A1 0020 0060 003F 0061 003F 0040 007F 0020 0021 0040 0020 0081 0040 0040 0080 0060 003F 0021 0040 0040 0040 0040 0040 0020 013F 0021 0040 0060 0020 0041 0041 0081 0181"
+  - id: roof_fan_on_open_air_in_speed_40
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0026 0000 0040 001F 0020 0040 0020 001F 0021 003F 0020 001F 0020 0020 0040 001F 0020 0060 00FE 0061 001F 00DE 0020 0040 00DF 001F 0021 003F 0020 00BE 0020 0060 00BE 0020 003F 0040 0021 009F 0020 007F 00A0 001F 005F 003F 0060 003F 0040 007F 0020 001F 0041 001F 007F 0040 0080 001F 0020 0020 003F 003F 0020 0020 009F 0020 0020 003F 0020 013D 0021 003F 005F 0020 0040 003F 005F 0080 0020 0181"
+  - id: roof_fan_on_open_air_in_speed_50
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0027 0000 0041 001F 0021 003F 0021 001F 0021 003F 0021 0021 0020 0020 0041 0020 0021 0060 0101 0060 0020 00E0 0021 0040 00E1 0020 0020 0041 0020 00C0 0020 0060 00C1 0020 0041 0040 0020 00A1 0020 0080 00A1 0020 0061 0040 0060 0040 0041 0080 0021 0020 0040 0021 0081 0040 0041 0020 0041 0040 0041 0040 0020 0041 0040 0041 0040 0041 0020 0141 0020 0040 0060 0020 0041 0040 0061 0020 0020 0020 0021 0181"
+  - id: roof_fan_on_open_air_in_speed_60
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0026 0000 0042 001F 0021 003E 0021 001F 0021 0040 0020 001F 0021 001F 0040 0020 0020 005F 0101 005F 0021 00E0 0020 003F 00E1 0020 0021 0041 0020 00C0 0021 0060 00C1 0020 0041 0040 0020 009F 0021 0080 00A1 0020 0060 003F 0060 0041 0040 0081 0020 0020 0041 0020 007F 003F 0061 0080 0040 003F 0021 0040 0040 0040 0040 0040 0020 013F 0020 0041 0060 0020 0040 003F 0040 0020 0020 0041 0020 0181"
+  - id: roof_fan_on_open_air_in_speed_70
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0027 0000 0040 001F 0021 003E 0021 001F 0021 003F 0020 001F 0021 001F 0040 001F 0020 005F 00FF 005F 0021 00DE 0020 0040 00DF 001F 0021 003F 0020 00BE 0020 0060 00BF 001F 0040 003F 0020 00A0 0020 007E 00A0 001F 0060 003F 0060 003F 0040 007F 0020 001F 0040 0020 0080 003F 003F 0040 005F 001F 0020 0040 0020 001F 009F 0020 0020 003F 0021 013E 0020 003F 0060 001F 0040 003F 0040 0020 003F 001F 0021 0181"
+  - id: roof_fan_on_open_air_in_speed_80
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0027 0000 0041 001F 0021 003F 0021 001F 0021 0040 0020 001F 0021 0020 0041 0020 0020 0060 0101 0061 0020 00E0 0021 0040 00E0 0020 0021 0041 0020 00C0 0020 0061 00C1 0020 0041 0040 0020 00A0 0020 0080 00A1 0020 0060 0040 0060 0041 0040 0080 0020 0020 0041 0020 0081 0040 00A0 0021 0020 0020 0020 0041 001F 0041 0041 0040 0041 0040 0020 0141 0020 0041 005F 0021 0041 0040 0040 0041 0020 0041 001F 0181"
+  - id: roof_fan_on_open_air_in_speed_90
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0027 0000 0040 001F 0021 003E 0021 001F 0021 003E 0022 001F 0020 001F 0040 001F 0021 005F 00FF 005F 0020 00DE 0021 003F 00DF 001F 0020 003F 0021 00BE 0020 005F 00BF 001F 0040 003F 0021 009F 0020 007E 00A0 001F 0060 003F 005F 003F 0040 007E 0021 001F 0040 001F 0080 003F 0040 001F 0021 003F 0020 001F 0020 003F 0021 001F 00A0 001F 0020 003F 0021 013E 0020 003F 0060 001F 003F 0040 0040 005F 0040 0181"
+  - id: roof_fan_on_open_air_in_speed_100
+    then:
+      - remote_transmitter.transmit_pronto:
+          transmitter_id: transmitter_main
+          data: "0000 006D 0025 0000 0040 001F 0020 0040 0020 0020 0020 003F 0020 001F 0021 001F 0040 001F 0020 005F 00FF 005F 0021 00DE 0020 0040 00DF 0020 0020 003F 0020 00BF 0020 005F 00BF 001F 0040 003F 0020 009F 0021 0080 009F 001F 0060 003F 005F 0040 003F 0080 0020 001F 0040 0020 007F 0040 0060 001F 0040 003F 0021 003F 0020 0020 009E 0020 0020 0040 0020 013E 0020 0040 005F 001F 0040 003F 009F 0181"
+
+
+button:
+###############################################################################
+# Button Definitions for 24V Air Conditioner
+###############################################################################    
+  - platform: template
+    name: "Creality T100 Speakers - Standby"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_standby
+  - platform: template
+    name: "Creality T100 Speakers - Input"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_input
+  - platform: template
+    name: "Creality T100 Speakers - Reset"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_reset
+  - platform: template
+    name: "Creality T100 Speakers - BT Pair"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_bt_pair
+  - platform: template
+    name: "Creality T100 Speakers - EQ Music"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_eq_music
+  - platform: template
+    name: "Creality T100 Speakers - EQ Cinema"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_eq_cinema
+  - platform: template
+    name: "Creality T100 Speakers - EQ Concert"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_eq_concert
+  - platform: template
+    name: "Creality T100 Speakers - EQ Gaming"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_eq_gaming
+  - platform: template
+    name: "Creality T100 Speakers - BT/USB Stop"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_bt_usb_stop
+  - platform: template
+    name: "Creality T100 Speakers - BT/USB PlayPause"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_bt_usb_play_pause
+  - platform: template
+    name: "Creality T100 Speakers - BT/USB Next Song"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_bt_usb_next_song
+  - platform: template
+    name: "Creality T100 Speakers - BT/USB Previous Song"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_bt_usb_previous_song
+  - platform: template
+    name: "Creality T100 Speakers - Treble Down"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_treble_down
+  - platform: template
+    name: "Creality T100 Speakers - Treble Up"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_treble_up
+  - platform: template
+    name: "Creality T100 Speakers - Bass Down"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_bass_down
+  - platform: template
+    name: "Creality T100 Speakers - Bass Up"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_bass_up
+  - platform: template
+    name: "Creality T100 Speakers - Volume Down"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_volume_down
+  - platform: template
+    name: "Creality T100 Speakers - Volume Mute"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_volume_mute
+  - platform: template
+    name: "Creality T100 Speakers - Volume Up"
+    on_press:
+      then:
+        - script.execute: creality_t100_speakers_volume_up
+
+###############################################################################
+# Button Definitions for 24V Air Conditioner
+###############################################################################  
+  - platform: template
+    name: "24V AC - On/Off"
+    on_press:
+      then:
+        - script.execute: air_conditioner_on_off
+  - platform: template
+    name: "24V AC - Swing Flap"
+    on_press:
+      then:
+        - script.execute: air_conditioner_swing_flap
+  - platform: template
+    name: "24V AC - Temp Up"
+    on_press:
+      then:
+        - script.execute: air_conditioner_temp_up
+  - platform: template
+    name: "24V AC - Temp Down"
+    on_press:
+      then:
+        - script.execute: air_conditioner_temp_down
+  - platform: template
+    name: "24V AC - Speed Down"
+    on_press:
+      then:
+        - script.execute: air_conditioner_speed_down
+  - platform: template
+    name: "24V AC - Speed Up"
+    on_press:
+      then:
+        - script.execute: air_conditioner_speed_up
+  - platform: template
+    name: "24V AC - Fresh Air"
+    on_press:
+      then:
+        - script.execute: air_conditioner_fresh_air
+  - platform: template
+    name: "24V AC - Strong"
+    on_press:
+      then:
+        - script.execute: air_conditioner_strong
+  - platform: template
+    name: "24V AC - ECO"
+    on_press:
+      then:
+        - script.execute: air_conditioner_eco
+  - platform: template
+    name: "24V AC - Sleep"
+    on_press:
+      then:
+        - script.execute: air_conditioner_sleep
+
+###############################################################################
+# Button Definitions for IR Fan Control
+###############################################################################
+
+  # Roof Fan Off / On (Closed/Open state)
+  - platform: template
+    name: "Roof Fan - Off & Open"
+    on_press:
+      then:
+        - script.execute: roof_fan_off_and_open
+  - platform: template
+    name: "Roof Fan - Off & Closed"
+    on_press:
+      then:
+        - script.execute: roof_fan_off_and_closed
+
+  # Roof Fan On, Closed (Ceiling Fan) – Speed Control
+  - platform: template
+    name: "Roof Fan - On Closed, Speed 10%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_closed_speed_10
+  - platform: template
+    name: "Roof Fan - On Closed, Speed 20%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_closed_speed_20
+  - platform: template
+    name: "Roof Fan - On Closed, Speed 30%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_closed_speed_30
+  - platform: template
+    name: "Roof Fan - On Closed, Speed 40%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_closed_speed_40
+  - platform: template
+    name: "Roof Fan - On Closed, Speed 50%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_closed_speed_50
+  - platform: template
+    name: "Roof Fan - On Closed, Speed 60%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_closed_speed_60
+  - platform: template
+    name: "Roof Fan - On Closed, Speed 70%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_closed_speed_70
+  - platform: template
+    name: "Roof Fan - On Closed, Speed 80%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_closed_speed_80
+  - platform: template
+    name: "Roof Fan - On Closed, Speed 90%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_closed_speed_90
+  - platform: template
+    name: "Roof Fan - On Closed, Speed 100%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_closed_speed_100
+
+  # Roof Fan On, Open – Air Out Mode (Speeds 10% to 100%)
+  - platform: template
+    name: "Roof Fan (Open, Air Out) - Speed 10%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_out_speed_10
+  - platform: template
+    name: "Roof Fan (Open, Air Out) - Speed 20%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_out_speed_20
+  - platform: template
+    name: "Roof Fan (Open, Air Out) - Speed 30%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_out_speed_30
+  - platform: template
+    name: "Roof Fan (Open, Air Out) - Speed 40%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_out_speed_40
+  - platform: template
+    name: "Roof Fan (Open, Air Out) - Speed 50%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_out_speed_50
+  - platform: template
+    name: "Roof Fan (Open, Air Out) - Speed 60%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_out_speed_60
+  - platform: template
+    name: "Roof Fan (Open, Air Out) - Speed 70%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_out_speed_70
+  - platform: template
+    name: "Roof Fan (Open, Air Out) - Speed 80%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_out_speed_80
+  - platform: template
+    name: "Roof Fan (Open, Air Out) - Speed 90%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_out_speed_90
+  - platform: template
+    name: "Roof Fan (Open, Air Out) - Speed 100%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_out_speed_100
+
+  # Roof Fan On, Open – Air In Mode (Speeds 10% to 100%)
+  - platform: template
+    name: "Roof Fan (Open, Air In) - Speed 10%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_in_speed_10
+  - platform: template
+    name: "Roof Fan (Open, Air In) - Speed 20%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_in_speed_20
+  - platform: template
+    name: "Roof Fan (Open, Air In) - Speed 30%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_in_speed_30
+  - platform: template
+    name: "Roof Fan (Open, Air In) - Speed 40%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_in_speed_40
+  - platform: template
+    name: "Roof Fan (Open, Air In) - Speed 50%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_in_speed_50
+  - platform: template
+    name: "Roof Fan (Open, Air In) - Speed 60%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_in_speed_60
+  - platform: template
+    name: "Roof Fan (Open, Air In) - Speed 70%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_in_speed_70
+  - platform: template
+    name: "Roof Fan (Open, Air In) - Speed 80%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_in_speed_80
+  - platform: template
+    name: "Roof Fan (Open, Air In) - Speed 90%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_in_speed_90
+  - platform: template
+    name: "Roof Fan (Open, Air In) - Speed 100%"
+    on_press:
+      then:
+        - script.execute: roof_fan_on_open_air_in_speed_100
+
+uart:
+  - id: zigbee_uart
+    tx_pin: GPIO33
+    rx_pin: GPIO32
+    baud_rate: 115200

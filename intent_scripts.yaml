@@ -1,0 +1,91 @@
+# config/intent_scripts.yaml
+RoofFanSetMode:
+  speech:
+    text: "Roof fan is now set to {{ mode }} mode."
+  action:
+    - variables:
+        _dir: >
+          {% set m = mode | lower %}
+          {% if m == 'exhaust' %}forward
+          {% elif m == 'intake' %}reverse
+          {% else %}{{ m }}{% endif %}
+    - service: fan.set_direction # <- service, not action
+      data:
+        entity_id: fan.ag_pro_roof_fan
+        direction: "{{ _dir }}"
+
+RoofFanTurnOn:
+  speech:
+    text: >
+      Turning roof fan on{% if percentage is defined %}
+      to {{ percentage }} %{% endif %} and opening the hatch for intake.
+  action:
+    - service: cover.open_cover
+      target:
+        entity_id: cover.ag_pro_roof_fan_lid
+    - service: fan.set_direction
+      data:
+        entity_id: fan.ag_pro_roof_fan
+        direction: reverse
+    - service: fan.turn_on
+      data:
+        entity_id: fan.ag_pro_roof_fan
+        percentage: "{{ percentage | default(omit) }}"
+
+RoofFanTurnOff:
+  speech:
+    text: "Roof fan off and lid closed."
+  action:
+    - service: fan.turn_off
+      target:
+        entity_id: fan.ag_pro_roof_fan
+    - service: cover.close_cover
+      target:
+        entity_id: cover.ag_pro_roof_fan_lid
+
+AGRoofFanSetPercentage:
+  speech:
+    text: >
+      {% if percentage is defined %}
+        Roof fan set to {{ percentage }} %.
+      {% else %}
+        I didn’t catch the speed – please try again.
+      {% endif %}
+
+  action:
+    # Exit if no slot
+    - if: "{{ percentage is not defined }}"
+      then: []
+
+    # Snap to nearest 10 % *and* force an int           <── key line is “| int”
+    - variables:
+        _pct: "{{ ((percentage | int(default=60) / 10) | round(0) * 10) | int }}"
+
+    # Log value so you can watch it in HA logs
+    - service: system_log.write
+      data:
+        message: "Roof‑fan intent sending speed {{ _pct }}"
+        level: info
+
+    # Change speed only (direction & lid untouched)
+    - service: fan.set_percentage
+      target:
+        entity_id: fan.ag_pro_roof_fan
+      data:
+        percentage: "{{ _pct }}"
+
+CookModeStart:
+  speech:
+    text: "Cook mode activated. Fan exhaust 60 %, lights 100 %, gas on."
+  action:
+    - service: script.turn_on
+      target:
+        entity_id: script.cook_mode
+
+CookModeStop:
+  speech:
+    text: "Cook mode cancelled. Everything returned to normal."
+  action:
+    - service: script.turn_on
+      target:
+        entity_id: script.cook_mode_off

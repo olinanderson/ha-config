@@ -1,0 +1,23 @@
+# Logs and databases
+home-assistant.log*
+home-assistant_v2.db*
+*.db-journal
+*.pid
+
+# Sensitive files
+secrets.yaml
+.ssh/
+ssh_keys/
+
+# Runtime files
+.cloud/
+.storage/
+.shopping_list.json
+deps/
+tts/
+
+# ESPHome nested repo
+esphome/esphome-components
+
+# Other generated files
+.HA_VERSION

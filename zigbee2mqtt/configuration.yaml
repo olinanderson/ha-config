@@ -1,0 +1,57 @@
+version: 4
+homeassistant:
+  enabled: true
+advanced:
+  network_key:
+    - 145
+    - 122
+    - 67
+    - 101
+    - 83
+    - 165
+    - 143
+    - 15
+    - 94
+    - 103
+    - 100
+    - 40
+    - 194
+    - 126
+    - 87
+    - 250
+  pan_id: 28035
+  ext_pan_id:
+    - 0
+    - 21
+    - 248
+    - 58
+    - 13
+    - 91
+    - 172
+    - 223
+mqtt:
+  server: mqtt://core-mosquitto:1883
+  user: mqtt_user
+  password: mqtt_password
+frontend:
+  enabled: true
+  port: 8099
+serial:
+  port: >-
+    /dev/serial/by-id/usb-Itead_Sonoff_Zigbee_3.0_USB_Dongle_Plus_V2_4eace082b41fef11a27a57d0639e525b-if00-port0
+  adapter: ezsp
+devices:
+  '0xa4c138453dc9e0a7':
+    friendly_name: LED Controller CCT 1
+  '0xa4c13846c6ff1fa5':
+    friendly_name: LED Controller CCT 2
+  '0xa4c1388ec37a46bc':
+    friendly_name: LED Controller SC 1
+  '0x9035eafffec6ed9b':
+    friendly_name: Under Cabinet Lighting Switch
+  '0xb43a31fffe33901f':
+    friendly_name: Main Lighting Switch
+  '0xb43a31fffe26eb40':
+    friendly_name: Shower Lighting Switch
+  '0xa4c13843df45a434':
+    friendly_name: LED Controller SC 2

@@ -1,0 +1,321 @@
+- alias: Update Starlink Entity Every Second
+  trigger:
+    - trigger: time_pattern
+      seconds: /1
+  action:
+    - action: homeassistant.update_entity
+      target:
+        entity_id: device_tracker.starlink_device_location
+  mode: single
+  id: 5c4ae16d93684fc9bf37f7c117cb0703
+- alias: Initialize Previous Coordinates on Startup
+  trigger:
+    - trigger: homeassistant
+      event: start
+  action:
+    - action: input_text.set_value
+      data:
+        entity_id: input_text.previous_latitude
+        value:
+          "{{ state_attr('device_tracker.starlink_device_location', 'latitude')
+          | default('0.0') }}"
+    - action: input_text.set_value
+      data:
+        entity_id: input_text.previous_longitude
+        value:
+          "{{ state_attr('device_tracker.starlink_device_location', 'longitude')
+          | default('0.0') }}"
+    - action: input_text.set_value
+      data:
+        entity_id: input_text.previous_elevation
+        value:
+          "{{ state_attr('device_tracker.starlink_device_location', 'elevation')
+          | default('0.0') }}"
+  id: dd03deee68484cf4b74846e0d7aaee69
+- alias: Update Filtered Starlink Location
+  trigger:
+    - trigger: state
+      entity_id: device_tracker.starlink_device_location
+  condition:
+    - condition: template
+      value_template:
+        "{% set current_lat = state_attr('device_tracker.starlink_device_location',
+        'latitude') | float %} {% set current_lon = state_attr('device_tracker.starlink_device_location',
+        'longitude') | float %} {% set current_ele = state_attr('device_tracker.starlink_device_location',
+        'elevation') | float %} {% set prev_lat = states('input_text.previous_latitude')
+        | float %} {% set prev_lon = states('input_text.previous_longitude') | float
+        %} {% set prev_ele = states('input_text.previous_elevation') | float %} {%
+        set distance = distance(prev_lat, prev_lon, current_lat, current_lon) %} {%
+        set elevation_change = (current_ele - prev_ele) | abs %} {{ distance > states('input_number.distance_threshold')
+        | float or elevation_change > states('input_number.elevation_threshold') |
+        float }}
+
+        "
+  action:
+    - action: device_tracker.see
+      data:
+        dev_id: filtered_starlink_location
+        gps:
+          - "{{ state_attr('device_tracker.starlink_device_location', 'latitude')
+            }}"
+          - "{{ state_attr('device_tracker.starlink_device_location', 'longitude')
+            }}"
+        gps_accuracy:
+          "{{ state_attr('device_tracker.starlink_device_location', 'gps_accuracy')
+          }}"
+        attributes:
+          elevation:
+            "{{ state_attr('device_tracker.starlink_device_location', 'elevation')
+            }}"
+    - action: input_text.set_value
+      data:
+        entity_id: input_text.previous_latitude
+        value:
+          "{{ state_attr('device_tracker.starlink_device_location', 'latitude')
+          }}"
+    - action: input_text.set_value
+      data:
+        entity_id: input_text.previous_longitude
+        value:
+          "{{ state_attr('device_tracker.starlink_device_location', 'longitude')
+          }}"
+    - action: input_text.set_value
+      data:
+        entity_id: input_text.previous_elevation
+        value:
+          "{{ state_attr('device_tracker.starlink_device_location', 'elevation')
+          }}"
+  id: 2f0fdb53911c41bbb6e40d79fe25e34e
+- alias: "Main Lighting: Sync LED Dimmer with Switch"
+  trigger:
+    - trigger: state
+      entity_id: light.main_lighting_switch
+  action:
+    - choose:
+        - conditions: "{{ trigger.to_state.state == 'on' }}"
+          sequence:
+            - action: light.turn_on
+              data:
+                brightness:
+                  "{{ state_attr('light.main_lighting_switch', 'brightness')
+                  | default(255) }}"
+              target:
+                entity_id: light.led_controller_cct_1
+        - conditions: "{{ trigger.to_state.state == 'off' }}"
+          sequence:
+            - action: light.turn_off
+              target:
+                entity_id: light.led_controller_cct_1
+  mode: single
+  id: da628a416f844416bc745bc6c33ec37c
+- alias: "Main Lighting: Sync Warmth to LED Dimmer"
+  trigger:
+    - trigger: state
+      entity_id: input_number.main_light_warmth
+  action:
+    - action: light.turn_on
+      data:
+        color_temp: "{{ states('input_number.main_light_warmth') | int }}"
+      target:
+        entity_id: light.led_controller_cct_1
+  mode: single
+  id: 7d383f4cc6ea4901b42f9a92288acfa1
+- id: "1739334868426"
+  alias: Linked Entities
+  description: ""
+  use_blueprint:
+    path: alexdelprete/ha-blueprint-linked-entities.yaml
+    input:
+      linked_entity:
+        - light.led_controller_cct_1
+        - light.main_lighting_switch
+- id: "1739334926562"
+  alias: Linked Entities Under Cabinet
+  description: ""
+  use_blueprint:
+    path: alexdelprete/ha-blueprint-linked-entities.yaml
+    input:
+      linked_entity:
+        - light.led_controller_cct_2
+        - light.under_cabinet_lighting_switch
+- id: "1739334948121"
+  alias: Linked Entities Shower Lighting
+  description: ""
+  use_blueprint:
+    path: alexdelprete/ha-blueprint-linked-entities.yaml
+    input:
+      linked_entity:
+        - light.shower_lighting_switch
+        - light.led_controller_sc_1
+# ────────────────────────────────────────────────────────────────
+# Combined Shore‑Power Charger Logic & Sync
+# ────────────────────────────────────────────────────────────────
+- id: combined_shore_power_charger
+  alias: Combined Shore‑Power Charger Logic & Sync
+  description: |
+    Turns charger ON when SOC < ON‑threshold (helper) and enable toggle is ON.
+    Turns charger OFF when SOC > OFF‑threshold, or when toggle set to OFF.
+  mode: restart
+  ################################################################
+  # TRIGGERS
+  ################################################################
+  trigger:
+    - id: enable_toggle
+      trigger: state
+      entity_id: input_boolean.shore_power_charger_enabled
+
+    - id: low_soc
+      trigger: numeric_state
+      entity_id: sensor.olins_van_bms_battery # 0‑100 %
+      below: input_number.shore_charge_on_threshold
+
+    - id: high_soc
+      trigger: numeric_state
+      entity_id: sensor.olins_van_bms_battery
+      above: input_number.shore_charge_off_threshold
+
+  ################################################################
+  # ACTIONS
+  ################################################################
+  action:
+    # ── A) Manual enable / disable toggle ───────────────────────
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: enable_toggle
+          sequence:
+            - if:
+                - condition: state
+                  entity_id: input_boolean.shore_power_charger_enabled
+                  state: "on"
+              then:
+                - action: switch.turn_on
+                  target:
+                    entity_id: switch.a32_pro_do8_switch04_shore_power_charger
+              else:
+                - action: switch.turn_off
+                  target:
+                    entity_id: switch.a32_pro_do8_switch04_shore_power_charger
+
+    # ── B) Battery SOC dropped below ON threshold ───────────────
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: low_soc
+            - condition: state
+              entity_id: input_boolean.shore_power_charger_enabled
+              state: "on"
+          sequence:
+            - action: switch.turn_on
+              target:
+                entity_id: switch.a32_pro_do8_switch04_shore_power_charger
+
+    # ── C) Battery SOC rose above OFF threshold ────────────────
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: high_soc
+          sequence:
+            - action: switch.turn_off
+              target:
+                entity_id: switch.a32_pro_do8_switch04_shore_power_charger
+
+# The following automation is used to setup the ducking module in pulse audio which lowers the volume of music from airplay/audio from PC when HA is playing audio through the VLC media player
+- alias: "Bootstrap ducking → VLC"
+  mode: single
+  trigger:
+    - trigger: homeassistant
+      event: start # fires when HA has finished booting :contentReference[oaicite:1]{index=1}
+  action:
+    - delay: "00:00:15" # let hassio_audio come online :contentReference[oaicite:2]{index=2}
+    - action: shell_command.load_ducking_docker
+
+- id: iphone_home_arrival
+  alias: "iPhone Home Arrival - Lights & Welcome"
+  description: "Turn off power saving mode and announce return when iPhone comes home after being away 15+ minutes"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: device_tracker.olin_andersons_iphone_16_pro_max
+      from: "not_home"
+      to: "home"
+  condition:
+    # Only trigger if away for at least 15 minutes
+    - condition: template
+      value_template: >
+        {% set away_duration = now() - trigger.from_state.last_changed %}
+        {{ away_duration.total_seconds() >= 900 }}
+  action:
+    # Turn off power saving mode (which restores lights/monitors to previous state)
+    - action: script.power_saving_mode_off
+
+    # Set media player volume
+    - action: media_player.volume_set
+      target:
+        entity_id: media_player.vlc_telnet
+      data:
+        volume_level: 0.3
+
+    # Calculate how long you were away and get battery percentage
+    - action: tts.speak
+      target:
+        entity_id: tts.openai_tts_gpt_4o_mini_tts
+      data:
+        cache: true
+        media_player_entity_id: media_player.vlc_telnet
+        message: >
+          {% set away_duration = now() - trigger.from_state.last_changed %}
+          {% set total_minutes = (away_duration.total_seconds() / 60) | round(0) %}
+          {% set days = (total_minutes / 1440) | int %}
+          {% set hours = ((total_minutes % 1440) / 60) | int %}
+          {% set minutes = (total_minutes % 60) | int %}
+          {% set van_battery_pct = states('sensor.olins_van_bms_battery') | default('unknown') %}
+          {% set inside_temp = states('sensor.a32_pro_bme280_1_temperature') | default('unknown') %}
+          {% set outside_temp = states('sensor.a32_pro_bme280_4_temperature') | default('unknown') %}
+          Welcome back Olin! You were away for 
+          {%- if days > 0 -%}
+            {{ days }} day{% if days != 1 %}s{% endif %}
+            {%- if hours > 0 %} and {{ hours }} hour{% if hours != 1 %}s{% endif %}{% endif -%}
+          {%- elif hours > 0 -%}
+            {{ hours }} hour{% if hours != 1 %}s{% endif %}
+            {%- if minutes > 0 %} and {{ minutes }} minute{% if minutes != 1 %}s{% endif %}{% endif -%}
+          {%- else -%}
+            {{ minutes }} minute{% if minutes != 1 %}s{% endif %}
+          {%- endif %}. 
+          {% if van_battery_pct != 'unknown' %}
+          The van battery is at {{ van_battery_pct }} percent.
+          {% else %}
+          I couldn't get the van battery level.
+          {% endif %}
+          {% if inside_temp != 'unknown' and outside_temp != 'unknown' %}
+          It's {{ inside_temp | round(1) }} degrees inside and {{ outside_temp | round(1) }} degrees outside.
+          {% elif inside_temp != 'unknown' %}
+          The inside temperature is {{ inside_temp | round(1) }} degrees.
+          {% elif outside_temp != 'unknown' %}
+          The outside temperature is {{ outside_temp | round(1) }} degrees.
+          {% endif %}
+
+# ────────────────────────────────────────────────────────────────
+# Power Saving Mode Automation - triggers scripts when toggle changes
+# ────────────────────────────────────────────────────────────────
+- id: power_saving_mode_automation
+  alias: "Power Saving Mode Toggle Handler"
+  description: "Triggers power saving scripts when toggle changes"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: input_boolean.power_saving_mode
+  action:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: input_boolean.power_saving_mode
+              state: "on"
+          sequence:
+            - action: script.power_saving_mode_on
+        - conditions:
+            - condition: state
+              entity_id: input_boolean.power_saving_mode
+              state: "off"
+          sequence:
+            - action: script.power_saving_mode_off

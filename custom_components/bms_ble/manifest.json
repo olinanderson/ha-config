@@ -1,0 +1,69 @@
+{
+  "domain": "bms_ble",
+  "name": "BLE Battery Management",
+  "bluetooth": [
+    {
+      "local_name": "SmartBat-A*",
+      "service_uuid": "0000fff0-0000-1000-8000-00805f9b34fb"
+    },
+    {
+      "local_name": "SmartBat-B*",
+      "service_uuid": "0000fff0-0000-1000-8000-00805f9b34fb"
+    },
+    {
+      "local_name": "DL-*",
+      "service_uuid": "0000fff0-0000-1000-8000-00805f9b34fb"
+    },
+    {
+      "service_uuid": "0000ffe0-0000-1000-8000-00805f9b34fb",
+      "manufacturer_id": 2917
+    },
+    {
+      "service_uuid": "0000ff00-0000-1000-8000-00805f9b34fb"
+    },
+    {
+      "local_name": "SP0*",
+      "service_uuid": "0000fff0-0000-1000-8000-00805f9b34fb"
+    },
+    {
+      "local_name": "SP1*",
+      "service_uuid": "0000fff0-0000-1000-8000-00805f9b34fb"
+    },
+    {
+      "local_name": "TBA-*"
+    },
+    {
+      "local_name": "DXB-*"
+    },
+    {
+      "service_uuid": "0000ffb0-0000-1000-8000-00805f9b34fb"
+    },
+    {
+      "service_uuid": "0000ffe0-0000-1000-8000-00805f9b34fb",
+      "manufacturer_id": 22618
+    },
+    {
+      "local_name": "libatt*",
+      "manufacturer_id": 21320
+    },
+    {
+      "local_name": "LT-*",
+      "manufacturer_id": 33384
+    },
+    {
+      "local_name": "$PFLAC*",
+      "service_uuid": "0000ffe0-0000-1000-8000-00805f9b34fb",
+      "manufacturer_id": 65535
+    }
+  ],
+  "codeowners": ["@patman15"],
+  "config_flow": true,
+  "dependencies": ["bluetooth_adapters"],
+  "documentation": "https://github.com/patman15/BMS_BLE-HA",
+  "integration_type": "device",
+  "iot_class": "local_polling",
+  "issue_tracker": "https://github.com/patman15/BMS_BLE-HA/issues",
+  "loggers": ["bleak_retry_connector"],
+  "requirements": [],
+  "version": "1.10.0"
+}

@@ -1,0 +1,9 @@
+load_ducking_docker: >
+  ssh -i /config/ssh_keys/ha_host_id_ed25519
+      -p 22222
+      -o StrictHostKeyChecking=no
+      root@172.30.32.1 "
+        docker exec hassio_audio pactl list modules |
+        grep -q module-role-ducking ||
+        docker exec hassio_audio pactl load-module module-role-ducking \
+          trigger_roles=video ducking_roles=any_role volume=-18dB global=true"

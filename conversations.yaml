@@ -1,0 +1,19 @@
+# conversations.yaml  – replace the whole file
+AGRoofFanSetPercentage:
+  - "(set | adjust | change) [the] roof fan (speed )?to {percentage} [percent]"
+
+RoofFanSetMode:
+  - "(set | make | switch) (the )?roof fan to {mode}"
+
+RoofFanTurnOn:
+  - "turn on the roof fan"
+  - "turn the roof fan on to {number:percentage} [percent]"
+
+RoofFanTurnOff:
+  - "(turn | shut) off the roof fan"
+
+CookModeStart:
+  - "(turn | start | enable) (the )?cook mode"
+
+CookModeStop:
+  - "(turn | stop | disable) (the )?cook mode"

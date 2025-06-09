@@ -1,0 +1,206 @@
+set_fan_mode:
+  alias: "Set Fan Mode"
+  sequence:
+    - action: switch.turn_on
+      target:
+        entity_id: switch.coolant_blower_mode
+
+update_speedtest:
+  alias: "Update Speedtest"
+  sequence:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.speedtest_running
+    - action: homeassistant.update_entity
+      target:
+        entity_id:
+          - sensor.speedtest_download
+          - sensor.speedtest_upload
+          - sensor.speedtest_ping
+    # Wait a few seconds for the new values to come in (adjust delay as needed)
+    - delay: "00:00:05"
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.speedtest_running
+
+all_lights_toggle:
+  alias: "Toggle All Lights Based on Mixed State"
+  sequence:
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: >
+                {{ states('light.led_controller_cct_1')|default('off') == 'on' and states('light.led_controller_cct_2')|default('off') == 'on' and states('light.led_controller_sc_1')|default('off') == 'on' and states('light.led_controller_sc_2')|default('off') == 'on' }}
+          sequence:
+            - action: light.turn_off
+              target:
+                entity_id:
+                  - light.led_controller_cct_1
+                  - light.led_controller_cct_2
+                  - light.led_controller_sc_1
+                  - light.led_controller_sc_2
+        - conditions:
+            - condition: template
+              value_template: >
+                {{ not (states('light.led_controller_cct_1')|default('off') == 'on' and states('light.led_controller_cct_2')|default('off') == 'on' and states('light.led_controller_sc_1')|default('off') == 'on' and states('light.led_controller_sc_2')|default('off') == 'on') }}
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id:
+                  - light.led_controller_cct_1
+                  - light.led_controller_cct_2
+                  - light.led_controller_sc_1
+                  - light.led_controller_sc_2
+
+roof_fan_toggle_direction:
+  alias: Roof Fan ‑ Toggle Direction
+  mode: single
+  sequence:
+    - action: fan.set_direction
+      data:
+        entity_id: fan.ag_pro_roof_fan
+        direction: >
+          {% if state_attr('fan.ag_pro_roof_fan', 'direction') == 'forward' %}
+            reverse
+          {% else %}
+            forward
+          {% endif %}
+
+########################################################################
+#  Cook Mode – snapshot current states, then prepare cooking            #
+########################################################################
+cook_mode:
+  alias: Cook Mode
+  mode: single
+  sequence:
+    # ❶ Snapshot everything we’re about to change
+    - action: scene.create
+      data:
+        scene_id: pre_cook_mode
+        snapshot_entities:
+          - switch.a32_pro_switch16_lpg_valve
+          - light.led_controller_cct_2
+          - fan.ag_pro_roof_fan
+          - cover.ag_pro_roof_fan_lid
+
+    # ❷ Open the LPG valve
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_switch16_lpg_valve
+
+    # ❸ Lights to 100 %
+    - action: light.turn_on
+      target:
+        entity_id: light.led_controller_cct_2
+      data:
+        brightness_pct: 100
+
+    # ❹ Roof lid open (needed for exhaust)
+    - action: cover.open_cover
+      target:
+        entity_id: cover.ag_pro_roof_fan_lid
+
+    # ❺ Roof fan → exhaust @ 60 %
+    - action: fan.set_direction
+      data:
+        entity_id: fan.ag_pro_roof_fan
+        direction: forward # “forward” = exhaust
+    - action: fan.turn_on
+      data:
+        entity_id: fan.ag_pro_roof_fan
+        percentage: 60
+
+########################################################################
+#  Cook Mode Off – restore snapshot & ensure LPG is closed             #
+########################################################################
+cook_mode_off:
+  alias: Cook Mode Off
+  mode: single
+  sequence:
+    # ❶ Restore everything we captured earlier
+    - action: scene.turn_on
+      target:
+        entity_id: scene.pre_cook_mode
+
+    # ❷ (Extra safety) be sure LPG valve is closed
+    - action: switch.turn_off
+      target:
+        entity_id: switch.a32_pro_switch16_lpg_valve
+
+########################################################################
+#  Power Saving Mode ON - snapshot current states, then turn off       #
+########################################################################
+power_saving_mode_on:
+  alias: Power Saving Mode ON
+  mode: single
+  sequence:
+    # ❶ Snapshot everything we're about to change
+    - action: scene.create
+      data:
+        scene_id: pre_power_saving_mode
+        snapshot_entities:
+          - light.led_controller_cct_1
+          - light.led_controller_cct_2
+          - light.led_controller_sc_1
+          - light.led_controller_sc_2
+          - switch.a32_pro_do8_switch06_top_monitor
+          - switch.a32_pro_do8_switch07_bottom_monitor
+
+    # ❷ Turn off all lights
+    - action: light.turn_off
+      target:
+        entity_id:
+          - light.led_controller_cct_1
+          - light.led_controller_cct_2
+          - light.led_controller_sc_1
+          - light.led_controller_sc_2
+
+    # ❸ Turn off monitors
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_do8_switch06_top_monitor
+          - switch.a32_pro_do8_switch07_bottom_monitor
+
+    # ❹ Set the power saving mode toggle to ON
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.power_saving_mode
+
+########################################################################
+#  Power Saving Mode OFF - restore snapshot                            #
+########################################################################
+power_saving_mode_off:
+  alias: Power Saving Mode OFF
+  mode: single
+  sequence:
+    # ❶ Restore everything we captured earlier
+    - action: scene.turn_on
+      target:
+        entity_id: scene.pre_power_saving_mode
+
+    # ❷ Set the power saving mode toggle to OFF
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.power_saving_mode
+
+########################################################################
+#  Power Saving Mode Toggle - smart toggle based on current state      #
+########################################################################
+power_saving_mode_toggle:
+  alias: Power Saving Mode Toggle
+  mode: single
+  sequence:
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: input_boolean.power_saving_mode
+              state: "off"
+          sequence:
+            - action: script.power_saving_mode_on
+        - conditions:
+            - condition: state
+              entity_id: input_boolean.power_saving_mode
+              state: "on"
+          sequence:
+            - action: script.power_saving_mode_off

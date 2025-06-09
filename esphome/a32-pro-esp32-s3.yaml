@@ -1,0 +1,2455 @@
+esphome:
+  name: a32-pro
+  friendly_name: a32-Pro
+  platformio_options:
+    board_build.flash_mode: dio
+
+external_components:
+  - source: github://Fabian-Schmidt/esphome-victron_ble
+
+esp32:
+  board: esp32-s3-devkitc-1
+  framework:
+    type: arduino
+
+logger:
+  # We must allow at least DEBUG globally
+  # to get debug logs for climate.pid
+  level: DEBUG
+
+  logs:
+    wifi: ERROR
+    i2c: ERROR
+    api: ERROR
+    esp32_ble_tracker: ERROR
+    esp32_ble: ERROR
+    esp32_ble_client: ERROR 
+    sensor: ERROR
+    modbus_controller: ERROR
+    modbus_controller.sensor: ERROR
+    modbus: ERROR
+    victron_ble: ERROR
+    component: ERROR
+    light: ERROR 
+
+    # Add these new overrides:
+    text_sensor: ERROR
+    uart_debug: ERROR
+
+    # Keep the PID climate at DEBUG:
+    climate.pid: DEBUG
+
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "RPIb2C8lYPlFQY3YCdd0p+X/IRgFoodz01ywDlWjHLI="
+
+esp32_ble_tracker:
+  scan_parameters:
+    interval: 1100ms
+    window: 1100ms
+    active: true
+
+bluetooth_proxy:
+  active: true
+
+ota:
+  platform: esphome
+  password: "d35448720d5d7813fe49d7d79b98d308"
+
+# Victron Bluetooth Stuff
+
+victron_ble:
+  - id: MPPT_Controller_1
+    mac_address: "d9601c9c69b2"  # Replace with the Bluetooth MAC address of MPPT 1
+    bindkey: "fcee7ed9507bb605fba0c8ebd5ab3422"  # Replace with the encryption key for MPPT 1
+
+  - id: MPPT_Controller_2
+    mac_address: "c6a19a580ead"  # Replace with the Bluetooth MAC address of MPPT 2
+    bindkey: "74d155c02b86c64b572853306bc74694"  # Replace with the encryption key for MPPT 2
+
+  - id: Smart_Battery_Sense_12V
+    mac_address: "e4a576a4b459"
+    bindkey: "8741db6dda477fa0ea0e82ea5d85f6ee"
+
+time:
+  - platform: sntp
+    id: real_time_clock
+    timezone: "UTC"  # or your preferred timezone
+    
+# wifi:
+#   ssid: KinCony
+#   password: a12345678
+
+#   # Enable fallback hotspot (captive portal) in case wifi connection fails
+#   ap:
+#     ssid: "A32-Pro Fallback Hotspot"
+#     password: "25JYfblp8QJP"
+
+# captive_portal:
+
+ethernet:
+  type: W5500
+  manual_ip:
+    static_ip: 192.168.10.64
+    gateway: 192.168.10.1
+    subnet: 255.255.255.0
+  clk_pin: GPIO42
+  mosi_pin: GPIO44
+  miso_pin: GPIO40
+  cs_pin: GPIO39
+  interrupt_pin: GPIO41
+  reset_pin: GPIO43
+
+i2c:
+   - id: bus_a
+     sda: 11
+     scl: 10
+     scan: true
+     frequency: 400kHz
+
+xl9535:
+  - id: xl9535_hub_out1 # for output channel 1-16
+    address: 0x21
+  - id: xl9535_hub_out2 # for output channel 17-32
+    address: 0x22
+  - id: xl9535_hub_in1 # for input channel 1-16
+    address: 0x24
+  - id: xl9535_hub_in2 # for input channel 17-32
+    address: 0x25
+
+pcf8574:
+  - id: 'pcf8574_in_3'  # for input channel 33-40
+    address: 0x23
+
+  # DO8 Relay Expansion Board
+  - id: 'pcf8574_hub_out_1'  # for output channel 1-8 DO8 expansion board 
+    address: 0x27
+
+uart:
+  - id: mbus
+    baud_rate: 19200 
+    debug:
+      direction: BOTH
+      dummy_receiver: true
+      after:
+        timeout: 1000ms
+    tx_pin: 9
+    rx_pin: 8
+
+  - id: uart_tuya
+    baud_rate: 115200
+    debug:
+      direction: BOTH
+      dummy_receiver: true
+      after:
+        timeout: 10ms
+    tx_pin: 15
+    rx_pin: 16
+
+  - id: uart_sim7600
+    baud_rate: 115200
+    debug:
+      direction: BOTH
+      dummy_receiver: true
+      after:
+        timeout: 10ms
+      sequence:
+        - lambda: UARTDebug::log_string(direction, bytes);
+    tx_pin: 18
+    rx_pin: 17
+
+# Modbus configuration
+modbus:
+  id: modbus1
+  uart_id: mbus  # Reference to the UART defined above
+
+modbus_controller:
+  # Living Area 
+  - id: BME280_1
+    address: 1
+    modbus_id: modbus1
+    update_interval: 10s  # Adjust the update interval as needed
+    
+    # Drivers cab 
+  - id: BME280_2
+    address: 2
+    modbus_id: modbus1
+    update_interval: 10s  # Adjust the update interval as needed
+
+    # Shower    
+  - id: BME280_3
+    address: 3
+    modbus_id: modbus1
+    update_interval: 10s  # Adjust the update interval as needed
+    
+    #Outdoor Underneath Van
+  - id: BME280_4
+    address: 4
+    modbus_id: modbus1
+    update_interval: 10s  # Adjust the update interval as needed
+    
+  - id: s5140
+    address: 5
+    modbus_id: modbus1
+    update_interval: 100ms      # poll less often
+
+button: 
+  - platform: template
+    name: "Inverter On/Off Toggle"
+    on_press:
+      then:
+        - script.execute: push_inverter
+
+  # ── New: software reboot control ───────────────────────────────
+  - platform: restart          # built‑in “Restart” platform
+    name: "Restart A32-Pro"    # shown in HA
+    id: restart_a32            # optional; handy if you want to call it from scripts
+    icon: "mdi:restart"        # optional – pick any HA icon you like
+
+switch:
+  - platform: gpio
+    pin: 45
+    name: "LED"
+
+  - platform: uart
+    uart_id: mbus
+    name: "RS485 Button"
+    data: [0x11, 0x22, 0x33, 0x44, 0x55]
+
+  - platform: uart
+    uart_id: uart_sim7600
+    name: "UART 4G"
+    data: "AT+CGSN\r\n" # read 4G SIM7600 ID
+
+  # - platform: uart
+  #   uart_id: uart_tuya
+  #   name: "UART TUYA2"
+  #   data: [0x55, 0xaa, 0x03, 0x00, 0x00, 0x01, 0x01, 0x04]
+
+  # Kincony D08 Expansion Relay Module
+  - platform: gpio
+    name: DO8 Switch01
+    pin:
+      pcf8574: pcf8574_hub_out_1
+      number: 0
+      mode: OUTPUT
+      inverted: true
+
+  - platform: gpio
+    name: DO8 Switch02
+    pin:
+      pcf8574: pcf8574_hub_out_1
+      number: 1
+      mode: OUTPUT
+      inverted: true
+     
+  - platform: gpio
+    name: DO8 Switch03 Inverter Button
+    id: inverter_button
+    pin:
+      pcf8574: pcf8574_hub_out_1
+      number: 2
+      mode: OUTPUT
+      inverted: true
+     
+  - platform: gpio
+    name: DO8 Switch04 Shore Power Charger 
+    pin:
+      pcf8574: pcf8574_hub_out_1
+      number: 3
+      mode: OUTPUT
+      inverted: true
+    restore_mode: RESTORE_DEFAULT_ON
+     
+  - platform: gpio
+    name: DO8 Switch05 Battery Heater
+    id: do8_switch05_battery_heater
+    pin:
+      pcf8574: pcf8574_hub_out_1
+      number: 4
+      mode: OUTPUT
+      inverted: true
+     
+  - platform: gpio
+    name: DO8 Switch06 Top Monitor
+    id: top_monitor
+    pin:
+      pcf8574: pcf8574_hub_out_1
+      number: 5
+      mode: OUTPUT
+      inverted: true
+    restore_mode: RESTORE_DEFAULT_ON
+
+  - platform: gpio
+    name: DO8 Switch07 Bottom Monitor
+    id: bottom_monitor
+    pin:
+      pcf8574: pcf8574_hub_out_1
+      number: 6
+      mode: OUTPUT
+      inverted: true
+    restore_mode: RESTORE_DEFAULT_ON
+     
+  - platform: gpio
+    name: DO8 Switch08 Air Fryer Ventilation Fans
+    id: do8_switch08_air_fryer_ventilation_fans
+    pin:
+      pcf8574: pcf8574_hub_out_1
+      number: 7
+      mode: OUTPUT
+      inverted: true
+
+  - platform: gpio
+    name: Switch01 Water System Valve 1
+    id: water_system_valve_1_open_closed
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 0
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch02 Water System Valve 2
+    id: water_system_valve_2_open_closed
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 1
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch03 Water System Valve 3
+    id: water_system_valve_3_open_closed
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 2
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch04
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 3
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch05
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 4
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch06 Grey Water Tank Valve
+    id: grey_water_tank_valve_open_closed
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 5
+      mode: OUTPUT
+      inverted: true
+    restore_mode: RESTORE_DEFAULT_OFF
+  - platform: gpio
+    name: "Switch07 Bed Up"
+    id: bed_up_on_off
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 6
+      mode: OUTPUT
+      inverted: true
+    on_turn_on:
+      - switch.turn_off: bed_down_on_off
+  - platform: gpio
+    name: "Switch08 Bed Down"
+    id: bed_down_on_off
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 7
+      mode: OUTPUT
+      inverted: true
+    on_turn_on:
+      - switch.turn_off: bed_up_on_off
+  - platform: gpio
+    name: Switch09 Shower Button LED
+    id: shower_button_LED_on_off
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 10
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch10 Water System Overall
+    id: switch10_water_system_overall
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 11
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch11 Water System State Main
+    id: switch11_water_system_state_main
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 12
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch12 Water System State Recirculating Shower
+    id: switch12_water_system_state_recirculating_shower
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 13
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch13 Water System State Recirculating Shower Flush
+    id: switch13_water_system_state_recirculating_shower_flush
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 14
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch14 UV Filter
+    id: UV_filter
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 15
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch15 Coolant Pump
+    id: coolant_pump
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 16
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch16 LPG Valve
+    id: LPG_valve
+    pin:
+      xl9535: xl9535_hub_out1
+      number: 17
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch17 Silicone Heating Pads Shower Water Tank x2
+    id: silicone_heating_pads_shower_water_tank_x2_on_off
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 0
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch18 Silicone Heating Pads Fresh Water Tank x4
+    id: silicone_heating_pads_fresh_water_tank_x4_on_off
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 1
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch19 Silicone Heating Pads Grey Water Tank x4
+    id: silicone_heating_pads_grey_water_tank_x4_on_off
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 2
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch20 Heating Pads Auto Thermostat Grey Water Tank x2
+    id: heating_pads_auto_thermostat_grey_water_tank_x2_on_off
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 3
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch21 Left Outdoor Lights
+    id: left_outdoor_lights_on_off
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 4
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch22 Right Outdoor Lights
+    id: right_outdoor_lights_on_off
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 5
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch23 Rear Outdoor Lights
+    id: rear_outdoor_lights_on_off
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 6
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    id: hydronic_heater_on_off_physical
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 7
+      mode: OUTPUT
+      inverted: true
+    restore_mode: RESTORE_DEFAULT_OFF
+
+  # Template switch for the hydronic heater (Switch24)
+  - platform: template
+    name: "Switch24 Hydronic Heater"
+    id: hydronic_heater_on_off
+    lambda: |-
+      // Reflect the physical pin’s actual ON/OFF state.
+      return id(hydronic_heater_on_off_physical).state;
+    turn_on_action:
+      - if:
+          condition:
+            # Only allow turning on if the Power Supply is ON.
+            - switch.is_on: hydronic_heater_power_supply_control
+          then:
+            - switch.turn_on: hydronic_heater_on_off_physical
+          else:
+            - logger.log:
+                level: WARN
+                format: "Cannot turn on hydronic heater: Power Supply is OFF!"
+    turn_off_action:
+      - switch.turn_off: hydronic_heater_on_off_physical
+      # When turning off, record the current absolute time.
+      - lambda: |-
+          id(hydronic_heater_last_off_timestamp) = id(real_time_clock).now().timestamp;
+
+    
+  - platform: gpio
+    name: Switch25
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 10
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch26 Starlink Power Supply
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 11
+      mode: OUTPUT
+      inverted: true
+    restore_mode: RESTORE_DEFAULT_ON
+  - platform: gpio
+    name: Switch27 Bed Power Supply
+    id: bed_power_supply_on_off
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 12
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch28 Compressor
+    id: compressor_on_off
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 13
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch29 Shower System Water Pump
+    id: shower_system_water_pump_on_off
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 14
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch30 Main System Water Pump
+    id: main_system_water_pump_on_off
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 15
+      mode: OUTPUT
+      inverted: true
+  - platform: gpio
+    name: Switch31 Lightbar
+    id: lightbar
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 16
+      mode: OUTPUT
+      inverted: true
+  # No name: we don't expose this directly to HA
+  - platform: gpio
+    id: hydronic_heater_power_supply_physical
+    pin:
+      xl9535: xl9535_hub_out2
+      number: 17
+      mode: OUTPUT
+      inverted: true
+    restore_mode: RESTORE_DEFAULT_ON
+
+  # Template switch for the hydronic heater power supply (Switch32)
+  - platform: template
+    name: "Switch32 Hydronic Heater Power Supply"
+    id: hydronic_heater_power_supply_control
+    lambda: |-
+      // Reflect the state of the physical power supply switch.
+      return id(hydronic_heater_power_supply_physical).state;
+    turn_on_action:
+      - switch.turn_on: hydronic_heater_power_supply_physical
+    turn_off_action:
+      - if:
+          condition:
+            or:
+              # 1) The heater (Switch24) is ON...
+              - switch.is_on: hydronic_heater_on_off
+              # 2) ...or if the heater was turned off less than 180 seconds ago:
+              - lambda: |-
+                  float now_sec = id(real_time_clock).now().timestamp;
+                  float last_off = id(hydronic_heater_last_off_timestamp);
+                  return (now_sec - last_off) < 180.0;
+          then:
+            - logger.log:
+                level: WARN
+                format: "Cannot turn off hydronic heater power supply yet!"
+          else:
+            - switch.turn_off: hydronic_heater_power_supply_physical
+            - logger.log:
+                level: INFO
+                format: "Hydronic heater power supply turned OFF."
+
+
+    # Coolant Blower
+  - platform: template
+    name: "Coolant Blower Mode (Auto/Manual)"
+    id: blower_mode_switch
+     # Return true if in Auto mode
+    lambda: |-
+      return id(blower_active); 
+    # Enable PID
+    turn_on_action:
+      - lambda: |-
+          id(blower_active) = true;  
+          ESP_LOGI("BLOWER_MODE", "Blower set to Auto mode (PID on)");
+    # Disable PID
+    turn_off_action:
+      - lambda: |-
+          id(blower_active) = false;
+          ESP_LOGI("BLOWER_MODE", "Blower set to Manual mode (PID off)");
+
+  - platform: template
+    name: "Water System Master Switch"
+    id: water_system_master_switch
+    lambda: |-
+      return id(water_system_enabled);
+    turn_on_action:
+      - lambda: |-
+          id(water_system_enabled) = true;
+      - script.execute:
+          id: set_water_state
+          state: !lambda 'return id(last_water_state);'
+    turn_off_action:
+      - lambda: |-
+          id(water_system_enabled) = false;
+      - switch.turn_off: switch10_water_system_overall
+      - switch.turn_off: main_system_water_pump_on_off
+      - switch.turn_off: shower_system_water_pump_on_off
+      - switch.turn_off: switch11_water_system_state_main
+      - switch.turn_off: switch12_water_system_state_recirculating_shower
+      - switch.turn_off: switch13_water_system_state_recirculating_shower_flush
+      - switch.turn_off: UV_filter
+
+  - platform: template
+    name: "Water System State: Main"
+    id: water_system_state_main
+    lambda: |-
+      return id(last_water_state) == 1;
+    turn_on_action:
+      - script.execute:
+          id: set_water_state
+          state: 1
+
+  - platform: template
+    name: "Water System State: Recirculating Shower"
+    id: water_system_state_recirculating_shower
+    lambda: |-
+      return id(last_water_state) == 2;
+    turn_on_action:
+      - script.execute:
+          id: set_water_state
+          state: 2
+
+  - platform: template
+    name: "Water System State: Recirculating Shower Flush"
+    id: water_system_state_recirculating_shower_flush
+    lambda: |-
+      return id(last_water_state) == 3;
+    turn_on_action:
+      - script.execute:
+          id: set_water_state
+          state: 3
+
+  - platform: template
+    name: "Battery Heater Enable"
+    id: battery_heater_enable
+    lambda: |-
+      // Return true if the thermostat is active (i.e. not OFF)
+      return (id(battery_heater_thermostat).mode != climate::CLIMATE_MODE_OFF);
+    turn_on_action:
+      - climate.control:
+          id: battery_heater_thermostat
+          mode: HEAT
+    turn_off_action:
+      - climate.control:
+          id: battery_heater_thermostat
+          mode: "OFF"
+
+  - platform: template
+    name: "Air Fryer Ventilation Enable"
+    id: air_fryer_ventilation_enable
+    lambda: |-
+      return (id(air_fryer_thermostat).mode != climate::CLIMATE_MODE_OFF);
+    turn_on_action:
+      - climate.control:
+          id: air_fryer_thermostat
+          mode: "COOL"
+    turn_off_action:
+      - climate.control:
+          id: air_fryer_thermostat
+          mode: "OFF"
+
+  - platform: template
+    name: "Fresh Water Tank Heater Enable"
+    id: fresh_water_tank_heater_enable
+    lambda: |-
+      return (id(fresh_water_tank_thermostat).mode != climate::CLIMATE_MODE_OFF);
+    turn_on_action:
+      - climate.control:
+          id: fresh_water_tank_thermostat
+          mode: "HEAT"
+    turn_off_action:
+      - climate.control:
+          id: fresh_water_tank_thermostat
+          mode: "OFF"
+
+  - platform: template
+    name: "Shower Water Tank Heater Enable"
+    id: shower_water_tank_heater_enable
+    lambda: |-
+      return (id(shower_water_tank_thermostat).mode != climate::CLIMATE_MODE_OFF);
+    turn_on_action:
+      - climate.control:
+          id: shower_water_tank_thermostat
+          mode: "HEAT"
+    turn_off_action:
+      - climate.control:
+          id: shower_water_tank_thermostat
+          mode: "OFF"
+
+  - platform: template
+    name: "Grey Water Tank Heater Enable"
+    id: grey_water_tank_heater_enable
+    lambda: |-
+      return (id(grey_water_tank_thermostat).mode != climate::CLIMATE_MODE_OFF);
+    turn_on_action:
+      - climate.control:
+          id: grey_water_tank_thermostat
+          mode: "HEAT"
+      - switch.turn_on: heating_pads_auto_thermostat_grey_water_tank_x2_on_off
+    turn_off_action:
+      - climate.control:
+          id: grey_water_tank_thermostat
+          mode: "OFF"
+      - switch.turn_off: heating_pads_auto_thermostat_grey_water_tank_x2_on_off
+
+binary_sensor:
+  - platform: gpio
+    name: DI01
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 0
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI02
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 1
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI03
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 2
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI04
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 3
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI05
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 4
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI06
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 5
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI07
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 6
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI08
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 7
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI09
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 10
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI10
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 11
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI11
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 12
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI12
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 13
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI13
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 14
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI14
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 15
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI15
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 16
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI16
+    pin:
+      xl9535: xl9535_hub_in1
+      number: 17
+      mode: INPUT
+      inverted: true
+
+  - platform: gpio
+    name: "A32 Pro TMP1"
+    pin: 
+      number: 1
+      inverted: true
+
+
+  - platform: gpio
+    name: "A32 Pro TMP2"
+    pin: 
+      number: 2
+      inverted: true
+
+  - platform: gpio
+    name: "A32 Pro DL"
+    pin: 
+      number: 0
+      inverted: true
+
+  - platform: gpio
+    name: "A32 Pro DTUYA"
+    pin: 
+      number: 21
+      inverted: true
+
+  - platform: gpio
+    name: DI17
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 0
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI18
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 1
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI19
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 2
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI20
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 3
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI21
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 4
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI22
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 5
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI23
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 6
+      mode: INPUT
+      inverted: true
+  - platform: gpio
+    name: DI24
+    id: di_24
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 7
+      mode: INPUT
+      inverted: true
+    on_state:
+      - if:
+          condition:
+            binary_sensor.is_on: di_24
+          then:
+            - switch.turn_on: bed_up_on_off
+          else:
+            - switch.turn_off: bed_up_on_off
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI25
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 10
+      mode: INPUT
+      inverted: true
+    on_press:
+      - switch.toggle: top_monitor
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI26
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 11
+      mode: INPUT
+      inverted: true
+    on_press:
+      - switch.toggle: bottom_monitor
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI27 Water System Overall
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 12
+      mode: INPUT
+      inverted: true
+    on_press:
+      - lambda: 'id(water_system_enabled) = !id(water_system_enabled);'
+      - if:
+          condition:
+            lambda: 'return !id(water_system_enabled);'
+          then:
+            - switch.turn_off: switch10_water_system_overall 
+            - switch.turn_off: main_system_water_pump_on_off
+            - switch.turn_off: shower_system_water_pump_on_off
+            - switch.turn_off: switch11_water_system_state_main
+            - switch.turn_off: switch12_water_system_state_recirculating_shower
+            - switch.turn_off: switch13_water_system_state_recirculating_shower_flush
+          else:
+            - switch.turn_on: switch10_water_system_overall  
+            - script.execute:
+                id: set_water_state
+                state: !lambda 'return id(last_water_state);'
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI28 Water System State Main
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 13
+      mode: INPUT
+      inverted: true
+    on_press:
+      - script.execute:
+          id: set_water_state
+          state: 1
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI29 Water System State Recirculating Shower 
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 14
+      mode: INPUT
+      inverted: true
+    on_press:
+      - script.execute:
+          id: set_water_state
+          state: 2
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI30 Water System State Recirculating Shower Flush
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 15
+      mode: INPUT
+      inverted: true
+    on_press:
+      - script.execute:
+          id: set_water_state
+          state: 3
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI31 Rocker 1 - Lightbar
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 16
+      mode: INPUT
+      inverted: true
+    on_press:
+      - switch.toggle: lightbar
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+      
+  - platform: gpio
+    name: DI32 Rocker 2 - Rear Outdoor Lights
+    pin:
+      xl9535: xl9535_hub_in2
+      number: 17
+      mode: INPUT
+      inverted: true
+    on_press:
+      - switch.toggle: rear_outdoor_lights_on_off
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI33 Rocker 3 - Left Outdoor Lights
+    pin:
+      pcf8574: pcf8574_in_3
+      number: 0
+      mode: INPUT
+      inverted: true
+    on_press:
+      - switch.toggle: left_outdoor_lights_on_off
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI34 Rocker 4 - Right Outdoor Lights
+    pin:
+      pcf8574: pcf8574_in_3
+      number: 1
+      mode: INPUT
+      inverted: true
+    on_press:
+      - switch.toggle: right_outdoor_lights_on_off
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI35 Rocker 5 - Hydronic Heater
+    pin:
+      pcf8574: pcf8574_in_3
+      number: 2
+      mode: INPUT
+      inverted: true
+    on_press:
+      - switch.toggle: hydronic_heater_on_off
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI36 Rocker 6 - Grey Water Tank Valve
+    pin:
+      pcf8574: pcf8574_in_3
+      number: 3
+      mode: INPUT
+      inverted: true
+    on_press:
+      - switch.toggle: grey_water_tank_valve_open_closed
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI37 LPG Valve
+    pin:
+      pcf8574: pcf8574_in_3
+      number: 4
+      mode: INPUT
+      inverted: true
+    on_press:
+      - switch.toggle: LPG_valve
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI38 Bed Power Supply
+    pin:
+      pcf8574: pcf8574_in_3
+      number: 5
+      mode: INPUT
+      inverted: true
+    on_press:
+      - switch.toggle: bed_power_supply_on_off
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  - platform: gpio
+    name: DI39 # used to be Bed Up 
+    pin:
+      pcf8574: pcf8574_in_3
+      number: 6
+      mode: INPUT
+      inverted: true
+
+  - platform: gpio
+    name: DI40 Bed Down
+    id: di_40
+    pin:
+      pcf8574: pcf8574_in_3
+      number: 7
+      mode: INPUT
+      inverted: true
+    on_state:
+      - if:
+          condition:
+            binary_sensor.is_on: di_40
+          then:
+            - switch.turn_on: bed_down_on_off
+          else:
+            - switch.turn_off: bed_down_on_off
+    filters:
+      - delayed_on: 100ms
+      - delayed_off: 100ms
+
+  # MPPT Controller 1 binary sensors
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_1
+    name: "MPPT1 is in Fault state"
+    type: DEVICE_STATE_FAULT
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_1
+    name: "MPPT1 has Error"
+    type: CHARGER_ERROR
+
+  # MPPT Controller 2 binary sensors
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_2
+    name: "MPPT2 is in Fault state"
+    type: DEVICE_STATE_FAULT
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_2
+    name: "MPPT2 has Error"
+    type: CHARGER_ERROR
+
+text_sensor:
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_1
+    name: "MPPT1 state"
+    type: DEVICE_STATE
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_1
+    name: "MPPT1 Error reason"
+    type: CHARGER_ERROR
+
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_2
+    name: "MPPT2 state"
+    type: DEVICE_STATE
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_2
+    name: "MPPT2 Error reason"
+    type: CHARGER_ERROR
+
+# Template text sensor for lockout status
+  - platform: template
+    name: "Hydronic Heater Power Supply Lockout Status"
+    id: heater_ps_lockout_status
+    update_interval: 1s
+    lambda: |-
+      float now_sec = id(real_time_clock).now().timestamp;
+      float last_off = id(hydronic_heater_last_off_timestamp);
+      bool heater_on = id(hydronic_heater_on_off).state;
+      if (heater_on) {
+        return {"Hydronic heater RUNNING -> Turn off hydronic heater and wait for cooldown before removing power."};
+      } else {
+        float diff = now_sec - last_off;
+        if (diff < 180.0) {
+          float remain = 180.0 - diff;
+          char buffer[120];
+          sprintf(buffer, "Cooldown active -> ~%.0f s left before removing power is allowed.", remain);
+          return {buffer};
+        } else {
+          return {"No lockout -> Safe to kill power (resets any fault codes)."};
+        }
+      }
+
+gp8403:
+  id: my_gp8403
+  voltage: 5V
+
+globals:
+  - id: blower_active
+    type: bool
+    initial_value: "false"  # Default to Manual mode (PID off)
+
+  # Global: store last-off time using absolute time.
+  - id: hydronic_heater_last_off_timestamp
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+
+  - id: water_system_enabled
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+
+  - id: last_water_state
+    type: int
+    restore_value: yes
+    initial_value: '1'
+
+  - id: valves_need_delay          # true if a valve position changes this run
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+script:
+  ########################################################################
+  #  set_water_state – switch between the three operating modes of the   #
+  #  water system.                                                       #
+  #    state = 1 → MAIN (normal use)                                     #
+  #    state = 2 → RECIRCULATING SHOWER                                  #
+  #    state = 3 → RECIRCULATING SHOWER FLUSH                            #
+  ########################################################################
+  - id: set_water_state
+    parameters:
+      state: int                   # 1‑Main · 2‑Recirc · 3‑Flush
+    mode: restart                  # cancel any previous run
+    then:
+      # ── Only act when the master switch is enabled ───────────────────
+      - if:
+          condition:
+            lambda: 'return id(water_system_enabled);'
+          then:
+
+            # ── 0. Remember the requested state for next power‑up ─────
+            - lambda: 'id(last_water_state) = state;'
+
+            # ── 1. Stop both pumps immediately ────────────────────────
+            - switch.turn_off: main_system_water_pump_on_off
+            - switch.turn_off: shower_system_water_pump_on_off
+
+            # ── 2. Work out which valve positions are required ────────
+            - lambda: |-
+                bool v1_desired = (state == 2);   // Valve 1
+                bool v2_desired = (state == 3);                 // Valve 2
+                bool v3_desired = (state == 3);                 // Valve 3
+
+                id(valves_need_delay) =
+                  (id(water_system_valve_1_open_closed).state != v1_desired) ||
+                  (id(water_system_valve_2_open_closed).state != v2_desired) ||
+                  (id(water_system_valve_3_open_closed).state != v3_desired);
+
+            # ── 3. Move only the valves that need moving ──────────────
+            # Valve 1
+            - if:
+                condition:
+                  lambda: 'return id(water_system_valve_1_open_closed).state != (state == 2);'
+                then:
+                  - switch.toggle: water_system_valve_1_open_closed
+            # Valve 2
+            - if:
+                condition:
+                  lambda: 'return id(water_system_valve_2_open_closed).state != (state == 3);'
+                then:
+                  - switch.toggle: water_system_valve_2_open_closed
+            # Valve 3
+            - if:
+                condition:
+                  lambda: 'return id(water_system_valve_3_open_closed).state != (state == 3);'
+                then:
+                  - switch.toggle: water_system_valve_3_open_closed
+
+            # ── 4. Update state‑indicator LEDs on the switch panel ────
+            - switch.turn_off: switch11_water_system_state_main
+            - switch.turn_off: switch12_water_system_state_recirculating_shower
+            - switch.turn_off: switch13_water_system_state_recirculating_shower_flush
+            - if: { condition: { lambda: 'return state == 1;' }, then: { switch.turn_on: switch11_water_system_state_main } }
+            - if: { condition: { lambda: 'return state == 2;' }, then: { switch.turn_on: switch12_water_system_state_recirculating_shower } }
+            - if: { condition: { lambda: 'return state == 3;' }, then: { switch.turn_on: switch13_water_system_state_recirculating_shower_flush } }
+
+            # ── 5. Keep overall water‑system power ON ─────────────────
+            - switch.turn_on: switch10_water_system_overall
+
+            # ── 6. UV filter control  (ON for states 2 & 3) ───────────
+            - if:
+                condition: { lambda: 'return state == 2 || state == 3;' }
+                then:       { switch.turn_on: UV_filter }
+                else:       { switch.turn_off: UV_filter }
+
+            # ── 7. OPTIONAL delay if any valves moved ─────────────────
+            - if:
+                condition:
+                  lambda: 'return id(valves_need_delay);'
+                then:
+                  - delay: 10s
+
+            # ── 8. Start the pumps appropriate to this mode ───────────
+            - switch.turn_on: main_system_water_pump_on_off
+            - if:
+                condition: { lambda: 'return state == 2 || state == 3;' }
+                then:       { switch.turn_on: shower_system_water_pump_on_off }
+
+  - id: push_inverter
+    mode: restart
+    then:
+      - switch.turn_on: inverter_button
+      - delay: 1s
+      - switch.turn_off: inverter_button
+
+climate:
+  # PID Climate for Van Hydronic Heating
+  - platform: pid
+    id: coolant_blower_heating
+    name: "Van Hydronic Heating (PID)"
+    sensor: BME280_1_Temperature
+    default_target_temperature: 20 °C
+    heat_output: pid_coolant_blower_output
+    control_parameters:
+      kp: 0.95493
+      ki: 0.00137
+      kd: 167.00887
+      output_averaging_samples: 5      # Smooth the final output (RESULT) over 5 samples
+      derivative_averaging_samples: 5  # Smooth the derivative calculation
+
+    # Optional: deadband around the setpoint to reduce toggling
+    # Adjust thresholds or multipliers to taste
+    deadband_parameters:
+      threshold_high: 0.1     # +0.5 °C above setpoint
+      threshold_low: -0.1     # –0.5 °C below setpoint
+      kp_multiplier: 0.0      # Proportional effectively turned off in deadband
+      ki_multiplier: 0.05     # Let integral gently adjust inside deadband
+      kd_multiplier: 0.0      # Usually keep derivative disabled inside deadband
+      deadband_output_averaging_samples: 15  # Extra smoothing while in deadband
+
+    on_state:
+      - if:
+          condition:
+            lambda: 'return x.mode != climate::CLIMATE_MODE_OFF;'
+          then:
+            - lambda: |-
+                id(blower_active) = true;
+                ESP_LOGI("CLIMATE", "Climate is ON. PID enabled.");
+          else:
+            - lambda: |-
+                id(blower_active) = false;
+                ESP_LOGI("CLIMATE", "Climate is OFF. PID disabled.");
+          
+                  
+  # 1) Battery Heater Thermostat
+  - platform: bang_bang
+    id: battery_heater_thermostat
+    name: "Battery Heater Thermostat"
+    sensor: s5140_ch36_temp
+    default_target_temperature_low: 4
+    default_target_temperature_high: 5
+    heat_action:
+      - switch.turn_on: do8_switch05_battery_heater
+    idle_action:
+      - switch.turn_off: do8_switch05_battery_heater
+
+  # 2) Air Fryer Ventilation Thermostat
+  - platform: bang_bang
+    id: air_fryer_thermostat
+    name: "Air Fryer Ventilation Thermostat"
+    sensor: s5140_ch37_temp
+    default_target_temperature_low: 38
+    default_target_temperature_high: 40
+    cool_action:
+      - switch.turn_on: do8_switch08_air_fryer_ventilation_fans
+    idle_action:
+      - switch.turn_off: do8_switch08_air_fryer_ventilation_fans
+
+  # 3) Fresh Water Tank Thermostat
+  - platform: bang_bang
+    id: fresh_water_tank_thermostat
+    name: "Fresh Water Tank Thermostat"
+    sensor: s5140_ch38_temp
+    default_target_temperature_low: 4
+    default_target_temperature_high: 5
+    heat_action:
+      - switch.turn_on: silicone_heating_pads_fresh_water_tank_x4_on_off
+    idle_action:
+      - switch.turn_off: silicone_heating_pads_fresh_water_tank_x4_on_off
+
+  # 4) Shower Water Tank Thermostat
+  - platform: bang_bang
+    id: shower_water_tank_thermostat
+    name: "Shower Water Tank Thermostat"
+    sensor: s5140_ch40_temp
+    default_target_temperature_low: 4
+    default_target_temperature_high: 5
+    heat_action:
+      - switch.turn_on: silicone_heating_pads_shower_water_tank_x2_on_off
+    idle_action:
+      - switch.turn_off: silicone_heating_pads_shower_water_tank_x2_on_off
+
+  # 5) Grey Water Tank Thermostat
+  - platform: bang_bang
+    id: grey_water_tank_thermostat
+    name: "Grey Water Tank Thermostat"
+    sensor: s5140_ch39_temp
+    default_target_temperature_low: 4
+    default_target_temperature_high: 5
+    heat_action:
+      - switch.turn_on: silicone_heating_pads_grey_water_tank_x4_on_off
+    idle_action:
+      - switch.turn_off: silicone_heating_pads_grey_water_tank_x4_on_off
+
+output:
+  - platform: gp8403
+    id: gp8403_output_1
+    gp8403_id: my_gp8403
+    channel: 0
+
+  - platform: gp8403
+    id: gp8403_output_2
+    gp8403_id: my_gp8403
+    channel: 1
+
+# Coolant blower PID output
+  - platform: template
+    type: float
+    id: pid_coolant_blower_output
+    write_action:
+      then:
+        - if:
+            condition:
+              lambda: 'return id(blower_active);'  # Check if Auto mode (PID is on)
+            then:
+              - logger.log: 
+                  level: DEBUG
+                  format: "Auto Mode: Setting blower brightness to %.2f"
+                  args: ["state"]
+              - light.turn_on:
+                  id: blower
+                  brightness: !lambda "return state < 0 ? 0 : (state > 1 ? 1 : state);"
+            else:
+              - logger.log: 
+                  level: DEBUG
+                  format: "Manual Mode: Allowing direct brightness control"
+
+light:
+  - platform: monochromatic
+    name: "A32 Pro-DAC-0"
+    id: blower
+    output: gp8403_output_1
+    gamma_correct: 1.0
+    restore_mode: RESTORE_DEFAULT_OFF
+    
+  - platform: monochromatic
+    name: "A32 Pro-DAC-1"
+    output: gp8403_output_2
+    gamma_correct: 1.0
+
+sensor:
+  - platform: adc
+    pin: 7
+    name: "A32 Pro A1 Voltage"
+    update_interval: 5s
+    attenuation: 11db
+    filters:
+      - lambda:
+          if (x >= 3.11) {
+            return x * 1.60256;
+          } else if (x <= 0.15) {
+            return 0;
+          } else {
+            return x * 1.51;
+          }
+  - platform: adc
+    pin: 6
+    name: "A32 Pro A2 Voltage"
+    update_interval: 5s
+    attenuation: 11db
+    filters:
+      # - multiply: 1.51515
+      - lambda:
+          if (x >= 3.11) {
+            return x * 1.60256;
+          } else if (x <= 0.15) {
+            return 0;
+          } else {
+            return x * 1.51;
+          }
+  - platform: adc
+    pin: 5
+    name: "A32 Pro A3 Current"
+    update_interval: 5s
+    unit_of_measurement: mA
+    attenuation: 11db
+    filters:
+      - multiply: 6.66666666
+  - platform: adc
+    pin: 4
+    name: "A32 Pro A4 Current"
+    update_interval: 5s
+    unit_of_measurement: mA
+    attenuation: 11db
+    filters:
+      - multiply: 6.66666666
+
+  # S5140 40 Channel Input Module
+  # Channels 1–8: 0–5V (Divide by 100 for scaling)
+############################################
+#  FRESH‑WATER TANK                        #
+############################################
+
+  # 1) raw sender voltage
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Ch 1 Voltage – Fresh‑Water Tank (240‑33 Ω)"
+    id: fresh_water_level_voltage
+    address: 100
+    register_type: holding
+    unit_of_measurement: "V"
+    value_type: U_WORD
+    accuracy_decimals: 2
+    filters:
+      - lambda: "return x / 100.0;"          # register ➜ volts
+
+  # 2) volume percentage (non‑linear) + 10‑sample moving average
+  - platform: template
+    name: "Fresh Water Tank Level (%)"
+    id: fresh_water_level
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 1s                      # one raw value every second
+    lambda: |-
+      /* ---------- 1. voltage ➜ resistance ---------- */
+      float V = id(fresh_water_level_voltage).state;
+      if (V > 0.90) return 0.0;              // open‑circuit guard
+      float R = V / 0.004;                   // V➜Ω
+
+      /* ---------- 2. resistance ➜ height (cm) ------ */
+      const float R_EMPTY = 240.0;
+      const float R_FULL  = 33.0;
+      const float H_MAX   = 19.13;
+      float h = (R_EMPTY - R) / (R_EMPTY - R_FULL) * H_MAX;
+      h = h < 0 ? 0 : (h > H_MAX ? H_MAX : h);
+
+      /* ---------- 3. height ➜ volume % (lookup) ---- */
+      static const uint8_t P[] = {  0,10,20,30,40,50,60,70,80,90,100 };
+      static const float   H[] = { 0.00,2.86,5.71,8.47,10.76,
+                                  12.52,13.84,15.16,16.48,17.80,19.13 };
+      for (int i = 0; i < 10; i++) {
+        if (h <= H[i + 1]) {
+          return P[i] + (P[i + 1] - P[i]) *
+                        (h - H[i]) / (H[i + 1] - H[i]);
+        }
+      }
+      return 100.0;                           // safety fallback
+    filters:
+      - sliding_window_moving_average:
+          window_size: 10     # average the last 10 readings
+          send_every: 1       # publish every second (avg of 10)
+
+  ############################################
+  #  GREY‑WATER TANK                         #
+  ############################################
+
+  # 1) raw sender voltage
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Ch 2 Voltage – Grey‑Water Tank (0‑190 Ω)"
+    id: grey_water_level_voltage
+    address: 101
+    register_type: holding
+    unit_of_measurement: "V"
+    value_type: U_WORD
+    accuracy_decimals: 2
+    filters:
+      - lambda: "return x / 100.0;"
+
+  # 2) volume percentage (linear) + 10‑sample moving average
+  - platform: template
+    name: "Grey Water Tank Level (%)"
+    id: grey_water_level
+    unit_of_measurement: "%"
+    accuracy_decimals: 1
+    update_interval: 1s
+    lambda: |-
+      float V = id(grey_water_level_voltage).state;
+      float R = V / 0.004;                    // V➜Ω
+      float pct = (R / 190.0) * 100.0;        // linear height ➜ %
+      return pct < 0 ? 0 : (pct > 100 ? 100 : pct);
+    filters:
+      - sliding_window_moving_average:
+          window_size: 10
+          send_every: 1
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    id: shower_tank_voltage         
+    name: "S5140 Channel 3 Voltage - Shower Tank Level Sensor (on/off, capacitive proximity sensor)"
+    address: 102
+    register_type: holding
+    unit_of_measurement: "V"
+    value_type: U_WORD
+    accuracy_decimals: 2
+    filters:
+      - lambda: "return x / 100.0;"
+    on_value_range:
+      - above: 4.0          # ≥ 4 V  → LED ON
+        then:
+          - switch.turn_on: shower_button_LED_on_off
+      - below: 4.0          # < 4 V  → LED OFF
+        then:
+          - switch.turn_off: shower_button_LED_on_off
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 4 Current (24V) - Air Conditioning"
+    address: 103
+    register_type: holding
+    unit_of_measurement: "A"
+    value_type: U_WORD
+    accuracy_decimals: 2
+    filters:
+      - lambda: "return -1 * (x / 100.0) * (70.0 / 5.0);"
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 5 Current (24V) - 24V Devices"
+    address: 104
+    register_type: holding
+    unit_of_measurement: "A"
+    value_type: U_WORD
+    accuracy_decimals: 2
+    filters:
+      - lambda: "return -1 * (x / 100.0) * (50.0 / 5.0);"
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 6 Current (24V) - 12V Devices"
+    address: 105
+    register_type: holding
+    unit_of_measurement: "A"
+    value_type: U_WORD
+    accuracy_decimals: 2
+    filters:
+      - lambda: "return -1 * (x / 100.0) * (50.0 / 5.0);"
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 7 Current (24V) - Inverter"
+    address: 106
+    register_type: holding
+    unit_of_measurement: "A"
+    value_type: U_WORD
+    accuracy_decimals: 2
+    filters:
+      - lambda: "return -1 * (x / 100.0 ) * (150.0 / 5.0);"
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 8 Current (24V) - Alternator Charger"
+    address: 107
+    register_type: holding
+    unit_of_measurement: "A"
+    value_type: U_WORD
+    accuracy_decimals: 2
+    filters:
+      - lambda: "return (x / 100.0) * (100.0 / 5.0);"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 9 Current (12V) - Battery Heater"
+  #   address: 108
+  #   register_type: holding
+  #   unit_of_measurement: "A"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return -1 * (x / 100.0) * (10.0 / 5.0);"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 10 Current (12V) - Roof Fan"
+  #   address: 109
+  #   register_type: holding
+  #   unit_of_measurement: "A"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return -1 * (x / 100.0) * (10.0 / 5.0);"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 11 Current (24V) - Bed Motor"
+  #   address: 110
+  #   register_type: holding
+  #   unit_of_measurement: "A"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return -1 * (x / 100.0) * (10.0 / 5.0);"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 12 Current (24V) - Shore Power Charger"
+  #   address: 111
+  #   register_type: holding
+  #   unit_of_measurement: "A"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return (x / 100.0) * (70.0 / 5.0);"
+
+  # Channels 9–16: 4–20mA (Divide by 100 for scaling)
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 9 Current"
+  #   address: 108
+  #   register_type: holding
+  #   unit_of_measurement: "mA"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 10 Current"
+  #   address: 109
+  #   register_type: holding
+  #   unit_of_measurement: "mA"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 11 Current"
+  #   address: 110
+  #   register_type: holding
+  #   unit_of_measurement: "mA"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 12 Current"
+  #   address: 111
+  #   register_type: holding
+  #   unit_of_measurement: "mA"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100.0;"
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 13 Current (12V) - Battery Heater"
+    address: 112
+    register_type: holding
+    unit_of_measurement: "A"
+    value_type: U_WORD
+    accuracy_decimals: 2
+    filters:
+      - lambda: "return -1 * (x / 100.0) * (10.0 / 5.0);"
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 14 Current (12V) - Roof Fan"
+    address: 113
+    register_type: holding
+    unit_of_measurement: "A"
+    value_type: U_WORD
+    accuracy_decimals: 2
+    filters:
+      - lambda: "return -1 * (x / 100.0) * (10.0 / 5.0);"
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 15 Current (24V) - Bed Motor"
+    address: 114
+    register_type: holding
+    unit_of_measurement: "A"
+    value_type: U_WORD
+    accuracy_decimals: 2
+    filters:
+      - lambda: "return -1 * (x / 100.0) * (20.0 / 5.0);"
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 16 Current (24V) - Shore Power Charger"
+    address: 115
+    register_type: holding
+    unit_of_measurement: "A"
+    value_type: U_WORD
+    accuracy_decimals: 2
+    filters:
+      - lambda: "return (x / 100.0) * (70.0 / 5.0);"
+
+  #  # Channels 17–28: 0–5V (Divide by 100 for scaling)
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 17 Voltage"
+  #   address: 116
+  #   register_type: holding
+  #   unit_of_measurement: "V"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100.0"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 18 Voltage"
+  #   address: 117
+  #   register_type: holding
+  #   unit_of_measurement: "A"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 19 Current (24V) - Bed Motor"
+  #   address: 118
+  #   register_type: holding
+  #   unit_of_measurement: "A"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return -1 * (x / 100.0) * (20.0 / 5.0);"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 20 Current (24V) - Shore Power Charger"
+  #   address: 119
+  #   register_type: holding
+  #   unit_of_measurement: "A"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return (x / 100.0) * (70.0 / 5.0);"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 21 Voltage"
+  #   address: 120
+  #   register_type: holding
+  #   unit_of_measurement: "V"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 22 Voltage"
+  #   address: 121
+  #   register_type: holding
+  #   unit_of_measurement: "V"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 23 Voltage"
+  #   address: 122
+  #   register_type: holding
+  #   unit_of_measurement: "V"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 24 Voltage"
+  #   address: 123
+  #   register_type: holding
+  #   unit_of_measurement: "V"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 25 Voltage"
+  #   address: 124
+  #   register_type: holding
+  #   unit_of_measurement: "V"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 26 Voltage"
+  #   address: 125
+  #   register_type: holding
+  #   unit_of_measurement: "V"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 27 Voltage"
+  #   address: 126
+  #   register_type: holding
+  #   unit_of_measurement: "V"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 28 Voltage"
+  #   address: 127
+  #   register_type: holding
+  #   unit_of_measurement: "V"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 2
+  #   filters:
+  #     - lambda: "return x / 100.0;"
+
+  # # Channels 29–40: 10K NTC Thermistor (Divide by 10 for scaling)
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 29 Temperature"
+  #   address: 128
+  #   register_type: holding
+  #   unit_of_measurement: "°C"
+  #   value_type: S_WORD
+  #   accuracy_decimals: 1
+  #   filters:
+  #     - lambda: "return x / 10.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 30 Temperature"
+  #   address: 129
+  #   register_type: holding
+  #   unit_of_measurement: "°C"
+  #   value_type: S_WORD
+  #   accuracy_decimals: 1
+  #   filters:
+  #     - lambda: "return x / 10.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 31 Temperature"
+  #   address: 130
+  #   register_type: holding
+  #   unit_of_measurement: "°C"
+  #   value_type: S_WORD
+  #   accuracy_decimals: 1
+  #   filters:
+  #     - lambda: "return x / 10.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 32 Temperature"
+  #   address: 131
+  #   register_type: holding
+  #   unit_of_measurement: "°C"
+  #   value_type: S_WORD
+  #   accuracy_decimals: 1
+  #   filters:
+  #     - lambda: "return x / 10.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: s5140
+  #   name: "S5140 Channel 33 Temperature"
+  #   address: 132
+  #   register_type: holding
+  #   unit_of_measurement: "°C"
+  #   value_type: S_WORD
+  #   accuracy_decimals: 1
+  #   filters:
+  #     - lambda: "return x / 10.0;"  
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 34 Temperature - Blower Coolant"
+    address: 133
+    register_type: holding
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+      - sliding_window_moving_average:
+          window_size: 7
+          send_every: 1
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 35 Temperature - Blower Air"
+    address: 134
+    register_type: holding
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+      - sliding_window_moving_average:
+          window_size: 7
+          send_every: 1
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 36 Temperature - Battery Bottom Aluminum Plate"
+    id: s5140_ch36_temp
+    address: 135
+    register_type: holding
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+      - sliding_window_moving_average:
+          window_size: 7
+          send_every: 1
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 37 Temperature - Air Fryer Compartment"
+    id: s5140_ch37_temp
+    address: 136
+    register_type: holding
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+      - sliding_window_moving_average:
+          window_size: 7
+          send_every: 1
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 38 Temperature - Fresh Water Tank"
+    id: s5140_ch38_temp
+    address: 137
+    register_type: holding
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+      - sliding_window_moving_average:
+          window_size: 7
+          send_every: 1
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 39 Temperature - Grey Water Tank"
+    id: s5140_ch39_temp
+    address: 138
+    register_type: holding
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+      - sliding_window_moving_average:
+          window_size: 7
+          send_every: 1
+
+  - platform: modbus_controller
+    modbus_controller_id: s5140
+    name: "S5140 Channel 40 Temperature - Shower Water Tank"
+    id: s5140_ch40_temp
+    address: 139
+    register_type: holding
+    unit_of_measurement: "°C"
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+      - sliding_window_moving_average:
+          window_size: 7
+          send_every: 1           
+
+  # BME280 Temperature + Humidity + Pressure sensors
+  - platform: modbus_controller
+    modbus_controller_id: BME280_1
+    name: "BME280_1 Relative Humidity"
+    id: "BME280_1_Relative_Humidity"
+    address: 0
+    register_type: holding
+    unit_of_measurement: "RH %"
+    device_class: humidity  # Added device class
+    state_class: measurement  # Added state class
+    value_type: U_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+
+  - platform: modbus_controller
+    modbus_controller_id: BME280_1
+    name: "BME280_1 Temperature"
+    id: "BME280_1_Temperature"
+    address: 1
+    register_type: holding
+    unit_of_measurement: "°C"
+    device_class: temperature  # Added device class
+    state_class: measurement  # Added state class
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: BME280_1
+  #   name: "BME280_1 Station Pressure"
+  #   address: 2
+  #   register_type: holding
+  #   unit_of_measurement: "kPa"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 1
+  #   filters:
+  #     - lambda: "return x / 10;"
+  
+# BME280 Temperature + Humidity + Pressure sensors
+  - platform: modbus_controller
+    modbus_controller_id: BME280_2
+    name: "BME280_2 Relative Humidity"
+    id: "BME280_2_Relative_Humidity"
+    address: 0
+    register_type: holding
+    unit_of_measurement: "RH %"
+    device_class: humidity  # Added device class
+    state_class: measurement  # Added state class
+    value_type: U_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+
+  - platform: modbus_controller
+    modbus_controller_id: BME280_2
+    name: "BME280_2 Temperature"
+    id: "BME280_2_Temperature"
+    address: 1
+    register_type: holding
+    unit_of_measurement: "°C"
+    device_class: temperature  # Added device class
+    state_class: measurement  # Added state class
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: BME280_2
+  #   name: "BME280_2 Station Pressure"
+  #   address: 2
+  #   register_type: holding
+  #   unit_of_measurement: "kPa"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 1
+  #   filters:
+  #     - lambda: "return x / 10;"
+
+# BME280 Temperature + Humidity + Pressure sensors
+  - platform: modbus_controller
+    modbus_controller_id: BME280_3
+    name: "BME280_3 Relative Humidity"
+    id: "BME280_3_Relative_Humidity"
+    address: 0
+    register_type: holding
+    unit_of_measurement: "RH %"
+    device_class: humidity  # Added device class
+    state_class: measurement  # Added state class
+    value_type: U_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+
+  - platform: modbus_controller
+    modbus_controller_id: BME280_3
+    name: "BME280_3 Temperature"
+    id: "BME280_3_Temperature"
+    address: 1
+    register_type: holding
+    unit_of_measurement: "°C"
+    device_class: temperature  # Added device class
+    state_class: measurement  # Added state class
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: BME280_3
+  #   name: "BME280_3 Station Pressure"
+  #   address: 2
+  #   register_type: holding
+  #   unit_of_measurement: "kPa"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 1
+  #   filters:
+  #     - lambda: "return x / 10;"
+
+# BME280 Temperature + Humidity + Pressure sensors
+  - platform: modbus_controller
+    modbus_controller_id: BME280_4
+    name: "BME280_4 Relative Humidity"
+    id: "BME280_4_Relative_Humidity"
+    address: 0
+    register_type: holding
+    unit_of_measurement: "RH %"
+    device_class: humidity  # Added device class
+    state_class: measurement  # Added state class
+    value_type: U_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+
+  - platform: modbus_controller
+    modbus_controller_id: BME280_4
+    name: "BME280_4 Temperature"
+    id: "BME280_4_Temperature"
+    address: 1
+    register_type: holding
+    unit_of_measurement: "°C"
+    device_class: temperature  # Added device class
+    state_class: measurement  # Added state class
+    value_type: S_WORD
+    accuracy_decimals: 1
+    filters:
+      - lambda: "return x / 10.0;"
+
+  # - platform: modbus_controller
+  #   modbus_controller_id: BME280_4
+  #   name: "BME280_4 Station Pressure"
+  #   address: 2
+  #   register_type: holding
+  #   unit_of_measurement: "kPa"
+  #   value_type: U_WORD
+  #   accuracy_decimals: 1
+  #   filters:
+  #     - lambda: "return x / 10;"
+
+  # MPPT Controller 1 (250W array)
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_1
+    name: "MPPT1 Output Voltage"
+    type: BATTERY_VOLTAGE
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_1
+    name: "MPPT1 Output Current"
+    type: BATTERY_CURRENT
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_1
+    name: "MPPT1 Yield Today"
+    type: YIELD_TODAY
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_1
+    name: "MPPT1 PV Power"
+    type: PV_POWER
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_1
+    name: "MPPT1 Load Current"
+    type: LOAD_CURRENT
+
+# MPPT Controller 2 (400W array)
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_2
+    name: "MPPT2 Output Voltage"
+    type: BATTERY_VOLTAGE
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_2
+    name: "MPPT2 Output Current"
+    type: BATTERY_CURRENT
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_2
+    name: "MPPT2 Yield Today"
+    type: YIELD_TODAY
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_2
+    name: "MPPT2 PV Power"
+    type: PV_POWER
+  - platform: victron_ble
+    victron_ble_id: MPPT_Controller_2
+    name: "MPPT2 Load Current"
+    type: LOAD_CURRENT
+
+# 12V Smart Battery Sense
+  - platform: victron_ble 
+    victron_ble_id: Smart_Battery_Sense_12V
+    name: "Smart Battery Sense (12V) Voltage"
+    type: BATTERY_VOLTAGE
+
+  - platform: victron_ble 
+    victron_ble_id: Smart_Battery_Sense_12V
+    name: "Smart Battery Sense (12V) Temperature"
+    type: TEMPERATURE
+
+  # PID sensors
+  - platform: pid
+    name: "Coolant Blower Heating PID Climate Result"
+    climate_id: coolant_blower_heating
+    type: RESULT
+
+  - platform: pid
+    name: "Coolant Blower Heating PID Climate Error"
+    climate_id: coolant_blower_heating
+    type: ERROR
+
+  - platform: pid
+    name: "Coolant Blower Heating PID Proportional Term"
+    climate_id: coolant_blower_heating
+    type: PROPORTIONAL
+
+  - platform: pid
+    name: "Coolant Blower Heating PID Integral Term"
+    climate_id: coolant_blower_heating
+    type: INTEGRAL
+
+  - platform: pid
+    name: "Coolant Blower Heating PID Derivative Term"
+    climate_id: coolant_blower_heating
+    type: DERIVATIVE
+
+  - platform: pid
+    name: "Coolant Blower Heating PID Heat Output"
+    climate_id: coolant_blower_heating
+    type: HEAT
+
+  - platform: pid
+    name: "Coolant Blower Heating PID Cool Output"
+    climate_id: coolant_blower_heating
+    type: COOL
+
+  - platform: pid
+    name: "Coolant Blower Heating PID KP"
+    climate_id: coolant_blower_heating
+    type: KP
+
+  - platform: pid
+    name: "Coolant Blower Heating PID KI"
+    climate_id: coolant_blower_heating
+    type: KI
+
+  - platform: pid
+    name: "Coolant Blower Heating PID KD"
+    climate_id: coolant_blower_heating
+    type: KD
+
+  - platform: uptime
+    id: system_uptime
+    name: "System Uptime"
+    update_interval: 1s
+
+
+web_server:
+  port: 80
+
+font:
+  - file: "gfonts://Roboto"
+    id: roboto
+    size: 20
+
+display:
+  - platform: ssd1306_i2c
+    i2c_id: bus_a
+    model: "SSD1306 128x64"
+    address: 0x3C
+    lambda: |-
+      it.printf(0, 0, id(roboto), "A32 Pro");
+
