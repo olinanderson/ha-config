@@ -8,6 +8,7 @@
         entity_id: device_tracker.starlink_device_location
   mode: single
   id: 5c4ae16d93684fc9bf37f7c117cb0703
+
 - alias: Initialize Previous Coordinates on Startup
   trigger:
     - trigger: homeassistant
@@ -32,6 +33,7 @@
           "{{ state_attr('device_tracker.starlink_device_location', 'elevation')
           | default('0.0') }}"
   id: dd03deee68484cf4b74846e0d7aaee69
+
 - alias: Update Filtered Starlink Location
   trigger:
     - trigger: state
@@ -86,6 +88,7 @@
           "{{ state_attr('device_tracker.starlink_device_location', 'elevation')
           }}"
   id: 2f0fdb53911c41bbb6e40d79fe25e34e
+
 - alias: "Main Lighting: Sync LED Dimmer with Switch"
   trigger:
     - trigger: state
@@ -108,6 +111,7 @@
                 entity_id: light.led_controller_cct_1
   mode: single
   id: da628a416f844416bc745bc6c33ec37c
+
 - alias: "Main Lighting: Sync Warmth to LED Dimmer"
   trigger:
     - trigger: state
@@ -120,6 +124,7 @@
         entity_id: light.led_controller_cct_1
   mode: single
   id: 7d383f4cc6ea4901b42f9a92288acfa1
+
 - id: "1739334868426"
   alias: Linked Entities
   description: ""
@@ -129,6 +134,7 @@
       linked_entity:
         - light.led_controller_cct_1
         - light.main_lighting_switch
+
 - id: "1739334926562"
   alias: Linked Entities Under Cabinet
   description: ""
@@ -138,6 +144,7 @@
       linked_entity:
         - light.led_controller_cct_2
         - light.under_cabinet_lighting_switch
+
 - id: "1739334948121"
   alias: Linked Entities Shower Lighting
   description: ""
@@ -147,18 +154,13 @@
       linked_entity:
         - light.shower_lighting_switch
         - light.led_controller_sc_1
-# ────────────────────────────────────────────────────────────────
-# Combined Shore‑Power Charger Logic & Sync
-# ────────────────────────────────────────────────────────────────
+
 - id: combined_shore_power_charger
-  alias: Combined Shore‑Power Charger Logic & Sync
+  alias: Combined Shore‑Power Charger Logic & Sync
   description: |
     Turns charger ON when SOC < ON‑threshold (helper) and enable toggle is ON.
     Turns charger OFF when SOC > OFF‑threshold, or when toggle set to OFF.
   mode: restart
-  ################################################################
-  # TRIGGERS
-  ################################################################
   trigger:
     - id: enable_toggle
       trigger: state
@@ -166,7 +168,7 @@
 
     - id: low_soc
       trigger: numeric_state
-      entity_id: sensor.olins_van_bms_battery # 0‑100 %
+      entity_id: sensor.olins_van_bms_battery # 0‑100 %
       below: input_number.shore_charge_on_threshold
 
     - id: high_soc
@@ -174,9 +176,6 @@
       entity_id: sensor.olins_van_bms_battery
       above: input_number.shore_charge_off_threshold
 
-  ################################################################
-  # ACTIONS
-  ################################################################
   action:
     # ── A) Manual enable / disable toggle ───────────────────────
     - choose:
@@ -220,80 +219,160 @@
               target:
                 entity_id: switch.a32_pro_do8_switch04_shore_power_charger
 
+# ────────────────────────────────────────────────────────────────
+# Welcome back message
+# ────────────────────────────────────────────────────────────────
 # The following automation is used to setup the ducking module in pulse audio which lowers the volume of music from airplay/audio from PC when HA is playing audio through the VLC media player
 - alias: "Bootstrap ducking → VLC"
   mode: single
   trigger:
     - trigger: homeassistant
-      event: start # fires when HA has finished booting :contentReference[oaicite:1]{index=1}
+      event: start # fires when HA has finished booting
   action:
-    - delay: "00:00:15" # let hassio_audio come online :contentReference[oaicite:2]{index=2}
+    - delay: "00:00:15" # let hassio_audio come online
     - action: shell_command.load_ducking_docker
 
+# ────────────────────────────────────────────────────────────────
+# Welcome back message
+# ────────────────────────────────────────────────────────────────
 - id: iphone_home_arrival
   alias: "iPhone Home Arrival - Lights & Welcome"
-  description: "Turn off power saving mode and announce return when iPhone comes home after being away 15+ minutes"
+  description: "Turn off power saving mode immediately, announce return only when iPhone comes home after being away 15+ minutes"
   mode: single
   trigger:
     - trigger: state
       entity_id: device_tracker.olin_andersons_iphone_16_pro_max
       from: "not_home"
       to: "home"
-  condition:
-    # Only trigger if away for at least 15 minutes
-    - condition: template
-      value_template: >
-        {% set away_duration = now() - trigger.from_state.last_changed %}
-        {{ away_duration.total_seconds() >= 900 }}
   action:
-    # Turn off power saving mode (which restores lights/monitors to previous state)
+    # Always turn off power saving mode immediately (no conditions)
     - action: script.power_saving_mode_off
 
-    # Set media player volume
-    - action: media_player.volume_set
-      target:
-        entity_id: media_player.vlc_telnet
-      data:
-        volume_level: 0.3
+    # Only do announcement if away for 15+ minutes
+    - if:
+        - condition: template
+          value_template: >
+            {% set away_duration = now() - trigger.from_state.last_changed %}
+            {{ away_duration.total_seconds() >= 900 }}
+      then:
+        # Set media player volume
+        - action: media_player.volume_set
+          target:
+            entity_id: media_player.vlc_telnet
+          data:
+            volume_level: 0.3
 
-    # Calculate how long you were away and get battery percentage
-    - action: tts.speak
-      target:
-        entity_id: tts.openai_tts_gpt_4o_mini_tts
-      data:
-        cache: true
-        media_player_entity_id: media_player.vlc_telnet
-        message: >
-          {% set away_duration = now() - trigger.from_state.last_changed %}
-          {% set total_minutes = (away_duration.total_seconds() / 60) | round(0) %}
-          {% set days = (total_minutes / 1440) | int %}
-          {% set hours = ((total_minutes % 1440) / 60) | int %}
-          {% set minutes = (total_minutes % 60) | int %}
-          {% set van_battery_pct = states('sensor.olins_van_bms_battery') | default('unknown') %}
-          {% set inside_temp = states('sensor.a32_pro_bme280_1_temperature') | default('unknown') %}
-          {% set outside_temp = states('sensor.a32_pro_bme280_4_temperature') | default('unknown') %}
-          Welcome back Olin! You were away for 
-          {%- if days > 0 -%}
-            {{ days }} day{% if days != 1 %}s{% endif %}
-            {%- if hours > 0 %} and {{ hours }} hour{% if hours != 1 %}s{% endif %}{% endif -%}
-          {%- elif hours > 0 -%}
-            {{ hours }} hour{% if hours != 1 %}s{% endif %}
-            {%- if minutes > 0 %} and {{ minutes }} minute{% if minutes != 1 %}s{% endif %}{% endif -%}
-          {%- else -%}
-            {{ minutes }} minute{% if minutes != 1 %}s{% endif %}
-          {%- endif %}. 
-          {% if van_battery_pct != 'unknown' %}
-          The van battery is at {{ van_battery_pct }} percent.
-          {% else %}
-          I couldn't get the van battery level.
-          {% endif %}
-          {% if inside_temp != 'unknown' and outside_temp != 'unknown' %}
-          It's {{ inside_temp | round(1) }} degrees inside and {{ outside_temp | round(1) }} degrees outside.
-          {% elif inside_temp != 'unknown' %}
-          The inside temperature is {{ inside_temp | round(1) }} degrees.
-          {% elif outside_temp != 'unknown' %}
-          The outside temperature is {{ outside_temp | round(1) }} degrees.
-          {% endif %}
+        # Calculate how long you were away and get battery percentage
+        - action: tts.speak
+          target:
+            entity_id: tts.openai_tts_gpt_4o_mini_tts
+          data:
+            cache: true
+            media_player_entity_id: media_player.vlc_telnet
+            message: >
+              {% set away_duration = now() - trigger.from_state.last_changed %}
+              {% set total_minutes = (away_duration.total_seconds() / 60) | round(0) %}
+              {% set days = (total_minutes / 1440) | int %}
+              {% set hours = ((total_minutes % 1440) / 60) | int %}
+              {% set minutes = (total_minutes % 60) | int %}
+              {% set van_battery_pct = states('sensor.olins_van_bms_battery') | default('unknown') %}
+              {% set inside_temp = states('sensor.a32_pro_bme280_1_temperature') | default('unknown') %}
+              {% set outside_temp = states('sensor.a32_pro_bme280_4_temperature') | default('unknown') %}
+              Welcome back Olin! You were away for 
+              {%- if days > 0 -%}
+                {{ days }} day{% if days != 1 %}s{% endif %}
+                {%- if hours > 0 %} and {{ hours }} hour{% if hours != 1 %}s{% endif %}{% endif -%}
+              {%- elif hours > 0 -%}
+                {{ hours }} hour{% if hours != 1 %}s{% endif %}
+                {%- if minutes > 0 %} and {{ minutes }} minute{% if minutes != 1 %}s{% endif %}{% endif -%}
+              {%- else -%}
+                {{ minutes }} minute{% if minutes != 1 %}s{% endif %}
+              {%- endif %}. 
+              {% if van_battery_pct != 'unknown' %}
+              The van battery is at {{ van_battery_pct }} percent.
+              {% else %}
+              I couldn't get the van battery level.
+              {% endif %}
+              {% if inside_temp != 'unknown' and outside_temp != 'unknown' %}
+              It's {{ inside_temp | round(1) }} degrees inside and {{ outside_temp | round(1) }} degrees outside.
+              {% elif inside_temp != 'unknown' %}
+              The inside temperature is {{ inside_temp | round(1) }} degrees.
+              {% elif outside_temp != 'unknown' %}
+              The outside temperature is {{ outside_temp | round(1) }} degrees.
+              {% endif %}
+
+# ────────────────────────────────────────────────────────────────
+# Auto Power Saving When Away from Van
+# ────────────────────────────────────────────────────────────────
+- id: auto_power_saving_when_away
+  alias: "Auto Power Saving When Away from Van"
+  description: "Turn on power saving mode when leaving van, turn off when returning"
+  mode: single
+  trigger:
+    # When you leave the van (iPhone goes away) - immediate trigger
+    - id: leave_van
+      trigger: state
+      entity_id: device_tracker.olin_andersons_iphone_16_pro_max
+      from: "home"
+      to: "not_home"
+
+    # When you return to the van (iPhone comes home)
+    - id: return_to_van
+      trigger: state
+      entity_id: device_tracker.olin_andersons_iphone_16_pro_max
+      from: "not_home"
+      to: "home"
+
+  condition:
+    # Simplified conditions - no time checks needed
+    - condition: template
+      value_template: >
+        {% if trigger.id == 'leave_van' %}
+          {# Always turn on power saving when leaving #}
+          true
+        {% elif trigger.id == 'return_to_van' %}
+          {# Always turn off power saving when returning #}
+          true
+        {% else %}
+          false
+        {% endif %}
+
+  action:
+    - choose:
+        # Turn ON power saving when leaving van
+        - conditions:
+            - condition: trigger
+              id: leave_van
+            # Always turn on power saving when leaving, regardless of current state
+          sequence:
+            - action: script.power_saving_mode_on
+            # Optional: Log the action
+            - action: system_log.write
+              data:
+                level: info
+                logger: automation.power_saving
+                message: "Power saving mode enabled - left van"
+
+        # Turn OFF power saving when returning to van
+        - conditions:
+            - condition: trigger
+              id: return_to_van
+            # Only if currently in power saving mode
+            - condition: state
+              entity_id: input_boolean.power_saving_mode
+              state: "on"
+            # Don't turn off if we're currently driving (let the driving automation handle it)
+            - condition: state
+              entity_id: binary_sensor.vehicle_is_moving
+              state: "off"
+          sequence:
+            - action: script.power_saving_mode_off
+            # Optional: Log the action
+            - action: system_log.write
+              data:
+                level: info
+                logger: automation.power_saving
+                message: "Power saving mode disabled - returned to van"
 
 # ────────────────────────────────────────────────────────────────
 # Power Saving Mode Automation - triggers scripts when toggle changes
@@ -317,5 +396,144 @@
             - condition: state
               entity_id: input_boolean.power_saving_mode
               state: "off"
+          sequence:
+            - action: script.power_saving_mode_off
+
+# ────────────────────────────────────────────────────────────────
+# Vehicle Fuel and Movement Tracking System
+# ────────────────────────────────────────────────────────────────
+
+# Update previous speed for acceleration calculation
+- id: update_previous_speed
+  alias: "Update Previous Speed for Acceleration Calculation"
+  description: "Store previous speed value to calculate acceleration"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: sensor.wican_speed
+  condition:
+    # Only if we have a valid speed reading
+    - condition: template
+      value_template: "{{ states('sensor.wican_speed') not in ['unavailable', 'unknown'] }}"
+  action:
+    - action: input_text.set_value
+      data:
+        entity_id: input_text.previous_speed
+        value: "{{ trigger.from_state.state | default('0') }}"
+
+# Update stable fuel level when acceleration is low
+- id: update_stable_fuel_level
+  alias: "Update Stable Fuel Level When Acceleration is Low"
+  description: "Only update fuel level reading when acceleration has been low for 5+ seconds"
+  mode: restart
+  trigger:
+    # Check when fuel changes or acceleration changes
+    - trigger: state
+      entity_id:
+        - sensor.wican_fuel
+        - sensor.vehicle_acceleration
+      # Wait 5 seconds to ensure stability
+      for: "00:00:05"
+
+  condition:
+    # Only update if acceleration is very low (stable velocity)
+    - condition: template
+      value_template: >
+        {% set acceleration = states('sensor.vehicle_acceleration') | float(0) | abs %}
+        {% set accel_threshold = states('input_number.acceleration_stability_threshold') | float(0.5) %}
+        {{ acceleration <= accel_threshold }}
+
+  action:
+    # Update the stored fuel level
+    - action: input_text.set_value
+      data:
+        entity_id: input_text.previous_fuel_level
+        value: "{{ states('sensor.wican_fuel') }}"
+
+# Handle WICAN disconnection (engine off)
+- id: update_fuel_on_wican_disconnect
+  alias: "Update Fuel Level When WICAN Disconnects"
+  description: "Capture fuel level when WICAN goes offline (engine turned off)"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: sensor.wican_fuel
+      to: "unavailable"
+  action:
+    # Store the last known fuel level before disconnect
+    - action: input_text.set_value
+      data:
+        entity_id: input_text.previous_fuel_level
+        value: "{{ trigger.from_state.state | default('0') }}"
+
+# Initialize on startup or reconnect
+- id: initialize_fuel_level_on_startup
+  alias: "Initialize Fuel Level on Startup"
+  trigger:
+    - trigger: homeassistant
+      event: start
+    # Also trigger when WICAN comes back online
+    - trigger: state
+      entity_id: sensor.wican_fuel
+      from: "unavailable"
+  condition:
+    # Only if we have valid readings
+    - condition: template
+      value_template: "{{ states('sensor.wican_fuel') not in ['unavailable', 'unknown'] }}"
+  action:
+    - action: input_text.set_value
+      data:
+        entity_id: input_text.previous_fuel_level
+        value: "{{ states('sensor.wican_fuel') }}"
+    - action: input_text.set_value
+      data:
+        entity_id: input_text.previous_speed
+        value: "{{ states('sensor.wican_speed') | default('0') }}"
+
+# ────────────────────────────────────────────────────────────────
+# Auto Power Saving When Driving
+# ────────────────────────────────────────────────────────────────
+- id: auto_power_saving_when_driving
+  alias: "Auto Power Saving When Driving"
+  description: "Turn on power saving mode when driving, turn off when stopped"
+  mode: single
+  trigger:
+    # When vehicle starts moving
+    - id: start_driving
+      trigger: state
+      entity_id: binary_sensor.vehicle_is_moving
+      to: "on"
+      # Wait 30 seconds to avoid toggling at traffic lights
+      for: "00:00:30"
+
+    # When vehicle stops moving
+    - id: stop_driving
+      trigger: state
+      entity_id: binary_sensor.vehicle_is_moving
+      to: "off"
+      # Wait 2 minutes to avoid toggling in stop-and-go traffic
+      for: "00:02:00"
+
+  action:
+    - choose:
+        # Turn ON power saving when driving
+        - conditions:
+            - condition: trigger
+              id: start_driving
+            # Only if not already in power saving mode
+            - condition: state
+              entity_id: input_boolean.power_saving_mode
+              state: "off"
+          sequence:
+            - action: script.power_saving_mode_on
+
+        # Turn OFF power saving when stopped
+        - conditions:
+            - condition: trigger
+              id: stop_driving
+            # Only if currently in power saving mode
+            - condition: state
+              entity_id: input_boolean.power_saving_mode
+              state: "on"
           sequence:
             - action: script.power_saving_mode_off

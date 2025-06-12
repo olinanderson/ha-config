@@ -1077,8 +1077,8 @@ binary_sensor:
     on_press:
       - switch.toggle: lightbar
     filters:
-      - delayed_on: 100ms
-      - delayed_off: 100ms
+      - delayed_on: 250ms
+      - delayed_off: 250ms
       
   - platform: gpio
     name: DI32 Rocker 2 - Rear Outdoor Lights
@@ -1090,8 +1090,8 @@ binary_sensor:
     on_press:
       - switch.toggle: rear_outdoor_lights_on_off
     filters:
-      - delayed_on: 100ms
-      - delayed_off: 100ms
+      - delayed_on: 250ms
+      - delayed_off: 250ms
 
   - platform: gpio
     name: DI33 Rocker 3 - Left Outdoor Lights
@@ -1103,8 +1103,8 @@ binary_sensor:
     on_press:
       - switch.toggle: left_outdoor_lights_on_off
     filters:
-      - delayed_on: 100ms
-      - delayed_off: 100ms
+      - delayed_on: 250ms
+      - delayed_off: 250ms
 
   - platform: gpio
     name: DI34 Rocker 4 - Right Outdoor Lights
@@ -1116,8 +1116,8 @@ binary_sensor:
     on_press:
       - switch.toggle: right_outdoor_lights_on_off
     filters:
-      - delayed_on: 100ms
-      - delayed_off: 100ms
+      - delayed_on: 250ms
+      - delayed_off: 250ms
 
   - platform: gpio
     name: DI35 Rocker 5 - Hydronic Heater
@@ -1129,8 +1129,8 @@ binary_sensor:
     on_press:
       - switch.toggle: hydronic_heater_on_off
     filters:
-      - delayed_on: 100ms
-      - delayed_off: 100ms
+      - delayed_on: 250ms
+      - delayed_off: 250ms
 
   - platform: gpio
     name: DI36 Rocker 6 - Grey Water Tank Valve
@@ -1142,8 +1142,8 @@ binary_sensor:
     on_press:
       - switch.toggle: grey_water_tank_valve_open_closed
     filters:
-      - delayed_on: 100ms
-      - delayed_off: 100ms
+      - delayed_on: 250ms
+      - delayed_off: 250ms
 
   - platform: gpio
     name: DI37 LPG Valve

@@ -50,27 +50,51 @@ input_number:
     step: 1
 
   shore_charge_on_threshold:
-    name: Charger Turn‑ON %
+    name: Charger Turn‑ON %
     icon: mdi:flash
     unit_of_measurement: "%"
     min: 0
     max: 100
     step: 1
-    initial: 89 # default ON at 89 %
+    initial: 89 # default ON at 89 %
 
   shore_charge_off_threshold:
-    name: Charger Turn‑OFF %
+    name: Charger Turn‑OFF %
     icon: mdi:power-plug-off
     unit_of_measurement: "%"
     min: 0
     max: 100
     step: 1
-    initial: 90 # default OFF at 90 %
+    initial: 90 # default OFF at 90 %
+
+  acceleration_stability_threshold:
+    name: "Acceleration Stability Threshold"
+    initial: 0.5
+    min: 0.1
+    max: 2.0
+    step: 0.1
+    unit_of_measurement: "km/h/s"
+    icon: mdi:speedometer-slow
+
+  vehicle_stopped_threshold:
+    name: "Vehicle Stopped Speed Threshold"
+    initial: 2
+    min: 0
+    max: 10
+    step: 0.5
+    unit_of_measurement: "km/h"
+    icon: mdi:car-brake-parking
 
 input_text:
   previous_latitude:
   previous_longitude:
   previous_elevation:
+  previous_fuel_level:
+    name: "Previous Fuel Level"
+    initial: "0"
+  previous_speed:
+    name: "Previous Speed"
+    initial: "0"
 
 input_boolean:
   speedtest_running:
@@ -81,7 +105,6 @@ input_boolean:
     name: "Shore Power Charger On/Off"
     initial: off
 
-  # Add this to your configuration.yaml input_boolean section:
   power_saving_mode:
     name: "Power Saving Mode"
     icon: mdi:battery-heart-variant
@@ -179,7 +202,7 @@ template:
                             pi*R**2 * ((2/3)*h2 - (h2**3)/(3*Ec**2)) %}
           {% endif %}
 
-          {# ── display percentage relative to the 80 % safety fill ── #}
+          {# ── display percentage relative to the 80 % safety fill ── #}
           {{ (100 * V_liq / (0.8 * V_max)) | round(1) }}
 
       - name: Propane – Raw Distance
@@ -194,10 +217,10 @@ template:
         unit_of_measurement: L
         state: >
           {% set pct = states('sensor.propane_tank_percentage') | float(0) %}
-          {{ (pct / 100 * 0.8 * 21.0) | round(2) }}  {# 21 L theoretical #}
+          {{ (pct / 100 * 0.8 * 21.0) | round(2) }}  {# 21 L theoretical #}
 
       # -----------------------------
-      # Power Sensors (24 V or 12 V) = (current | abs) * voltage
+      # Power Sensors (24 V or 12 V) = (current | abs) * voltage
       # -----------------------------
       - name: "Air Conditioning Power (24V)"
         unique_id: air_conditioning_power_24v
@@ -294,6 +317,127 @@ template:
           {% set d = state_attr('fan.ag_pro_roof_fan','direction') %}
           {{ 'Exhaust' if d == 'forward' else 'Intake' if d == 'reverse' else 'Unknown' }}
 
+      # -----------------------------
+      # Vehicle Acceleration and Fuel Filtering
+      # -----------------------------
+      - name: "Vehicle Acceleration"
+        unique_id: vehicle_acceleration
+        unit_of_measurement: "km/h/s"
+        state_class: measurement
+        icon: mdi:speedometer-slow
+        state: >
+          {% set current_speed = states('sensor.wican_speed') | float(0) %}
+          {% set previous_speed = states('input_text.previous_speed') | float(0) %}
+          {% set speed_change = current_speed - previous_speed %}
+
+          {# Estimate time delta - assuming updates every ~1 second #}
+          {% set time_delta = 1.0 %}
+          {% set acceleration = speed_change / time_delta %}
+
+          {{ acceleration | round(2) }}
+
+      - name: "Stable Fuel Level"
+        unique_id: stable_fuel_level
+        unit_of_measurement: "%"
+        device_class: battery
+        state_class: measurement
+        icon: mdi:fuel
+        state: >
+          {% set current_fuel = states('sensor.wican_fuel') | float(0) %}
+          {% set previous_fuel = states('input_text.previous_fuel_level') | float(current_fuel) %}
+          {% set acceleration = states('sensor.vehicle_acceleration') | float(0) | abs %}
+          {% set accel_threshold = states('input_number.acceleration_stability_threshold') | float(0.5) %}
+
+          {# Vehicle is considered stable if acceleration is very low #}
+          {% set is_stable = acceleration <= accel_threshold %}
+
+          {# Only update if vehicle is stable #}
+          {% if is_stable %}
+            {{ current_fuel }}
+          {% else %}
+            {{ previous_fuel }}
+          {% endif %}
+
+      - name: "Vehicle Stability Status"
+        unique_id: vehicle_stability_status
+        state: >
+          {% set speed = states('sensor.wican_speed') | float(0) %}
+          {% set acceleration = states('sensor.vehicle_acceleration') | float(0) | abs %}
+          {% set accel_threshold = states('input_number.acceleration_stability_threshold') | float(0.5) %}
+          {% set wican_available = not is_state('sensor.wican_speed', 'unavailable') %}
+
+          {% if not wican_available %}
+            Engine Off
+          {% elif acceleration <= accel_threshold %}
+            Stable ({{ speed | round(1) }} km/h)
+          {% else %}
+            Accelerating ({{ acceleration | round(2) }} km/h/s)
+          {% endif %}
+        icon: >
+          {% set acceleration = states('sensor.vehicle_acceleration') | float(0) | abs %}
+          {% set accel_threshold = states('input_number.acceleration_stability_threshold') | float(0.5) %}
+          {% set wican_available = not is_state('sensor.wican_speed', 'unavailable') %}
+
+          {% if not wican_available %}
+            mdi:engine-off
+          {% elif acceleration <= accel_threshold %}
+            mdi:check-circle
+          {% else %}
+            mdi:car-speed-limiter
+          {% endif %}
+
+  # -----------------------------
+  # Vehicle Movement Binary Sensors
+  # -----------------------------
+  - binary_sensor:
+      - name: "Vehicle Is Moving"
+        unique_id: vehicle_is_moving
+        device_class: moving
+        state: >
+          {% set speed = states('sensor.wican_speed') | float(0) %}
+          {% set speed_threshold = states('input_number.vehicle_stopped_threshold') | float(2) %}
+          {% set wican_available = is_state('binary_sensor.engine_is_running', 'on') %}
+          {{ wican_available and speed > speed_threshold }}
+        icon: >
+          {% if is_state('binary_sensor.vehicle_is_moving', 'on') %}
+            mdi:car
+          {% else %}
+            mdi:car-brake-parking
+          {% endif %}
+
+      - name: "Vehicle Is Stable"
+        unique_id: vehicle_is_stable
+        device_class: moving
+        state: >
+          {% set acceleration = states('sensor.vehicle_acceleration') | float(0) | abs %}
+          {% set accel_threshold = states('input_number.acceleration_stability_threshold') | float(0.5) %}
+          {% set engine_running = is_state('binary_sensor.engine_is_running', 'on') %}
+          {{ engine_running and acceleration <= accel_threshold }}
+        icon: >
+          {% if is_state('binary_sensor.vehicle_is_stable', 'on') %}
+            mdi:check-circle
+          {% else %}
+            mdi:car-speed-limiter
+          {% endif %}
+
+      - name: "Engine Is Running"
+        unique_id: engine_is_running
+        device_class: running
+        state: >
+          {% set speed_updated = states.sensor.wican_speed.last_updated %}
+          {% set fuel_updated = states.sensor.wican_fuel.last_updated %}
+          {% set now_time = now() %}
+          {% set speed_fresh = (now_time - speed_updated).total_seconds() < 120 %}
+          {% set fuel_fresh = (now_time - fuel_updated).total_seconds() < 120 %}
+          {% set speed_nonzero = states('sensor.wican_speed') | float(0) >= 0 %}
+          {{ (speed_fresh or fuel_fresh) and speed_nonzero }}
+        icon: >
+          {% if is_state('binary_sensor.engine_is_running', 'on') %}
+            mdi:engine
+          {% else %}
+            mdi:engine-off
+          {% endif %}
+
 # -----------------------------
 # Integration Sensors (Riemann Sum Integration)
 # These sensors calculate cumulative energy (in Wh)
@@ -383,3 +527,215 @@ sensor:
     source: sensor.a32_pro_mppt2_pv_power
     method: trapezoidal
     round: 2
+
+mqtt:
+  binary_sensor:
+    - state_topic: "wican/status"
+      name: "WiCAN Connected"
+      unique_id: wican_connected_mqtt
+      payload_on: '{"status": "online"}'
+      payload_off: '{"status": "offline"}'
+      device_class: connectivity
+      icon: mdi:car-connected
+      device:
+        {
+          identifiers: ["WiCAN"],
+          manufacturer: "MeatPi",
+          model: "WiCAN OBD",
+          name: "WiCAN",
+        }
+
+  sensor:
+    # Vehicle Speed (converted to km/h)
+    - state_topic: "wican/vehicle_speed"
+      name: "WiCAN Speed"
+      unique_id: wican_speed_mqtt
+      icon: mdi:speedometer
+      state_class: measurement
+      unit_of_measurement: "km/h"
+      value_template: '{{ value_json["0D-VehicleSpeed"] | default(0) }}'
+      expire_after: 120
+      availability:
+        - topic: "wican/status"
+          payload_available: '{"status": "online"}'
+          payload_not_available: '{"status": "offline"}'
+      device:
+        {
+          identifiers: ["WiCAN"],
+          manufacturer: "MeatPi",
+          model: "WiCAN OBD",
+          name: "WiCAN",
+        }
+
+    # Fuel Tank Level
+    - state_topic: "wican/fuel_tank_level"
+      name: "WiCAN Fuel"
+      unique_id: wican_fuel_mqtt
+      icon: mdi:fuel
+      device_class: battery
+      state_class: measurement
+      unit_of_measurement: "%"
+      value_template: '{{ value_json["2F-FuelTankLevel"] | default(0) }}'
+      expire_after: 120
+      availability:
+        - topic: "wican/status"
+          payload_available: '{"status": "online"}'
+          payload_not_available: '{"status": "offline"}'
+      device:
+        {
+          identifiers: ["WiCAN"],
+          manufacturer: "MeatPi",
+          model: "WiCAN OBD",
+          name: "WiCAN",
+        }
+
+    # Engine Coolant Temperature
+    - state_topic: "wican/engine_coolant_temp"
+      name: "WiCAN Coolant Temperature"
+      unique_id: wican_coolant_temp_mqtt
+      icon: mdi:thermometer
+      device_class: temperature
+      state_class: measurement
+      unit_of_measurement: "°C"
+      value_template: '{{ value_json["05-EngineCoolantTemp"] | default(0) }}'
+      expire_after: 120
+      availability:
+        - topic: "wican/status"
+          payload_available: '{"status": "online"}'
+          payload_not_available: '{"status": "offline"}'
+      device:
+        {
+          identifiers: ["WiCAN"],
+          manufacturer: "MeatPi",
+          model: "WiCAN OBD",
+          name: "WiCAN",
+        }
+
+    # Engine RPM
+    - state_topic: "wican/engine_rpm"
+      name: "WiCAN RPM"
+      unique_id: wican_rpm_mqtt
+      icon: mdi:engine
+      state_class: measurement
+      unit_of_measurement: "RPM"
+      value_template: '{{ value_json["0C-EngineRPM"] | default(0) }}'
+      expire_after: 120
+      availability:
+        - topic: "wican/status"
+          payload_available: '{"status": "online"}'
+          payload_not_available: '{"status": "offline"}'
+      device:
+        {
+          identifiers: ["WiCAN"],
+          manufacturer: "MeatPi",
+          model: "WiCAN OBD",
+          name: "WiCAN",
+        }
+
+    # Throttle Position
+    - state_topic: "wican/throttle_position"
+      name: "WiCAN Throttle Position"
+      unique_id: wican_throttle_position_mqtt
+      icon: mdi:car-brake-low-pressure
+      state_class: measurement
+      unit_of_measurement: "%"
+      value_template: '{{ value_json["11-ThrottlePosition"] | default(0) }}'
+      expire_after: 120
+      availability:
+        - topic: "wican/status"
+          payload_available: '{"status": "online"}'
+          payload_not_available: '{"status": "offline"}'
+      device:
+        {
+          identifiers: ["WiCAN"],
+          manufacturer: "MeatPi",
+          model: "WiCAN OBD",
+          name: "WiCAN",
+        }
+
+    # Distance with MIL On
+    - state_topic: "wican/distance_mil_on"
+      name: "WiCAN Distance MIL On"
+      unique_id: wican_distance_mil_on_mqtt
+      icon: mdi:road-variant
+      device_class: distance
+      state_class: measurement
+      unit_of_measurement: "km"
+      value_template: '{{ value_json["21-DistanceMILOn"] | default(0) }}'
+      expire_after: 120
+      availability:
+        - topic: "wican/status"
+          payload_available: '{"status": "online"}'
+          payload_not_available: '{"status": "offline"}'
+      device:
+        {
+          identifiers: ["WiCAN"],
+          manufacturer: "MeatPi",
+          model: "WiCAN OBD",
+          name: "WiCAN",
+        }
+
+    # Calculated Engine Load
+    - state_topic: "wican/calc_engine_load"
+      name: "WiCAN Engine Load"
+      unique_id: wican_engine_load_mqtt
+      icon: mdi:engine-outline
+      state_class: measurement
+      unit_of_measurement: "%"
+      value_template: '{{ value_json["04-CalcEngineLoad"] | default(0) }}'
+      expire_after: 120
+      availability:
+        - topic: "wican/status"
+          payload_available: '{"status": "online"}'
+          payload_not_available: '{"status": "offline"}'
+      device:
+        {
+          identifiers: ["WiCAN"],
+          manufacturer: "MeatPi",
+          model: "WiCAN OBD",
+          name: "WiCAN",
+        }
+
+    # Control Module Voltage
+    - state_topic: "wican/control_module_volt"
+      name: "WiCAN Control Module Voltage"
+      unique_id: wican_control_module_volt_mqtt
+      icon: mdi:car-battery
+      device_class: voltage
+      state_class: measurement
+      unit_of_measurement: "V"
+      value_template: '{{ value_json["42-ControlModuleVolt"] | default(0) | round(1) }}'
+      expire_after: 120
+      availability:
+        - topic: "wican/status"
+          payload_available: '{"status": "online"}'
+          payload_not_available: '{"status": "offline"}'
+      device:
+        {
+          identifiers: ["WiCAN"],
+          manufacturer: "MeatPi",
+          model: "WiCAN OBD",
+          name: "WiCAN",
+        }
+
+    # Ambient Air Temperature
+    - state_topic: "wican/ambient_air_temp"
+      name: "WiCAN Ambient Air Temperature"
+      unique_id: wican_ambient_air_temp_mqtt
+      icon: mdi:thermometer
+      device_class: temperature
+      state_class: measurement
+      unit_of_measurement: "°C"
+      value_template: '{{ value_json["46-AmbientAirTemp"] | default(0) }}'
+      expire_after: 120
+      availability:
+        - topic: "wican/status"
+          payload_available: '{"status": "online"}'
+          payload_not_available: '{"status": "offline"}'
+      device:
+        {
+          identifiers: ["WiCAN"],
+          manufacturer: "MeatPi",
+          model: "WiCAN OBD",
+          name: "WiCAN",
+        }

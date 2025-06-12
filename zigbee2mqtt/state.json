@@ -1,15 +1,15 @@
 {
     "0xa4c138453dc9e0a7": {
-        "state": "ON",
-        "brightness": 255,
+        "state": "OFF",
+        "brightness": 254,
         "do_not_disturb": false,
         "linkquality": 232,
         "color_mode": "color_temp",
         "color_temp": 309
     },
     "0xa4c13846c6ff1fa5": {
-        "state": "ON",
-        "brightness": 255,
+        "state": "OFF",
+        "brightness": 254,
         "linkquality": 240,
         "color_mode": "color_temp",
         "color_temp": 456
@@ -17,14 +17,14 @@
     "0xa4c1388ec37a46bc": {
         "linkquality": 248,
         "do_not_disturb": false,
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254
     },
     "0x9035eafffec6ed9b": {
         "power": 0,
         "energy": 0,
         "linkquality": 244,
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254,
         "update": {
             "state": "idle",
@@ -47,7 +47,7 @@
             "installed_version": 16908818,
             "latest_version": 16908818
         },
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254
     },
     "0xb43a31fffe26eb40": {
@@ -58,13 +58,13 @@
             "installed_version": 16908818,
             "latest_version": 16908818
         },
-        "state": "ON",
+        "state": "OFF",
         "brightness": 254,
         "linkquality": 255
     },
     "0xa4c13843df45a434": {
         "brightness": 254,
-        "state": "ON",
+        "state": "OFF",
         "linkquality": 216
     }
 }
