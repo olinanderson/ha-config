@@ -27,21 +27,6 @@ intent_script: !include intent_scripts.yaml # intent_script section only
 # Input Helpers
 # -----------------------------
 input_number:
-  distance_threshold:
-    name: Distance Threshold
-    initial: 10
-    min: 1
-    max: 1000
-    step: 1
-    unit_of_measurement: meters
-
-  elevation_threshold:
-    name: Elevation Threshold
-    initial: 5
-    min: 1
-    max: 100
-    step: 1
-
   main_light_warmth:
     name: Main Light Warmth
     initial: 400
@@ -86,9 +71,6 @@ input_number:
     icon: mdi:car-brake-parking
 
 input_text:
-  previous_latitude:
-  previous_longitude:
-  previous_elevation:
   previous_fuel_level:
     name: "Previous Fuel Level"
     initial: "0"
@@ -108,6 +90,12 @@ input_boolean:
   power_saving_mode:
     name: "Power Saving Mode"
     icon: mdi:battery-heart-variant
+
+  # ... your existing booleans ...
+  windows_audio_stream:
+    name: "Windows Audio Stream"
+    icon: mdi:music-note-bluetooth
+    initial: on # Start automatically
 
 # -----------------------------
 # Template Sensors

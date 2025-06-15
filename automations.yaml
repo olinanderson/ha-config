@@ -1,93 +1,65 @@
-- alias: Update Starlink Entity Every Second
+# ────────── Filtered Starlink updates (1 Hz while moving) ──────────
+- alias: Filtered Starlink Location • 1 s While Moving
+  id: filtered_starlink_location_timer
+  mode: queued # queue one-second calls so none are skipped
   trigger:
     - trigger: time_pattern
-      seconds: /1
+      seconds: "/1" # fire every second
+  condition:
+    - condition: state
+      entity_id: binary_sensor.vehicle_is_moving
+      state: "on" # run only when the van is moving
   action:
-    - action: homeassistant.update_entity
+    - action: homeassistant.update_entity # pull fresh co-ordinates first
       target:
         entity_id: device_tracker.starlink_device_location
-  mode: single
-  id: 5c4ae16d93684fc9bf37f7c117cb0703
+    - action: device_tracker.see # push them to the “filtered” tracker
+      data:
+        dev_id: filtered_starlink_location
+        gps:
+          - "{{ state_attr('device_tracker.starlink_device_location','latitude') }}"
+          - "{{ state_attr('device_tracker.starlink_device_location','longitude') }}"
+        gps_accuracy: "{{ state_attr('device_tracker.starlink_device_location','gps_accuracy') }}"
+        attributes:
+          elevation: "{{ state_attr('device_tracker.starlink_device_location','elevation') }}"
 
-- alias: Initialize Previous Coordinates on Startup
-  trigger:
-    - trigger: homeassistant
-      event: start
-  action:
-    - action: input_text.set_value
-      data:
-        entity_id: input_text.previous_latitude
-        value:
-          "{{ state_attr('device_tracker.starlink_device_location', 'latitude')
-          | default('0.0') }}"
-    - action: input_text.set_value
-      data:
-        entity_id: input_text.previous_longitude
-        value:
-          "{{ state_attr('device_tracker.starlink_device_location', 'longitude')
-          | default('0.0') }}"
-    - action: input_text.set_value
-      data:
-        entity_id: input_text.previous_elevation
-        value:
-          "{{ state_attr('device_tracker.starlink_device_location', 'elevation')
-          | default('0.0') }}"
-  id: dd03deee68484cf4b74846e0d7aaee69
-
-- alias: Update Filtered Starlink Location
+# Optional: Update location when you first start moving
+- alias: Update Starlink Location When Movement Starts
   trigger:
     - trigger: state
-      entity_id: device_tracker.starlink_device_location
-  condition:
-    - condition: template
-      value_template:
-        "{% set current_lat = state_attr('device_tracker.starlink_device_location',
-        'latitude') | float %} {% set current_lon = state_attr('device_tracker.starlink_device_location',
-        'longitude') | float %} {% set current_ele = state_attr('device_tracker.starlink_device_location',
-        'elevation') | float %} {% set prev_lat = states('input_text.previous_latitude')
-        | float %} {% set prev_lon = states('input_text.previous_longitude') | float
-        %} {% set prev_ele = states('input_text.previous_elevation') | float %} {%
-        set distance = distance(prev_lat, prev_lon, current_lat, current_lon) %} {%
-        set elevation_change = (current_ele - prev_ele) | abs %} {{ distance > states('input_number.distance_threshold')
-        | float or elevation_change > states('input_number.elevation_threshold') |
-        float }}
-
-        "
+      entity_id: binary_sensor.vehicle_is_moving
+      from: "off"
+      to: "on"
   action:
     - action: device_tracker.see
       data:
         dev_id: filtered_starlink_location
         gps:
-          - "{{ state_attr('device_tracker.starlink_device_location', 'latitude')
-            }}"
-          - "{{ state_attr('device_tracker.starlink_device_location', 'longitude')
-            }}"
-        gps_accuracy:
-          "{{ state_attr('device_tracker.starlink_device_location', 'gps_accuracy')
-          }}"
+          - "{{ state_attr('device_tracker.starlink_device_location', 'latitude') }}"
+          - "{{ state_attr('device_tracker.starlink_device_location', 'longitude') }}"
+        gps_accuracy: "{{ state_attr('device_tracker.starlink_device_location', 'gps_accuracy') }}"
         attributes:
-          elevation:
-            "{{ state_attr('device_tracker.starlink_device_location', 'elevation')
-            }}"
-    - action: input_text.set_value
+          elevation: "{{ state_attr('device_tracker.starlink_device_location', 'elevation') }}"
+  id: starlink_location_movement_start
+
+# Optional: Final location update when you stop moving
+- alias: Update Starlink Location When Movement Stops
+  trigger:
+    - trigger: state
+      entity_id: binary_sensor.vehicle_is_moving
+      from: "on"
+      to: "off"
+  action:
+    - action: device_tracker.see
       data:
-        entity_id: input_text.previous_latitude
-        value:
-          "{{ state_attr('device_tracker.starlink_device_location', 'latitude')
-          }}"
-    - action: input_text.set_value
-      data:
-        entity_id: input_text.previous_longitude
-        value:
-          "{{ state_attr('device_tracker.starlink_device_location', 'longitude')
-          }}"
-    - action: input_text.set_value
-      data:
-        entity_id: input_text.previous_elevation
-        value:
-          "{{ state_attr('device_tracker.starlink_device_location', 'elevation')
-          }}"
-  id: 2f0fdb53911c41bbb6e40d79fe25e34e
+        dev_id: filtered_starlink_location
+        gps:
+          - "{{ state_attr('device_tracker.starlink_device_location', 'latitude') }}"
+          - "{{ state_attr('device_tracker.starlink_device_location', 'longitude') }}"
+        gps_accuracy: "{{ state_attr('device_tracker.starlink_device_location', 'gps_accuracy') }}"
+        attributes:
+          elevation: "{{ state_attr('device_tracker.starlink_device_location', 'elevation') }}"
+  id: starlink_location_movement_stop
 
 - alias: "Main Lighting: Sync LED Dimmer with Switch"
   trigger:
@@ -220,7 +192,7 @@
                 entity_id: switch.a32_pro_do8_switch04_shore_power_charger
 
 # ────────────────────────────────────────────────────────────────
-# Welcome back message
+# Ducking in pulseaudio 
 # ────────────────────────────────────────────────────────────────
 # The following automation is used to setup the ducking module in pulse audio which lowers the volume of music from airplay/audio from PC when HA is playing audio through the VLC media player
 - alias: "Bootstrap ducking → VLC"
@@ -537,3 +509,16 @@
               state: "on"
           sequence:
             - action: script.power_saving_mode_off
+
+# ────────────────────────────────────────────────────────────────
+# Ducking in pulseaudio 
+# ────────────────────────────────────────────────────────────────
+# The following automation is used to setup the ducking module in pulse audio which lowers the volume of music from airplay/audio from PC when HA is playing audio through the VLC media player
+- alias: "Scream audio receiver"
+  mode: single
+  trigger:
+    - trigger: homeassistant
+      event: start # fires when HA has finished booting
+  action:
+    - delay: "00:00:15" # let hassio_audio come online
+    - action: shell_command.start_scream_receiver

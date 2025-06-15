@@ -1,3 +1,4 @@
+# This is the shell command that's used to duck the audio of the video player when a notification is played
 load_ducking_docker: >
   ssh -i /config/ssh_keys/ha_host_id_ed25519
       -p 22222
@@ -6,4 +7,17 @@ load_ducking_docker: >
         docker exec hassio_audio pactl list modules |
         grep -q module-role-ducking ||
         docker exec hassio_audio pactl load-module module-role-ducking \
-          trigger_roles=video ducking_roles=any_role volume=-18dB global=true"
+          trigger_roles=video ducking_roles=any_role volume=-20dB global=true"
+
+# This is the shell command to load the scream audio Receiver
+start_scream_receiver: >
+  ssh -i /config/ssh_keys/ha_host_id_ed25519
+  -p 22222
+  -o StrictHostKeyChecking=no
+  root@172.30.32.1
+  'iptables -t nat -A PREROUTING -p udp --dport 4010 -j DNAT --to-destination 172.30.32.4:4010 2>/dev/null || true ;
+  iptables -I DOCKER-USER -p udp -d 172.30.32.4 --dport 4010 -j ACCEPT 2>/dev/null || true ;
+  iptables -t nat -A POSTROUTING -p udp -d 172.30.32.4 --dport 4010 -j MASQUERADE 2>/dev/null || true ;
+  docker exec hassio_audio apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community scream ;
+  docker exec hassio_audio pkill -f scream || true ;
+  docker exec -d hassio_audio scream -u -v -o pulse -s alsa_output.usb-Generic_USB_SPDIF_Adapter_202110200032-00.iec958-stereo -n WinPC'
