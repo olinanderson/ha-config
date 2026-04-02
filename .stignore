@@ -1,0 +1,52 @@
+// Syncthing ignore patterns for HA config
+// Matches .gitignore exclusions
+
+// Database files (large, constantly changing)
+home-assistant_v2.db
+home-assistant_v2.db-shm
+home-assistant_v2.db-wal
+home-assistant.log
+home-assistant.log.*
+
+// Runtime / cache
+.cloud
+.storage
+deps
+tts
+__pycache__
+
+// Secrets
+secrets.yaml
+ssh_keys
+
+// Custom components (managed by HACS)
+custom_components
+
+// Themes (managed by HACS)
+themes
+
+// Blueprints (managed by HA)
+blueprints
+
+// Static assets
+www
+
+// Zigbee2MQTT (managed separately)
+zigbee2mqtt
+
+// Syncthing own files
+.ha-sync
+.stfolder
+.stversions
+
+// Git
+.git
+
+// OS junk
+Thumbs.db
+.DS_Store
+
+// Temp files
+*.tmp
+*~
+*.swp

@@ -797,3 +797,16 @@
         message: "Heater low fuel lockout cleared – fuel above 30%."
         level: info
 
+# ────────────────────────────────────────────────────────────────
+# Syncthing — bidirectional config sync with PC over Tailscale
+# ────────────────────────────────────────────────────────────────
+- id: syncthing_start_on_boot
+  alias: "Syncthing • Start on HA boot"
+  mode: single
+  trigger:
+    - trigger: homeassistant
+      event: start
+  action:
+    - delay: "00:00:30"  # let networking come online
+    - action: shell_command.start_syncthing
+

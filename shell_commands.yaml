@@ -21,3 +21,15 @@ start_scream_receiver: >
   docker exec hassio_audio apk add --no-cache --repository=https://dl-cdn.alpinelinux.org/alpine/edge/community scream ;
   docker exec hassio_audio pkill -f scream || true ;
   docker exec -d hassio_audio scream -u -v -o pulse -s alsa_output.usb-Generic_USB_SPDIF_Adapter_202110200032-00.iec958-stereo -n WinPC'
+
+# Start Syncthing for bidirectional config sync with PC over Tailscale
+start_syncthing: >
+  /bin/sh -c 'if ! pgrep -f "syncthing serve" > /dev/null 2>&1; then
+    nohup /config/.ha-sync/syncthing serve
+      --home=/config/.ha-sync/st-config
+      --no-browser --no-upgrade
+      > /config/.ha-sync/syncthing.log 2>&1 &
+    echo "Syncthing started";
+  else
+    echo "Syncthing already running";
+  fi'
