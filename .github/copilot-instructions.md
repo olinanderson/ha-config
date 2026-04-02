@@ -1,10 +1,10 @@
 # Copilot Instructions — Home Assistant (Olin's Van)
 
-> **⚠ NETWORK DRIVE WARNING**: This `config/` folder lives on the Home Assistant host
-> and is shared over the network via **Tailscale / SMB** (`\\homeassistant\config`).
-> File operations may **hang or time out** if the Tailscale tunnel is slow or the HA
-> host is under load. If a file read/write stalls, retry once — don't assume failure.
-> Prefer **reading large chunks** over many small reads to minimize round-trips.
+> **Workspace location**: The primary working copy lives on the **local SSD** at
+> `C:\Users\Olin\Documents\Workspace\ha_config`. Files are synced bidirectionally
+> to the HA host via **Syncthing over Tailscale**. Changes propagate in ~10 seconds.
+> The old SMB network drive (`H:` / `\\homeassistant\config`) still works but is
+> slow — prefer editing the local copy.
 
 ---
 
@@ -42,6 +42,132 @@ entertainment, and safety subsystems for full-time van life.
 - HA Host SSH: port `22222` on `172.30.32.1` (used for PulseAudio ducking & Scream audio)
 - Inverter monitoring: Shelly EM pinging at `192.168.10.174`
 - Remote access: **Tailscale** VPN — the config share is `\\homeassistant\config`
+
+---
+
+## Syncthing — Bidirectional Config Sync
+
+The HA config folder (`/config` on the HA host) is synced bidirectionally to local
+PCs via **Syncthing** over **Tailscale**. This replaces the slow SMB network drive
+(`H:\`) for day-to-day editing.
+
+### Architecture
+
+```
+┌──────────────────────┐         Tailscale VPN         ┌──────────────────┐
+│   Home Assistant     │◄──── tcp://100.80.15.86:22000 ──►│   Windows PC     │
+│   (HA host)          │        Syncthing v2.0.15       │   (Asylum)       │
+│                      │                                │                  │
+│  /config/            │   ◄─── bidirectional sync ──►  │  C:\Users\Olin\  │
+│  (source of truth)   │        ~10 second latency      │  Documents\      │
+│                      │                                │  Workspace\      │
+│  Device: HomeAssist  │                                │  ha_config\      │
+│  ant (7EM6772...)    │                                │                  │
+│                      │                                │  Device: Asylum  │
+│  Binary:             │                                │  (BXJLBZS...)    │
+│  /config/.ha-sync/   │                                │                  │
+│    syncthing         │                                │  Binary: winget  │
+│                      │                                │  (auto-installed)│
+└──────────────────────┘                                └──────────────────┘
+```
+
+### Key Details
+
+| Setting | Value |
+|---|---|
+| **Folder ID** | `ha-config` (must match on all devices) |
+| **HA folder path** | `/config` |
+| **HA Syncthing binary** | `/config/.ha-sync/syncthing` |
+| **HA Syncthing config** | `/config/.ha-sync/st-config/` |
+| **HA Syncthing log** | `/config/.ha-sync/syncthing.log` |
+| **HA Device ID** | `7EM6772-22RZNMH-NLCQWWI-OTUCSJH-Y54DBRJ-4NYEJKH-UP3AWSM-GAFM3AT` |
+| **HA Tailscale IP** | `100.80.15.86` |
+| **HA listen port** | `22000` (TCP) |
+| **HA GUI** | `http://100.80.15.86:8384` (no auth, Tailscale-only) |
+| **Sync interval** | ~10 seconds (filesystem watcher + 10s debounce) |
+| **Full rescan** | Every 60 minutes |
+| **Discovery** | Local only — no global discovery, no relays, no NAT |
+| **Auto-start** | HA automation `syncthing_start_on_boot` (30s delay after HA start) |
+| **Shell command** | `shell_command.start_syncthing` (idempotent, checks if already running) |
+
+### `.stignore` (synced files are filtered)
+
+Both sides use matching `.stignore` files that exclude:
+- Database files (`home-assistant_v2.db*`, `home-assistant.log*`)
+- Runtime/cache (`.cloud`, `.storage`, `deps`, `tts`, `__pycache__`)
+- Secrets (`secrets.yaml`, `ssh_keys`)
+- HACS-managed (`custom_components`, `themes`)
+- Blueprints, `www/`, `zigbee2mqtt/`
+- Syncthing internals (`.ha-sync`, `.stfolder`, `.stversions`)
+- Git (`.git`), OS junk, temp files
+
+### SSH Access to HA
+
+| Setting | Value |
+|---|---|
+| **Command** | `ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86` |
+| **Port** | 22 (default) |
+| **User** | `hassio` |
+| **Key** | `~/.ssh/id_ed25519` (ed25519) |
+| **Root access** | `sudo` works without password |
+| **OS** | Alpine Linux v3.23 (HAOS), x86_64 |
+| **Shell** | zsh |
+
+### Setting Up a New Computer (Laptop, etc.)
+
+To add another PC to the Syncthing mesh:
+
+1. **Install Syncthing** on the new machine:
+   ```bash
+   # Windows (winget)
+   winget install Syncthing.Syncthing
+
+   # macOS (Homebrew)
+   brew install syncthing
+
+   # Linux
+   sudo apt install syncthing   # or equivalent
+   ```
+
+2. **Start Syncthing** and open the web UI (`http://127.0.0.1:8384/`).
+
+3. **Note the new device's Device ID** from the web UI (Actions → Show ID).
+
+4. **Configure the new device — disable public infrastructure**:
+   - Settings → Connections: uncheck "Global Discovery", "Enable Relaying", "Enable NAT Traversal"
+   - Keep "Local Discovery" enabled
+
+5. **Add the HA device on the new machine**:
+   - Add Remote Device → paste HA Device ID: `7EM6772-22RZNMH-NLCQWWI-OTUCSJH-Y54DBRJ-4NYEJKH-UP3AWSM-GAFM3AT`
+   - Set address to `tcp://100.80.15.86:22000` (HA's Tailscale IP)
+   - Name it `HomeAssistant`
+
+6. **Add the new device on HA's Syncthing** (via HA GUI at `http://100.80.15.86:8384`):
+   - Add Remote Device → paste the new machine's Device ID
+   - Set address to the new machine's Tailscale IP: `tcp://<tailscale-ip>:22000`
+
+7. **Share the folder**:
+   - On the new machine: when HA proposes sharing `ha-config`, accept it
+   - Set the local folder path (e.g. `C:\Users\You\Workspace\ha_config` or `~/workspace/ha_config`)
+   - Enable "Ignore Permissions"
+   - OR: manually add folder with ID `ha-config`, share with HA device
+
+8. **Create `.stignore`** in the new local folder (copy from the existing PC or HA).
+
+9. **Verify**: files should sync within ~10 seconds. Check `http://127.0.0.1:8384/` for connection status.
+
+10. **Git**: `git init && git remote add origin https://github.com/olinanderson/ha-config.git && git fetch origin main && git reset origin/main && git branch -M main && git branch --set-upstream-to=origin/main`
+
+### Troubleshooting
+
+- **HA Syncthing not running?** SSH in: `sudo pgrep -f "syncthing serve"`. If not running:
+  `sudo sh -c 'nohup /config/.ha-sync/syncthing serve --home=/config/.ha-sync/st-config --no-browser --no-upgrade > /config/.ha-sync/syncthing.log 2>&1 &'`
+- **Connection refused?** Ensure both machines are on Tailscale and port 22000 is not firewalled.
+- **Files not syncing?** Check `.stignore` — files matching ignore patterns won't sync.
+- **Conflict files?** Syncthing creates `.sync-conflict-*` files. Resolve manually and delete the conflict copy.
+- **HA GUI**: `http://100.80.15.86:8384` — check folder status, connected devices, errors.
+- **Windows GUI**: `http://127.0.0.1:8384/` — same.
+- **Logs**: HA: `sudo tail -50 /config/.ha-sync/syncthing.log`. Windows: `%LOCALAPPDATA%\Syncthing\syncthing.log`.
 
 ---
 
@@ -111,6 +237,14 @@ zigbee2mqtt/                    # Zigbee2MQTT config
 .github/
   copilot-instructions.md       # THIS FILE
   dashboard-editing-reference.md
+
+# --- Syncthing (bidirectional sync) ---
+.ha-sync/                       # Syncthing binary + config (NOT synced, NOT in git)
+  syncthing                     # Syncthing v2.0.15 Linux binary
+  st-config/                    # Syncthing config, keys, index DB
+  syncthing.log                 # Runtime log
+.stignore                       # Syncthing ignore patterns
+.stfolder/                      # Syncthing folder marker (empty)
 ```
 
 ---
@@ -532,6 +666,7 @@ Used in `old_home.yaml`:
 | Shelly EM 1s ping | Update inverter detection every second |
 | Inverter pending clear | Clear pending flag when ping state changes |
 | Bootstrap ducking / Scream | Start audio ducking + Scream receiver on HA boot |
+| `syncthing_start_on_boot` | Start Syncthing daemon 30s after HA boot |
 
 ---
 
