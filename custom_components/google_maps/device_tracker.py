@@ -1,221 +1,221 @@
 """Support for Google Maps location sharing."""
 from __future__ import annotations
 
-from collections.abc import Mapping
+import asyncio
+from collections.abc import Callable, Mapping
 from copy import copy
+from dataclasses import dataclass
+from datetime import datetime
+from functools import partial
 import logging
 from typing import Any, cast
 
-from locationsharinglib import Service
-from locationsharinglib.locationsharinglibexceptions import (
-    InvalidCookies as lsl_InvalidCookies,
-)
-import voluptuous as vol
-
-from homeassistant.components.device_tracker import (
+from homeassistant.components.device_tracker.config_entry import (
     DOMAIN as DT_DOMAIN,
-    PLATFORM_SCHEMA as PLATFORM_SCHEMA_BASE,
-    SeeCallback,
-    SourceType,
+    TrackerEntity,
 )
-from homeassistant.components.device_tracker.config_entry import TrackerEntity
-from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import (
-    ATTR_BATTERY_CHARGING,
-    ATTR_BATTERY_LEVEL,
-    ATTR_ID,
-    CONF_SCAN_INTERVAL,
-    CONF_USERNAME,
-)
-from homeassistant.core import HomeAssistant, callback
-from homeassistant.helpers import config_validation as cv, entity_registry as er
-from homeassistant.helpers.device_registry import (
-    STORAGE_VERSION_MAJOR,
-    STORAGE_VERSION_MINOR,
-)
-
-# DeviceInfo moved in 2023.9.0b0
-try:
-    from homeassistant.helpers.device_registry import DeviceInfo
-except ImportError:
-    from homeassistant.helpers.entity import DeviceInfo  # type: ignore[attr-defined]
-
+from homeassistant.const import ATTR_BATTERY_CHARGING
+from homeassistant.core import CALLBACK_TYPE, Event, HomeAssistant, callback
+from homeassistant.helpers import device_registry as dr, entity_registry as er
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
-from homeassistant.helpers.event import track_time_interval
+from homeassistant.helpers.event import (
+    async_call_later,
+    async_track_entity_registry_updated_event,
+)
 from homeassistant.helpers.restore_state import RestoreEntity
-from homeassistant.helpers.typing import ConfigType, DiscoveryInfoType
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
-from homeassistant.util import dt as dt_util, slugify
+from homeassistant.util import dt as dt_util
 
 from .const import (
     ATTR_ADDRESS,
-    ATTR_FULL_NAME,
     ATTR_LAST_SEEN,
     ATTR_NICKNAME,
     ATTRIBUTION,
     CONF_MAX_GPS_ACCURACY,
-    DEF_SCAN_INTERVAL,
-    DOMAIN,
     DT_NO_RECORD_ATTRS,
-    NAME_PREFIX,
+    MISSING_DATA_GRACE_PERIOD,
 )
-from .coordinator import GMDataUpdateCoordinator, GMIntegData
-from .helpers import (
-    ConfigID,
-    LocationData,
-    MiscData,
-    PersonData,
-    UniqueID,
-    old_cookies_file_path,
-)
+from .coordinator import GMConfigEntry, GMDataUpdateCoordinator
+from .helpers import CFG_UNIQUE_IDS, ConfigID, LocationData, UniqueID, dev_ids
 
 _LOGGER = logging.getLogger(__name__)
 
-# the parent "device_tracker" have marked the schemas as legacy, so this
-# need to be refactored as part of a bigger rewrite.
-PLATFORM_SCHEMA = PLATFORM_SCHEMA_BASE.extend(
-    {
-        vol.Required(CONF_USERNAME): cv.string,
-        vol.Optional(CONF_MAX_GPS_ACCURACY, default=100000): vol.Coerce(float),
-    }
-)
 
+@dataclass
+class MissingParams:
+    """Missing parameters."""
 
-def setup_scanner(
-    hass: HomeAssistant,
-    config: ConfigType,
-    see: SeeCallback,
-    discovery_info: DiscoveryInfoType | None = None,
-) -> bool:
-    """Set up the Google Maps Location sharing scanner."""
-    _LOGGER.warning(
-        "%s under %s is deprecated, please remove it from your configuration"
-        " and any associated entries in known_devices.yaml"
-        " and add via UI instead",
-        DOMAIN,
-        DT_DOMAIN,
-    )
-    scanner = GoogleMapsScanner(hass, config, see)
-    return scanner.success_init
-
-
-class GoogleMapsScanner:
-    """Representation of an Google Maps location sharing account."""
-
-    def __init__(
-        self, hass: HomeAssistant, config: ConfigType, see: SeeCallback
-    ) -> None:
-        """Initialize the scanner."""
-        self.see = see
-        self.username = config[CONF_USERNAME]
-        self.max_gps_accuracy = config[CONF_MAX_GPS_ACCURACY]
-        self.scan_interval = config.get(CONF_SCAN_INTERVAL) or DEF_SCAN_INTERVAL
-        self._prev_seen: dict[str, str] = {}
-
-        credfile = str(old_cookies_file_path(hass, self.username))
-        try:
-            self.service = Service(credfile, self.username)
-            self._update_info()  # type: ignore[no-untyped-call]
-
-            track_time_interval(hass, self._update_info, self.scan_interval)
-
-            self.success_init = True
-
-        except lsl_InvalidCookies:
-            _LOGGER.error(
-                "The cookie file provided does not provide a valid session. Please"
-                " create another one and try again"
-            )
-            self.success_init = False
-
-    def _update_info(self, now=None):  # type: ignore[no-untyped-def]
-        for person in self.service.get_all_people():
-            try:
-                dev_id = f"google_maps_{slugify(person.id)}"
-            except TypeError:
-                _LOGGER.warning("No location(s) shared with this account")
-                return
-
-            if (
-                self.max_gps_accuracy is not None
-                and person.accuracy > self.max_gps_accuracy
-            ):
-                _LOGGER.info(
-                    (
-                        "Ignoring %s update because expected GPS "
-                        "accuracy %s is not met: %s"
-                    ),
-                    person.nickname,
-                    self.max_gps_accuracy,
-                    person.accuracy,
-                )
-                continue
-
-            last_seen = dt_util.as_utc(person.datetime)
-            if last_seen < self._prev_seen.get(dev_id, last_seen):  # type: ignore[operator]
-                _LOGGER.debug(
-                    "Ignoring %s update because timestamp is older than last timestamp",
-                    person.nickname,
-                )
-                _LOGGER.debug("%s < %s", last_seen, self._prev_seen[dev_id])
-                continue
-            if last_seen == self._prev_seen.get(dev_id):
-                _LOGGER.debug(
-                    "Ignoring %s update because timestamp "
-                    "is the same as the last timestamp %s",
-                    person.nickname,
-                    last_seen,
-                )
-                continue
-            self._prev_seen[dev_id] = last_seen  # type: ignore[assignment]
-
-            attrs = {
-                ATTR_ADDRESS: person.address,
-                ATTR_FULL_NAME: person.full_name,
-                ATTR_ID: person.id,
-                ATTR_LAST_SEEN: last_seen,
-                ATTR_NICKNAME: person.nickname,
-                ATTR_BATTERY_CHARGING: person.charging,
-                ATTR_BATTERY_LEVEL: person.battery_level,
-            }
-            self.see(
-                dev_id=dev_id,
-                gps=(person.latitude, person.longitude),
-                picture=person.picture_url,
-                source_type=SourceType.GPS,
-                gps_accuracy=person.accuracy,
-                attributes=attrs,
-            )
+    name: str
+    unsub: CALLBACK_TYPE | None
 
 
 async def async_setup_entry(
-    hass: HomeAssistant, entry: ConfigEntry, async_add_entities: AddEntitiesCallback
+    hass: HomeAssistant, entry: GMConfigEntry, async_add_entities: AddEntitiesCallback
 ) -> None:
     """Set up the device tracker platform."""
-    cid = cast(ConfigID, entry.entry_id)
-    gmi_data = cast(GMIntegData, hass.data[DOMAIN])
-    coordinator = gmi_data.coordinators[cid]
-    unique_ids = gmi_data.unique_ids
+    dev_reg = dr.async_get(hass)
+    ent_reg = er.async_get(hass)
 
+    cid = ConfigID(entry.entry_id)
+    coordinator = entry.runtime_data.coordinator
     max_gps_accuracy = entry.options[CONF_MAX_GPS_ACCURACY]
-    created_uids: set[UniqueID] = set()
+    unique_ids = hass.data[CFG_UNIQUE_IDS]
+
+    lock = asyncio.Lock()
+    entities: dict[UniqueID, GoogleMapsDeviceTracker] = {}
+    missing: dict[UniqueID, MissingParams] = {}
+    registered_entities: dict[str, UniqueID] = {
+        ent.entity_id: UniqueID(ent.unique_id)
+        for ent in er.async_entries_for_config_entry(ent_reg, cid)
+        if ent.domain == DT_DOMAIN
+    }
+    unsub_ent_reg_updates: CALLBACK_TYPE | None = None
+
+    def stop_tracking_ent_reg_updates() -> None:
+        """Stop tracking entity registry updates."""
+        nonlocal unsub_ent_reg_updates
+
+        if unsub_ent_reg_updates:
+            unsub_ent_reg_updates()
+            unsub_ent_reg_updates = None
+
+    def track_ent_reg_updates() -> None:
+        """Track entity registry updates."""
+        nonlocal unsub_ent_reg_updates
+
+        stop_tracking_ent_reg_updates()
+        assert not unsub_ent_reg_updates
+        if registered_entities:
+            unsub_ent_reg_updates = async_track_entity_registry_updated_event(
+                hass,
+                # Provide a copy of the current keys so tracking/removing is not
+                # affected by updates to the dict.
+                list(registered_entities),
+                entity_registry_updated,
+            )
+
+    # Needs to be a callback so it doesn't get run in an executor by
+    # async_track_entity_registry_updated_event.
+    @callback
+    def entity_registry_updated(
+        event: Event[er.EventEntityRegistryUpdatedData],
+    ) -> None:
+        """Handle entity removed from entity registry."""
+        if (action := event.data["action"]) not in ("remove", "update"):
+            return
+
+        entity_id = event.data["entity_id"]
+        if action == "remove":
+            uid = registered_entities.pop(entity_id)
+            track_ent_reg_updates()
+
+            device = dev_reg.async_get_device(dev_ids(uid))
+            if not device:
+                # TODO: Remove warning???
+                _LOGGER.warning(
+                    "Could not find device for removed entity: %s", entity_id
+                )
+                return
+            dev_reg.async_remove_device(device.id)
+
+        # update
+        elif old_entity_id := cast(str | None, event.data.get("old_entity_id")):
+            track_entity(registered_entities.pop(old_entity_id), entity_id)
+
+    def track_entity(uid: UniqueID, entity_id: str) -> None:
+        """Track entity registry updates for entity."""
+        if entity_id in registered_entities:
+            assert registered_entities[entity_id] == uid
+            return
+        registered_entities[entity_id] = uid
+        track_ent_reg_updates()
+
+    def schedule_entity_removal(uid: UniqueID) -> None:
+        """Schedule an entity to be removed."""
+        # NOTE: The entity is not removed immediately because there are times when a
+        #       person's data goes missing for a little while, but then comes back again
+        #       on its own. The state of the entity will just not update during the time
+        #       the data is missing.
+        assert uid not in missing
+        missing[uid] = MissingParams(
+            entities[uid].log_name,
+            async_call_later(
+                hass, MISSING_DATA_GRACE_PERIOD, partial(remove_entity, uid)
+            ),
+        )
+
+    def unschedule_entity_removal(uid: UniqueID) -> None:
+        """Unschedule removal of entity."""
+        mp = missing.pop(uid)
+        if mp.unsub:
+            mp.unsub()
+        else:
+            _LOGGER.warning("Data available again for %s", mp.name)
+
+    async def remove_entity(uid: UniqueID, _: datetime) -> None:
+        """Remove entity."""
+        # NOTE: They will still be in the entity registry, so they will still exist in
+        #       HA's state machine, but they will become unavailable. The user can then
+        #       completely remove them if they want. Unless, of course, their data comes
+        #       back again, in which case, the entity will be recreated.
+        # Need to do this with a lock so that update_entities can't create a new Entity
+        # for the same UID that would add itself to the state machine, then the
+        # async_remove here would remove it from the state machine. Also, two entities
+        # with the same UID could cause an error or a different entity ID (e.g., xx_2).
+        async with lock:
+            mp = missing[uid]
+            _LOGGER.warning("Data missing for %s", mp.name)
+            assert mp.unsub
+            mp.unsub = None
+            entity = entities.pop(uid)
+            await entity.async_remove()
+        # Do not release uid from unique_ids in case data comes back and entity can
+        # be created again. It will still be in the Entity Registry, at least if and
+        # until the user removes it from the registry. And even then, no need to
+        # release the uid from unique_ids since it's not likely to come back and it
+        # will be released if entry gets unloaded and it won't get added next time
+        # entry loads.
+
+    async def update_entities() -> None:
+        """Update entities for people."""
+        async with lock:
+            # NOTE: Unique ID of "account entity" is the account's email address.
+            uids = frozenset(coordinator.data)
+
+            # For any entity that was scheduled to be removed due to its data being
+            # missing, cancel the removal if the data is available again.
+            for uid in missing.keys() & uids:
+                unschedule_entity_removal(uid)
+
+            # For any newly missing data, schedule a task to remove the entity after a
+            # grace period.
+            for uid in entities.keys() - uids - missing.keys():
+                schedule_entity_removal(uid)
+
+            # Attempt to take ownership of any unique IDs that have not yet been taken
+            # by other config entries, and create entities for those that have been
+            # "taken" and have not had entities created yet.
+            if create_uids := unique_ids.take(cid, uids) - entities.keys():
+                new_entities = {
+                    uid: GoogleMapsDeviceTracker(
+                        coordinator, uid, max_gps_accuracy, partial(track_entity, uid)
+                    )
+                    for uid in create_uids
+                }
+                async_add_entities(new_entities.values())
+                entities.update(new_entities)
 
     @callback
-    def create_entities(reg_uids: frozenset[UniqueID] = frozenset()) -> None:
-        """Create entities for newly seen people and optionally registered ones."""
-        if create_uids := (
-            unique_ids.take(cid, set(coordinator.data) | reg_uids) - created_uids
-        ):
-            async_add_entities(
-                [
-                    GoogleMapsDeviceTracker(coordinator, uid, max_gps_accuracy)
-                    for uid in create_uids
-                ]
-            )
-            created_uids.update(create_uids)
+    def update_entities_cb() -> None:
+        """Update entities for people."""
+        entry.async_create_background_task(
+            hass, update_entities(), f"Update entities for {entry.title}"
+        )
 
-    create_entities(unique_ids.owned(cid))
-    entry.async_on_unload(coordinator.async_add_listener(create_entities))
+    track_ent_reg_updates()
+    await update_entities()
+    entry.async_on_unload(coordinator.async_add_listener(update_entities_cb))
+    entry.async_on_unload(stop_tracking_ent_reg_updates)
 
 
 class GoogleMapsDeviceTracker(
@@ -225,49 +225,45 @@ class GoogleMapsDeviceTracker(
 
     _unrecorded_attributes = DT_NO_RECORD_ATTRS
     _attr_attribution = ATTRIBUTION
+    # With name == None and has_entity_name == True, entity will get device's name.
+    _attr_name = None
+    _attr_has_entity_name = True
     _attr_translation_key = "tracker"
 
-    _misc: MiscData | None = None
     _loc: LocationData | None = None
     _skip_reason: str = ""
 
     def __init__(
-        self, coordinator: GMDataUpdateCoordinator, uid: UniqueID, max_gps_accuracy: int
+        self,
+        coordinator: GMDataUpdateCoordinator,
+        uid: UniqueID,
+        max_gps_accuracy: int,
+        track_entity: Callable[[str], None],
     ) -> None:
         """Initialize Google Maps Device Tracker."""
         super().__init__(coordinator)
+        # NOTE: Unique ID of "account entity" is the account's email address.
         self._attr_unique_id = uid
         self._max_gps_accuracy = max_gps_accuracy
 
-        # Use misc data now if available. Loc data will be handled in
-        # async_added_to_hass.
-        if data := coordinator.data.get(uid):
-            assert data.misc
-            self._full_name = data.misc.full_name
-            self._attr_name = f"{NAME_PREFIX} {self._full_name}"
-            self._misc = copy(data.misc)
-        else:
-            # Created from Entity Registry. Get name from there.
-            # The rest is restored in async_added_to_hass if possible.
-            ent_reg = er.async_get(coordinator.hass)
-            self._attr_name = ent_reg.entities[
-                cast(
-                    str,
-                    ent_reg.async_get_entity_id(DT_DOMAIN, DOMAIN, uid),
-                )
-            ].original_name
-            self._full_name = cast(str, self._attr_name).removeprefix(f"{NAME_PREFIX} ")
+        # Use misc data now. Loc data will be handled in async_added_to_hass.
+        data = coordinator.data[uid]
+        assert data.misc
+        self._misc = copy(data.misc)
+        full_name = data.misc.full_name
+        name = f"Google Maps {full_name}"
+        # For some reason, the device_tracker component doesn't allow entity to be
+        # associated with a device. This appears to be for some legacy reason that no
+        # longer exists or makes sense. E.g., some built-in integrations assign device
+        # info for device_tracker entities.
+        self._attr_device_info = dr.DeviceInfo(  # type: ignore[assignment]
+            identifiers=dev_ids(uid), name=name, serial_number=uid
+        )
+        self._track_entity = track_entity
 
     @property
-    def suggested_object_id(self) -> str:
-        """Return input for object ID."""
-        return slugify(cast(str, self.name))
-
-    @property
-    def extra_state_attributes(self) -> Mapping[str, Any] | None:
+    def extra_state_attributes(self) -> Mapping[str, Any]:
         """Return entity specific state attributes."""
-        if self._misc is None:
-            return None
         attrs: dict[str, Any] = {ATTR_NICKNAME: self._misc.nickname}
         if (charging := self._misc.battery_charging) is not None:
             attrs[ATTR_BATTERY_CHARGING] = charging
@@ -277,21 +273,8 @@ class GoogleMapsDeviceTracker(
         return dict(sorted(attrs.items()))
 
     @property
-    def device_info(self) -> DeviceInfo | None:
-        """Return device specific attributes."""
-        info = DeviceInfo(
-            identifiers={(DOMAIN, cast(str, self.unique_id))},
-            name=self._full_name,
-        )
-        if (STORAGE_VERSION_MAJOR, STORAGE_VERSION_MINOR) >= (1, 4):
-            info["serial_number"] = self.unique_id
-        return info
-
-    @property
     def entity_picture(self) -> str | None:
         """Return the entity picture to use in the frontend, if any."""
-        if self._misc is None:
-            return None
         return self._misc.entity_picture
 
     @property
@@ -307,14 +290,7 @@ class GoogleMapsDeviceTracker(
     @property
     def battery_level(self) -> int | None:
         """Return the battery level of the device."""
-        if self._misc is None:
-            return None
         return self._misc.battery_level
-
-    @property
-    def source_type(self) -> SourceType | str:
-        """Return the source type of the device."""
-        return SourceType.GPS
 
     @property
     def location_accuracy(self) -> int:
@@ -338,26 +314,48 @@ class GoogleMapsDeviceTracker(
         return self._loc.longitude
 
     @property
-    def extra_restore_state_data(self) -> PersonData:
+    def extra_restore_state_data(self) -> LocationData | None:
         """Return Google Maps specific state data to be restored."""
-        return PersonData(self._loc, self._misc)
+        return self._loc
+
+    @property
+    def log_name(self) -> str:
+        """Return name to be used in log messages."""
+        return (
+            (self.registry_entry and self.registry_entry.name)
+            or (
+                (device_entry := self.device_entry)
+                and (device_entry.name_by_user or device_entry.name)
+            )
+            or self.entity_id
+            or self._misc.full_name
+        )
 
     async def async_added_to_hass(self) -> None:
         """Run when entity about to be added to hass."""
         await super().async_added_to_hass()
 
+        # Now that entity ID has been determined, add it to list of entity IDs to
+        # monitor being removed from entity registry.
+        self._track_entity(self.entity_id)
+
         # Restore state if possible.
-        if (last_extra_data := await self.async_get_last_extra_data()) and (
-            last_person_data := PersonData.from_dict(last_extra_data.as_dict())
-        ):
-            # Always restore loc data as "previous location" first, then overwrite
-            # with new location below if available and "better."
-            self._loc = last_person_data.loc
-            # Only restore misc data if we didn't get any when initialized.
-            if self._misc is None:
-                self._misc = last_person_data.misc
+        if last_extra_data := await self.async_get_last_extra_data():
+            # Previous versions stored PersonData which included misc & loc.
+            # Now only loc is stored directly.
+            last_extra_data_dict: dict[str, Any] = last_extra_data.as_dict()
+            if last_loc_data_dict := cast(
+                dict[str, Any] | None,
+                last_extra_data_dict.get("loc", last_extra_data_dict),
+            ):
+                # Always restore loc data as "previous location" first, then overwrite
+                # with new location below if available and "better."
+                self._loc = LocationData.from_dict(last_loc_data_dict)
 
         # Now that previous state has been restored, update with new data if possible.
+        # Note that although the Entity was created only when data for this uid was
+        # available, it's possible (although not very likely) for the coordinator to
+        # have updated since then and now there is no data for this uid.
         if not (data := self.coordinator.data.get(cast(UniqueID, self.unique_id))):
             return
         assert data.loc
@@ -367,9 +365,8 @@ class GoogleMapsDeviceTracker(
     def _handle_coordinator_update(self) -> None:
         """Handle updated data from the coordinator."""
         if not (data := self.coordinator.data.get(cast(UniqueID, self.unique_id))):
-            # TODO: Should we do anything special if data is not available, at least
-            # after first update, e.g., become unavailable, unknown or retored???
-            # And, if restored, do that by deleting ourselves???
+            # Data not availble. Keep current data for now.
+            # If data is not available long enough, Entity will be removed.
             return
         assert data.misc
         assert data.loc
@@ -419,4 +416,4 @@ class GoogleMapsDeviceTracker(
         """Log reason for ignoring location data."""
         if reason != self._skip_reason:
             self._skip_reason = reason
-            _LOGGER.debug("Ignoring %s location data because %s", self.name, reason)
+            _LOGGER.debug("Ignoring %s location data because %s", self.log_name, reason)

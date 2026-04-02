@@ -1,0 +1,22 @@
+# Lovelace frontend resources (HACS custom cards)
+# When in YAML mode, resources must be listed here.
+- url: /hacsfiles/lovelace-mushroom/mushroom.js
+  type: module
+- url: /hacsfiles/scheduler-card/scheduler-card.js
+  type: module
+- url: /hacsfiles/button-card/button-card.js
+  type: module
+- url: /hacsfiles/better-thermostat-ui-card/better-thermostat-ui-card.js
+  type: module
+- url: /hacsfiles/mini-graph-card/mini-graph-card-bundle.js
+  type: module
+- url: /hacsfiles/apexcharts-card/apexcharts-card.js
+  type: module
+- url: /hacsfiles/ha-map-card/map-card.js
+  type: module
+- url: /hacsfiles/power-flow-card-plus/power-flow-card-plus.js
+  type: module
+- url: /hacsfiles/ha-sankey-chart/ha-sankey-chart.js
+  type: module
+- url: /hacsfiles/weather-chart-card/weather-chart-card.js
+  type: module

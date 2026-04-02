@@ -1,0 +1,556 @@
+title: Power & Energy
+views:
+  - title: Power & Energy
+    path: power-energy
+    icon: mdi:lightning-bolt
+
+    # ─────────────────────────────────────────────
+    #  BADGE BAR — power system at a glance
+    # ─────────────────────────────────────────────
+    badges:
+      # ── Battery SOC ──
+      - type: custom:mushroom-template-badge
+        entity: sensor.olins_van_bms_battery
+        icon: |
+          {% set batt = states('sensor.olins_van_bms_battery') | float(0) %}
+          {% set level = (batt / 10) | round(0, 'floor') * 10 %}
+          {% if level < 10 %}{% set level = 10 %}{% endif %}
+          {{ 'mdi:battery' if level >= 100 else 'mdi:battery-' ~ level }}
+        content: "{{ states('sensor.olins_van_bms_battery') }}%"
+        color: >
+          {% set batt = states('sensor.olins_van_bms_battery') | float(0) %}
+          {{ 'red' if batt < 30 else 'orange' if batt < 65 else 'green' }}
+        label: SOC
+        tap_action:
+          action: more-info
+
+      # ── Solar ──
+      - type: custom:mushroom-template-badge
+        entity: sensor.total_mppt_pv_power
+        icon: mdi:solar-power-variant
+        content: "{{ states('sensor.total_mppt_pv_power') }}W"
+        color: >
+          {{ 'green' if states('sensor.total_mppt_pv_power') | float(0) > 50 else 'grey' }}
+        label: Solar
+        tap_action:
+          action: more-info
+
+      # ── Battery Power ──
+      - type: custom:mushroom-template-badge
+        entity: sensor.olins_van_bms_power
+        icon: >
+          {% set p = states('sensor.olins_van_bms_power') | float(0) %}
+          {{ 'mdi:battery-charging' if p > 0 else 'mdi:battery-arrow-down' if p < 0 else 'mdi:battery' }}
+        content: "{{ states('sensor.olins_van_bms_power') | float(0) | abs | round(0) }}W"
+        color: >
+          {% set p = states('sensor.olins_van_bms_power') | float(0) %}
+          {{ 'green' if p > 0 else 'orange' if p < 0 else 'grey' }}
+        label: Battery
+        tap_action:
+          action: more-info
+
+      # ── Alternator ──
+      - type: custom:mushroom-template-badge
+        entity: sensor.alternator_charger_power_24v
+        icon: mdi:car-battery
+        content: "{{ states('sensor.alternator_charger_power_24v') | float(0) | round(0) }}W"
+        color: >
+          {{ 'green' if states('sensor.alternator_charger_power_24v') | float(0) > 10 else 'grey' }}
+        label: Alternator
+        tap_action:
+          action: more-info
+
+      # ── Inverter ──
+      - type: custom:mushroom-template-badge
+        entity: binary_sensor.shelly_em_reachable
+        icon: >
+          {{ 'mdi:power-plug' if is_state('binary_sensor.shelly_em_reachable', 'on') else 'mdi:power-plug-off' }}
+        content: >
+          {{ 'ON' if is_state('binary_sensor.shelly_em_reachable', 'on') else 'OFF' }}
+        color: >
+          {{ 'green' if is_state('binary_sensor.shelly_em_reachable', 'on') else 'grey' }}
+        label: Inverter
+        tap_action:
+          action: call-service
+          service: button.press
+          target:
+            entity_id: button.a32_pro_inverter_on_off_toggle
+
+      # ── 12V Rail ──
+      - type: custom:mushroom-template-badge
+        entity: sensor.a32_pro_smart_battery_sense_12v_voltage
+        icon: mdi:current-dc
+        content: "{{ states('sensor.a32_pro_smart_battery_sense_12v_voltage') | float(0) | round(1) }}V"
+        color: >
+          {% set v = states('sensor.a32_pro_smart_battery_sense_12v_voltage') | float(0) %}
+          {{ 'red' if v < 11 else 'orange' if v < 12 else 'green' }}
+        label: 12V Rail
+        tap_action:
+          action: more-info
+
+    # ─────────────────────────────────────────────
+    #  SECTIONS
+    # ─────────────────────────────────────────────
+    sections:
+
+      # ═══════════════════════════════════════════
+      #  COLUMN 1: Battery + Charging
+      # ═══════════════════════════════════════════
+      - type: grid
+        column_span: 1
+        cards:
+          # ── Battery deep-dive hero ──
+          - type: custom:button-card
+            entity: sensor.olins_van_bms_battery
+            show_name: false
+            show_state: false
+            show_icon: false
+            show_label: true
+            label: |
+              [[[
+                var soc = parseFloat(states['sensor.olins_van_bms_battery'].state);
+                var current = parseFloat(states['sensor.olins_van_bms_current'].state);
+                var voltage = parseFloat(states['sensor.olins_van_bms_voltage'].state);
+                var power = parseFloat(states['sensor.olins_van_bms_power'].state);
+                var stored = parseFloat(states['sensor.olins_van_bms_stored_energy'].state);
+                var temp = parseFloat(states['sensor.olins_van_bms_temperature'].state);
+                var cycles = parseFloat(states['sensor.olins_van_bms_cycles'].state);
+                var delta = parseFloat(states['sensor.olins_van_bms_delta_voltage'].state);
+                var v12 = parseFloat(states['sensor.a32_pro_smart_battery_sense_12v_voltage'].state);
+
+                var socColor = soc < 30 ? 'var(--error-color)' : soc < 65 ? 'var(--warning-color)' : 'var(--success-color)';
+                var status = current > 0.5 ? 'Charging' : current < -0.5 ? 'Discharging' : 'Idle';
+                var statusColor = current > 0.5 ? 'var(--success-color)' : current < -0.5 ? 'var(--warning-color)' : 'var(--secondary-text-color)';
+
+                var timeStr = '';
+                if (current > 0.5) {
+                  var whRemaining = 8700 - stored;
+                  var hours = whRemaining / Math.abs(power);
+                  if (hours < 48) {
+                    var h = Math.floor(hours); var m = Math.round((hours - h) * 60);
+                    timeStr = h + 'h ' + m + 'm to full';
+                  }
+                } else if (current < -0.5) {
+                  var hours = stored / Math.abs(power);
+                  if (hours < 48) {
+                    var h = Math.floor(hours); var m = Math.round((hours - h) * 60);
+                    timeStr = h + 'h ' + m + 'm remaining';
+                  }
+                }
+
+                return `<div style="padding:2px 0;">
+                  <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:6px;">
+                    <span style="font-size:32px; font-weight:700; letter-spacing:-1px; color:${socColor};">${soc}%</span>
+                    <span style="font-size:13px; font-weight:500; color:${statusColor};">${status}</span>
+                    <span style="font-size:11px; color:var(--secondary-text-color); margin-left:auto;">${timeStr || ''}</span>
+                  </div>
+                  <div style="width:100%; height:6px; background:var(--divider-color); border-radius:3px; margin-bottom:10px; overflow:hidden;">
+                    <div style="width:${soc}%; height:100%; background:${socColor}; border-radius:3px; transition:width 1s ease;"></div>
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Voltage</div>
+                      <div style="font-size:14px; font-weight:600;">${voltage.toFixed(1)}V</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Current</div>
+                      <div style="font-size:14px; font-weight:600;">${current.toFixed(1)}A</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Power</div>
+                      <div style="font-size:14px; font-weight:600;">${Math.abs(power).toFixed(0)}W</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Temp</div>
+                      <div style="font-size:14px; font-weight:600;">${temp.toFixed(1)}°C</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Stored</div>
+                      <div style="font-size:14px; font-weight:600;">${(stored/1000).toFixed(2)}kWh</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Cycles</div>
+                      <div style="font-size:14px; font-weight:600;">${cycles}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Cell ΔV</div>
+                      <div style="font-size:14px; font-weight:600;">${(delta*1000).toFixed(0)}mV</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">12V Rail</div>
+                      <div style="font-size:14px; font-weight:600;">${v12.toFixed(1)}V</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Capacity</div>
+                      <div style="font-size:14px; font-weight:600;">8.7kWh</div>
+                    </div>
+                  </div>
+                </div>`;
+              ]]]
+            tap_action:
+              action: more-info
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 14px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+              label:
+                - font-size: 14px
+                - color: var(--primary-text-color)
+                - text-align: left
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Battery SOC 24h chart ──
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              show_states: true
+              colorize_states: true
+              title: Battery SOC (24h)
+            graph_span: 24h
+            yaxis:
+              - min: 0
+                max: 100
+                decimals: 0
+            series:
+              - entity: sensor.olins_van_bms_battery
+                name: SOC
+                type: area
+                color: '#22c55e'
+                curve: smooth
+                stroke_width: 2
+                opacity: 0.15
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Charge vs Discharge power 12h ──
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              show_states: true
+              colorize_states: true
+              title: Charge vs Discharge (12h)
+            graph_span: 12h
+            yaxis:
+              - decimals: 0
+            series:
+              - entity: sensor.battery_charging
+                name: Charging
+                type: area
+                color: '#22c55e'
+                curve: smooth
+                stroke_width: 2
+                opacity: 0.1
+              - entity: sensor.battery_discharging
+                name: Discharging
+                type: area
+                color: '#ef4444'
+                curve: smooth
+                stroke_width: 2
+                opacity: 0.1
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Charging sources ──
+          - type: custom:button-card
+            show_name: false
+            show_state: false
+            show_icon: false
+            show_label: true
+            label: |
+              [[[
+                var alt = parseFloat(states['sensor.alternator_charger_power_24v'].state) || 0;
+                var solar = parseFloat(states['sensor.total_mppt_pv_power'].state) || 0;
+                var shore = parseFloat(states['sensor.shore_power_charger_power_24v'].state) || 0;
+
+                var altColor = alt > 10 ? 'var(--success-color)' : 'var(--secondary-text-color)';
+                var solarColor = solar > 10 ? '#f59e0b' : 'var(--secondary-text-color)';
+                var shoreColor = shore > 10 ? 'var(--info-color)' : 'var(--secondary-text-color)';
+
+                return `<div style="padding:4px 0;">
+                  <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--secondary-text-color); margin-bottom:8px;">Charging Sources</div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; text-align:center;">
+                    <div>
+                      <ha-icon icon="mdi:car-battery" style="--mdc-icon-size:24px; color:${altColor};"></ha-icon>
+                      <div style="font-size:18px; font-weight:700; margin-top:2px;">${alt.toFixed(0)}W</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Alternator</div>
+                    </div>
+                    <div>
+                      <ha-icon icon="mdi:solar-power-variant" style="--mdc-icon-size:24px; color:${solarColor};"></ha-icon>
+                      <div style="font-size:18px; font-weight:700; margin-top:2px;">${solar.toFixed(0)}W</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Solar</div>
+                    </div>
+                    <div>
+                      <ha-icon icon="mdi:ev-plug-type1" style="--mdc-icon-size:24px; color:${shoreColor};"></ha-icon>
+                      <div style="font-size:18px; font-weight:700; margin-top:2px;">${shore.toFixed(0)}W</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Shore</div>
+                    </div>
+                  </div>
+                </div>`;
+              ]]]
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 14px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+              label:
+                - font-size: 14px
+                - color: var(--primary-text-color)
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Shore charger + Inverter toggles ──
+          - type: custom:button-card
+            show_name: false
+            show_state: false
+            show_icon: false
+            show_label: true
+            label: |
+              [[[
+                var shore = states['switch.a32_pro_do8_switch04_shore_power_charger'].state === 'on';
+                var shoreEnabled = states['input_boolean.shore_power_charger_enabled'].state === 'on';
+                var inverter = states['binary_sensor.shelly_em_reachable'].state === 'on';
+
+                var shoreColor = shore ? 'var(--info-color)' : 'var(--secondary-text-color)';
+                var enabledColor = shoreEnabled ? 'var(--success-color)' : 'var(--secondary-text-color)';
+                var invColor = inverter ? 'var(--success-color)' : 'var(--secondary-text-color)';
+
+                return `<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; text-align:center;">
+                  <div>
+                    <ha-icon icon="mdi:ev-plug-type1" style="--mdc-icon-size:22px; color:${shoreColor};"></ha-icon>
+                    <div style="font-size:12px; font-weight:600; margin-top:2px;">${shore ? 'ON' : 'OFF'}</div>
+                    <div style="font-size:10px; color:var(--secondary-text-color);">Shore Relay</div>
+                  </div>
+                  <div>
+                    <ha-icon icon="mdi:toggle-switch${shoreEnabled ? '' : '-off'}" style="--mdc-icon-size:22px; color:${enabledColor};"></ha-icon>
+                    <div style="font-size:12px; font-weight:600; margin-top:2px;">${shoreEnabled ? 'Enabled' : 'Disabled'}</div>
+                    <div style="font-size:10px; color:var(--secondary-text-color);">Shore Auto</div>
+                  </div>
+                  <div>
+                    <ha-icon icon="mdi:power-plug${inverter ? '' : '-off'}" style="--mdc-icon-size:22px; color:${invColor};"></ha-icon>
+                    <div style="font-size:12px; font-weight:600; margin-top:2px;">${inverter ? 'ON' : 'OFF'}</div>
+                    <div style="font-size:10px; color:var(--secondary-text-color);">Inverter</div>
+                  </div>
+                </div>`;
+              ]]]
+            tap_action:
+              action: more-info
+              entity: switch.a32_pro_do8_switch04_shore_power_charger
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 12px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+              label:
+                - font-size: 14px
+                - color: var(--primary-text-color)
+            grid_options:
+              columns: full
+              rows: 1
+
+      # ═══════════════════════════════════════════
+      #  COLUMN 2: Solar + Consumption
+      # ═══════════════════════════════════════════
+      - type: grid
+        column_span: 1
+        cards:
+          # ── MPPT dual panel hero ──
+          - type: custom:button-card
+            show_name: false
+            show_state: false
+            show_icon: false
+            show_label: true
+            label: |
+              [[[
+                var m1pv = parseFloat(states['sensor.a32_pro_mppt1_pv_power'].state) || 0;
+                var m2pv = parseFloat(states['sensor.a32_pro_mppt2_pv_power'].state) || 0;
+                var m1v = parseFloat(states['sensor.a32_pro_mppt1_output_voltage'].state) || 0;
+                var m2v = parseFloat(states['sensor.a32_pro_mppt2_output_voltage'].state) || 0;
+                var m1a = parseFloat(states['sensor.a32_pro_mppt1_output_current'].state) || 0;
+                var m2a = parseFloat(states['sensor.a32_pro_mppt2_output_current'].state) || 0;
+                var m1y = parseFloat(states['sensor.a32_pro_mppt1_yield_today'].state) || 0;
+                var m2y = parseFloat(states['sensor.a32_pro_mppt2_yield_today'].state) || 0;
+                var totalPV = parseFloat(states['sensor.total_mppt_pv_power'].state) || 0;
+                var totalYield = parseFloat(states['sensor.total_mppt_yield_today'].state) || 0;
+
+                var pvColor = totalPV > 100 ? 'var(--warning-color)' : totalPV > 10 ? 'var(--success-color)' : 'var(--secondary-text-color)';
+
+                return `<div style="padding:2px 0;">
+                  <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:8px;">
+                    <ha-icon icon="mdi:solar-power-variant" style="--mdc-icon-size:22px; color:${pvColor};"></ha-icon>
+                    <span style="font-size:28px; font-weight:700; letter-spacing:-0.5px; color:${pvColor};">${totalPV.toFixed(0)}W</span>
+                    <span style="font-size:12px; color:var(--secondary-text-color);">Total · ${totalYield.toFixed(0)}Wh today</span>
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px;">
+                      <div style="font-size:11px; font-weight:600; color:var(--secondary-text-color); margin-bottom:6px;">MPPT 1 (250W)</div>
+                      <div style="font-size:20px; font-weight:700;">${m1pv.toFixed(0)}W</div>
+                      <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-top:6px;">
+                        <div><span style="font-size:10px; color:var(--secondary-text-color);">V:</span> <span style="font-size:12px; font-weight:600;">${m1v.toFixed(1)}</span></div>
+                        <div><span style="font-size:10px; color:var(--secondary-text-color);">A:</span> <span style="font-size:12px; font-weight:600;">${m1a.toFixed(1)}</span></div>
+                      </div>
+                      <div style="font-size:11px; color:var(--secondary-text-color); margin-top:4px;">Yield: ${(m1y*1000).toFixed(0)}Wh</div>
+                    </div>
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px;">
+                      <div style="font-size:11px; font-weight:600; color:var(--secondary-text-color); margin-bottom:6px;">MPPT 2 (400W)</div>
+                      <div style="font-size:20px; font-weight:700;">${m2pv.toFixed(0)}W</div>
+                      <div style="display:grid; grid-template-columns:1fr 1fr; gap:4px; margin-top:6px;">
+                        <div><span style="font-size:10px; color:var(--secondary-text-color);">V:</span> <span style="font-size:12px; font-weight:600;">${m2v.toFixed(1)}</span></div>
+                        <div><span style="font-size:10px; color:var(--secondary-text-color);">A:</span> <span style="font-size:12px; font-weight:600;">${m2a.toFixed(1)}</span></div>
+                      </div>
+                      <div style="font-size:11px; color:var(--secondary-text-color); margin-top:4px;">Yield: ${(m2y*1000).toFixed(0)}Wh</div>
+                    </div>
+                  </div>
+                </div>`;
+              ]]]
+            tap_action:
+              action: more-info
+              entity: sensor.total_mppt_pv_power
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 14px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+              label:
+                - font-size: 14px
+                - color: var(--primary-text-color)
+                - text-align: left
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Solar production chart 24h ──
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              show_states: true
+              colorize_states: true
+              title: Solar Production (24h)
+            graph_span: 24h
+            yaxis:
+              - min: 0
+                decimals: 0
+            series:
+              - entity: sensor.a32_pro_mppt1_pv_power
+                name: MPPT 1
+                type: area
+                color: '#f59e0b'
+                curve: smooth
+                stroke_width: 2
+                opacity: 0.1
+              - entity: sensor.a32_pro_mppt2_pv_power
+                name: MPPT 2
+                type: area
+                color: '#f97316'
+                curve: smooth
+                stroke_width: 2
+                opacity: 0.1
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Per-device power consumption chart ──
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              show_states: true
+              colorize_states: true
+              title: Power by Device (6h)
+            graph_span: 6h
+            yaxis:
+              - min: 0
+                decimals: 0
+            stacked: true
+            series:
+              - entity: sensor.inverter_power_24v
+                name: Inverter
+                type: area
+                color: '#8b5cf6'
+                curve: smooth
+                stroke_width: 1
+                opacity: 0.3
+              - entity: sensor.air_conditioning_power_24v
+                name: A/C
+                type: area
+                color: '#3b82f6'
+                curve: smooth
+                stroke_width: 1
+                opacity: 0.3
+              - entity: sensor.all_24v_devices_power_24v
+                name: 24V Devices
+                type: area
+                color: '#22c55e'
+                curve: smooth
+                stroke_width: 1
+                opacity: 0.3
+              - entity: sensor.all_12v_devices_power_24v
+                name: 12V Devices
+                type: area
+                color: '#06b6d4'
+                curve: smooth
+                stroke_width: 1
+                opacity: 0.3
+              - entity: sensor.shore_power_charger_power_24v
+                name: Shore Charger
+                type: area
+                color: '#ec4899'
+                curve: smooth
+                stroke_width: 1
+                opacity: 0.3
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Power flow diagram ──
+          - type: custom:power-flow-card-plus
+            entities:
+              solar:
+                entity: sensor.total_mppt_pv_power
+                icon: mdi:solar-power-variant
+                color:
+                  icon_color: '#f59e0b'
+              battery:
+                entity:
+                  consumption: sensor.battery_discharging
+                  production: sensor.battery_charging
+                state_of_charge: sensor.olins_van_bms_battery
+                color:
+                  icon_color: var(--success-color)
+              grid:
+                entity:
+                  consumption: sensor.alternator_charger_power_24v
+                name: Alternator
+                icon: mdi:car-battery
+                color:
+                  icon_color: var(--info-color)
+              individual:
+                - entity: sensor.inverter_power_24v
+                  name: Inverter
+                  icon: mdi:power-plug
+                  color: '#8b5cf6'
+                - entity: sensor.all_24v_devices_power_24v
+                  name: 24V
+                  icon: mdi:flash
+                  color: '#22c55e'
+                - entity: sensor.all_12v_devices_power_24v
+                  name: 12V
+                  icon: mdi:lightning-bolt
+                  color: '#06b6d4'
+            grid_options:
+              columns: full
+              rows: auto
+
+    cards: []

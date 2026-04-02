@@ -1,0 +1,59 @@
+# ================================
+# template/binary_sensors.yaml
+# ================================
+
+# ─── Vehicle movement detection ───
+- binary_sensor:
+    - name: "Vehicle Is Moving"
+      unique_id: vehicle_is_moving
+      device_class: moving
+      state: >
+        {% set speed = states('sensor.wican_speed') | float(0) %}
+        {% set speed_threshold = states('input_number.vehicle_stopped_threshold') | float(2) %}
+        {% set wican_available = is_state('binary_sensor.engine_is_running', 'on') %}
+        {{ wican_available and speed > speed_threshold }}
+      icon: >
+        {% if is_state('binary_sensor.vehicle_is_moving', 'on') %}
+          mdi:car
+        {% else %}
+          mdi:car-brake-parking
+        {% endif %}
+
+    - name: "Vehicle Is Stable"
+      unique_id: vehicle_is_stable
+      device_class: moving
+      state: >
+        {% set acceleration = states('sensor.vehicle_acceleration') | float(0) | abs %}
+        {% set accel_threshold = states('input_number.acceleration_stability_threshold') | float(0.5) %}
+        {% set engine_running = is_state('binary_sensor.engine_is_running', 'on') %}
+        {{ engine_running and acceleration <= accel_threshold }}
+      icon: >
+        {% if is_state('binary_sensor.vehicle_is_stable', 'on') %}
+          mdi:check-circle
+        {% else %}
+          mdi:car-speed-limiter
+        {% endif %}
+
+    - name: "Engine Is Running"
+      unique_id: engine_is_running
+      device_class: running
+      state: >
+        {% set speed_updated = states.sensor.wican_speed.last_updated %}
+        {% set fuel_updated = states.sensor.wican_fuel.last_updated %}
+        {% set now_time = now() %}
+        {% set speed_fresh = (now_time - speed_updated).total_seconds() < 120 %}
+        {% set fuel_fresh = (now_time - fuel_updated).total_seconds() < 120 %}
+        {% set speed_nonzero = states('sensor.wican_speed') | float(0) >= 0 %}
+        {{ (speed_fresh or fuel_fresh) and speed_nonzero }}
+      icon: >
+        {% if is_state('binary_sensor.engine_is_running', 'on') %}
+          mdi:engine
+        {% else %}
+          mdi:engine-off
+        {% endif %}
+
+# ─── Inverter reachability ───
+- binary_sensor:
+    - name: "Inverter On"
+      device_class: power
+      state: "{{ is_state('binary_sensor.shelly_em_reachable','on') }}"

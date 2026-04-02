@@ -17,3 +17,37 @@ CookModeStart:
 
 CookModeStop:
   - "(turn | stop | disable) (the )?cook mode"
+
+StartBedtimeRoutine:
+  - "(start | begin | initiate) (the )?bedtime (routine | protocol)"
+  - "(good night | goodnight)"
+  - "it's bedtime"
+
+GoodMorning:
+  - "(good morning | rise and shine)"
+  - "(wake up | I'm up)"
+
+# Indoor dimmers off (capture generic phrases like "turn off all the lights")
+IndoorDimmersOff:
+  - "(turn | shut) off [all] [the] (lights | lighting)"
+  - "(turn | shut) off [all] [the] (indoor | inside | cabin | house | coach) (lights | lighting)"
+  - "turn [all] [the] lights off"
+  - "turn [all] [the] indoor lights off"
+  - "turn [all] [the] inside lights off"
+  - "turn [all] [the] cabin lights off"
+  - "turn [all] [the] house lights off"
+  - "turn [all] [the] coach lights off"
+  - "lights off"
+  - "shut off the lights"
+
+# Indoor dimmers on (broad on-phrases)
+IndoorDimmersOn:
+  - "turn on [all] [the] (lights | lighting)"
+  - "turn on [all] [the] (indoor | inside | cabin | house | coach) (lights | lighting)"
+  - "turn [all] [the] lights on"
+  - "turn [all] [the] indoor lights on"
+  - "turn [all] [the] inside lights on"
+  - "turn [all] [the] cabin lights on"
+  - "turn [all] [the] house lights on"
+  - "turn [all] [the] coach lights on"
+  - "lights on"

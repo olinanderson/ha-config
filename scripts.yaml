@@ -134,35 +134,33 @@ power_saving_mode_on:
   alias: Power Saving Mode ON
   mode: single
   sequence:
-    # ❶ Snapshot everything we're about to change
-    - action: scene.create
-      data:
-        scene_id: pre_power_saving_mode
-        snapshot_entities:
-          - light.led_controller_cct_1
-          - light.led_controller_cct_2
-          - light.led_controller_sc_1
-          - light.led_controller_sc_2
-          - switch.a32_pro_do8_switch06_top_monitor
-          - switch.a32_pro_do8_switch07_bottom_monitor
-
-    # ❷ Turn off all lights
+    # Turn off (most) lights – EXCLUDE shower lights
     - action: light.turn_off
       target:
         entity_id:
           - light.led_controller_cct_1
           - light.led_controller_cct_2
-          - light.led_controller_sc_1
+          # - light.led_controller_sc_1   # ← shower (left alone)
           - light.led_controller_sc_2
 
-    # ❸ Turn off monitors
+    # Turn off monitors
     - action: switch.turn_off
       target:
         entity_id:
           - switch.a32_pro_do8_switch06_top_monitor
           - switch.a32_pro_do8_switch07_bottom_monitor
 
-    # ❹ Set the power saving mode toggle to ON
+    # Turn OFF water system while away (but NOT if shower mode is on)
+    - if:
+        - condition: state
+          entity_id: input_boolean.shower_mode
+          state: "off"
+      then:
+        - action: switch.turn_off
+          target:
+            entity_id: switch.a32_pro_water_system_master_switch
+
+    # Mark as in power saving mode
     - action: input_boolean.turn_on
       target:
         entity_id: input_boolean.power_saving_mode
@@ -174,12 +172,15 @@ power_saving_mode_off:
   alias: Power Saving Mode OFF
   mode: single
   sequence:
-    # ❶ Restore everything we captured earlier
+    # Ensure inverter is ON before restoring AC-dependent devices
+    - action: script.inverter_ensure_on
+
+    # Restore the last rolling snapshot captured while PS mode was OFF
     - action: scene.turn_on
       target:
-        entity_id: scene.pre_power_saving_mode
+        entity_id: scene.last_active_state
 
-    # ❷ Set the power saving mode toggle to OFF
+    # Mark as not in power saving mode
     - action: input_boolean.turn_off
       target:
         entity_id: input_boolean.power_saving_mode
@@ -204,3 +205,262 @@ power_saving_mode_toggle:
               state: "on"
           sequence:
             - action: script.power_saving_mode_off
+
+inverter_toggle:
+  alias: Inverter, press button + set pending
+  mode: single
+  sequence:
+    - action: input_boolean.turn_on # show “loading”
+      target: { entity_id: input_boolean.inverter_toggle_pending }
+    - action: button.press # your real inverter toggle
+      target: { entity_id: button.a32_pro_inverter_on_off_toggle }
+    - delay: "00:00:15" # safety net in case Shelly never answers
+    - action: input_boolean.turn_off
+      target: { entity_id: input_boolean.inverter_toggle_pending }
+
+inverter_ensure_on:
+  alias: Inverter – Ensure ON (idempotent)
+  mode: single
+  sequence:
+    - if:
+        - condition: state
+          entity_id: binary_sensor.192_168_10_174
+          state: "off"
+        - condition: state
+          entity_id: input_boolean.inverter_toggle_pending
+          state: "off"
+      then:
+        - action: script.inverter_toggle
+
+########################################################################
+#  Inverter – Ensure OFF (idempotent)                                   #
+########################################################################
+inverter_ensure_off:
+  alias: Inverter – Ensure OFF (idempotent)
+  mode: single
+  sequence:
+    - if:
+        - condition: state
+          entity_id: binary_sensor.192_168_10_174
+          state: "on"
+        - condition: state
+          entity_id: input_boolean.inverter_toggle_pending
+          state: "off"
+      then:
+        - action: script.inverter_toggle
+
+########################################################################
+#  Starlink – sleep start after 30 minutes (placeholder)                #
+########################################################################
+starlink_sleep_start_after_30m:
+  alias: Starlink – Sleep start after 30 minutes
+  mode: single
+  sequence:
+    # Set Starlink sleep start time to 30 minutes from now
+    - action: time.set_value
+      target:
+        entity_id: time.starlink_sleep_start
+      data:
+        time: "{{ (now() + timedelta(minutes=30)).strftime('%H:%M:%S') }}"
+    # Optional: notify for visibility (you can remove this)
+    - action: logbook.log
+      data:
+        name: "Starlink"
+        message: "Sleep start set to {{ (now() + timedelta(minutes=30)).strftime('%H:%M') }}"
+
+########################################################################
+#  Bedtime Routine                                                      #
+#  - Water system: ON to Main                                           #
+#  - Under-cabinet: 100% for 5 minutes                                  #
+#  - Roof hatch lighting: 20% for 10 minutes                            #
+#  - After 10 minutes: inverter OFF, water OFF, all lights OFF          #
+#  - Starlink sleep start scheduled for +30 minutes                     #
+########################################################################
+bedtime_routine:
+  alias: Bedtime Routine
+  mode: single
+  sequence:
+    # Schedule Starlink sleep start (runs independently)
+    - action: script.starlink_sleep_start_after_30m
+
+    # Ensure water system is on and set to Main
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_water_system_master_switch
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_water_system_state_main
+
+    # Lighting pre-bed
+    - action: light.turn_on
+      target:
+        entity_id: light.under_cabinet_lighting_switch
+      data:
+        brightness_pct: 100
+    - action: light.turn_on
+      target:
+        entity_id: light.led_controller_cct_1  # use dimmer directly for roof hatch lighting
+      data:
+        brightness_pct: 20
+
+    # Under-cabinet stays on for 5 minutes
+    - delay: "00:05:00"
+    - action: light.turn_off
+      target:
+        entity_id: light.under_cabinet_lighting_switch
+
+    # After total of 10 minutes from start, do final shutdown
+    - delay: "00:05:00"
+    - action: script.inverter_ensure_off
+    - action: switch.turn_off
+      target:
+        entity_id: switch.a32_pro_water_system_master_switch
+    - action: light.turn_off
+      target:
+        entity_id:
+          - light.led_controller_cct_1
+          - light.led_controller_cct_2
+          - light.led_controller_sc_1
+          - light.led_controller_sc_2
+          - light.main_lighting_switch
+          - light.under_cabinet_lighting_switch
+
+########################################################################
+#  Sleep Mode ON / Good Night                                           #
+########################################################################
+sleep_mode_on:
+  alias: Sleep Mode ON
+  mode: single
+  sequence:
+    # Set the sleep flag (also useful to gate automations)
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.sleep_mode
+
+    # Snapshot current LIGHT states so we can restore later
+    - action: scene.create
+      data:
+        scene_id: pre_sleep_mode_lights
+        snapshot_entities:
+          - light.led_controller_cct_1
+          - light.led_controller_cct_2
+          - light.led_controller_sc_1
+          - light.led_controller_sc_2
+          - light.main_lighting_switch
+          - light.under_cabinet_lighting_switch
+
+    # Snapshot current monitor states so we can restore later
+    - action: scene.create
+      data:
+        scene_id: pre_sleep_mode_monitors
+        snapshot_entities:
+          - switch.a32_pro_do8_switch06_top_monitor
+          - switch.a32_pro_do8_switch07_bottom_monitor
+
+    # Turn off both monitors while sleeping
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_do8_switch06_top_monitor
+          - switch.a32_pro_do8_switch07_bottom_monitor
+
+    # Turn off all house lights for sleep (restore on wake)
+    - action: light.turn_off
+      target:
+        entity_id:
+          - light.led_controller_cct_1
+          - light.led_controller_cct_2
+          - light.led_controller_sc_1
+          - light.led_controller_sc_2
+          - light.main_lighting_switch
+          - light.under_cabinet_lighting_switch
+
+    # Schedule Starlink sleep start (same behavior as before)
+    - action: script.starlink_sleep_start_after_30m
+
+    # Set Starlink sleep END to 08:15 MST equivalent in current local time
+    - choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ states('time.starlink_sleep_end') != 'unknown' }}"
+          sequence:
+            - action: time.set_value
+              target:
+                entity_id: time.starlink_sleep_end
+              data:
+                time: >
+                  {% set mst_offset = -7 %}  {# MST fixed UTC-7 #}
+                  {% set local_offset = (now().utcoffset().total_seconds() / 3600) | int %}
+                  {% set delta = local_offset - mst_offset %}
+                  {% set hour = (8 + delta) % 24 %}
+                  {{ '%02d:%02d:%02d' % (hour, 15, 0) }}
+
+########################################################################
+#  Wake Up / Good Morning – restore essentials                          #
+########################################################################
+wake_up_routine:
+  alias: Wake Up Routine
+  mode: single
+  sequence:
+    # Clear sleep flag first so presence automations can work again
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.sleep_mode
+
+    # Ensure inverter is ON before restoring anything AC‑dependent
+    - action: script.inverter_ensure_on
+
+    # Restore pre-sleep LIGHT states
+    - action: scene.turn_on
+      target:
+        entity_id: scene.pre_sleep_mode_lights
+
+    # Turn water system back ON to Main
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_water_system_master_switch
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_water_system_state_main
+
+    # Restore monitors to their pre-sleep state
+    - action: scene.turn_on
+      target:
+        entity_id: scene.pre_sleep_mode_monitors
+
+    # Gentle lights: under‑cabinet to 30 % for a soft wake
+    - action: light.turn_on
+      target:
+        entity_id: light.under_cabinet_lighting_switch
+      data:
+        brightness_pct: 30
+
+    # Optionally restore your last active scene if you weren't in power‑saving
+    - choose:
+        - conditions:
+            - condition: state
+              entity_id: input_boolean.power_saving_mode
+              state: "off"
+          sequence:
+            - action: scene.turn_on
+              target:
+                entity_id: scene.last_active_state
+
+########################################################################
+#  Shower Mode – simple toggle scripts                                   #
+########################################################################
+shower_mode_on:
+  alias: Shower Mode ON
+  mode: single
+  sequence:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.shower_mode
+
+shower_mode_off:
+  alias: Shower Mode OFF
+  mode: single
+  sequence:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.shower_mode

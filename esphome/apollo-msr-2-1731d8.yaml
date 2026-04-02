@@ -1,0 +1,23 @@
+substitutions:
+  name: apollo-msr-2-1731d8
+  friendly_name: Apollo MSR-2
+packages:
+  ApolloAutomation.MSR-2: github://ApolloAutomation/MSR-2/Integrations/ESPHome/MSR-2.yaml
+esphome:
+  name: ${name}
+  name_add_mac_suffix: false
+  friendly_name: ${friendly_name}
+api:
+  encryption:
+    key: clDu5FF4Nb0QyZxafYaRZxE+Si5GJNec2grx6+0kIno=
+
+logger:
+  level: INFO
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+  manual_ip:
+    static_ip: 192.168.10.79
+    gateway: 192.168.10.1
+    subnet: 255.255.255.0

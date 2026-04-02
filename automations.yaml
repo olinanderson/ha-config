@@ -1,65 +1,146 @@
-# ────────── Filtered Starlink updates (1 Hz while moving) ──────────
-- alias: Filtered Starlink Location • 1 s While Moving
-  id: filtered_starlink_location_timer
-  mode: queued # queue one-second calls so none are skipped
+# ===========================
+# automations.yaml
+# ===========================
+
+# ───────────────────────────────────────────────
+#  Starlink-filtered tracker – MQTT update logic
+# ───────────────────────────────────────────────
+
+# 1️⃣  (Optional) Republish last known fix on HA boot
+#     – only if broker has NO retained packet
+- id: starlink_bootstrap_if_missing
+  alias: "Starlink • bootstrap retained message if none"
+  mode: single
+  trigger:
+    - trigger: homeassistant
+      event: start
+  condition:
+    # Run only when tracker state is 'unknown' (means broker lost retain)
+    - "{{ states('device_tracker.filtered_starlink_location') in ['unknown', 'unavailable'] }}"
+  action:
+    - action: mqtt.publish
+      data:
+        topic: homeassistant/device_tracker/filtered_starlink/attributes
+        qos: 1
+        retain: true
+        payload: >
+          {
+            "latitude": {{ state_attr('device_tracker.starlink_device_location','latitude') | default(0) }},
+            "longitude": {{ state_attr('device_tracker.starlink_device_location','longitude') | default(0) }},
+            "gps_accuracy": {{ state_attr('device_tracker.starlink_device_location','gps_accuracy') | default(0) }},
+            "elevation": {{ state_attr('device_tracker.starlink_device_location','altitude') | default(0) }},
+            "source_type": "gps"
+          }
+    - action: mqtt.publish
+      data:
+        topic: homeassistant/device_tracker/filtered_starlink/state
+        qos: 1
+        retain: true
+        payload: "home"
+
+# 2️⃣  Update Starlink entity itself every second (pulls fresh coords)
+- id: starlink_entity_refresh_1hz
+  alias: "Starlink • refresh built-in entity 1 Hz"
+  mode: single
   trigger:
     - trigger: time_pattern
-      seconds: "/1" # fire every second
+      seconds: "/1"
+  action:
+    - action: homeassistant.update_entity
+      target:
+        entity_id: device_tracker.starlink_device_location
+
+# 3️⃣  While the van is moving: publish new GPS fix each second
+- id: starlink_filtered_while_moving
+  alias: "Starlink • filtered coords 1 Hz while moving"
+  mode: queued
+  max: 3
+  trigger:
+    - trigger: time_pattern
+      seconds: "/1"
   condition:
     - condition: state
       entity_id: binary_sensor.vehicle_is_moving
-      state: "on" # run only when the van is moving
+      state: "on"
   action:
-    - action: homeassistant.update_entity # pull fresh co-ordinates first
-      target:
-        entity_id: device_tracker.starlink_device_location
-    - action: device_tracker.see # push them to the “filtered” tracker
+    - action: mqtt.publish
       data:
-        dev_id: filtered_starlink_location
-        gps:
-          - "{{ state_attr('device_tracker.starlink_device_location','latitude') }}"
-          - "{{ state_attr('device_tracker.starlink_device_location','longitude') }}"
-        gps_accuracy: "{{ state_attr('device_tracker.starlink_device_location','gps_accuracy') }}"
-        attributes:
-          elevation: "{{ state_attr('device_tracker.starlink_device_location','elevation') }}"
+        topic: homeassistant/device_tracker/filtered_starlink/attributes
+        qos: 1
+        retain: true
+        payload: >
+          {
+            "latitude": {{ state_attr('device_tracker.starlink_device_location','latitude') | default(0) }},
+            "longitude": {{ state_attr('device_tracker.starlink_device_location','longitude') | default(0) }},
+            "gps_accuracy": {{ state_attr('device_tracker.starlink_device_location','gps_accuracy') | default(0) }},
+            "elevation": {{ state_attr('device_tracker.starlink_device_location','altitude') | default(0) }},
+            "source_type": "gps"
+          }
+    # Tracker’s textual state stays constant
+    - action: mqtt.publish
+      data:
+        topic: homeassistant/device_tracker/filtered_starlink/state
+        qos: 1
+        retain: true
+        payload: "home"
 
-# Optional: Update location when you first start moving
-- alias: Update Starlink Location When Movement Starts
+# 4️⃣  Snapshot when movement STARTS
+- id: starlink_filtered_start_move
+  alias: "Starlink • snapshot when movement starts"
   trigger:
     - trigger: state
       entity_id: binary_sensor.vehicle_is_moving
       from: "off"
       to: "on"
   action:
-    - action: device_tracker.see
+    - action: mqtt.publish
       data:
-        dev_id: filtered_starlink_location
-        gps:
-          - "{{ state_attr('device_tracker.starlink_device_location', 'latitude') }}"
-          - "{{ state_attr('device_tracker.starlink_device_location', 'longitude') }}"
-        gps_accuracy: "{{ state_attr('device_tracker.starlink_device_location', 'gps_accuracy') }}"
-        attributes:
-          elevation: "{{ state_attr('device_tracker.starlink_device_location', 'elevation') }}"
-  id: starlink_location_movement_start
+        topic: homeassistant/device_tracker/filtered_starlink/attributes
+        qos: 1
+        retain: true
+        payload: >
+          {
+            "latitude": {{ state_attr('device_tracker.starlink_device_location','latitude') | default(0) }},
+            "longitude": {{ state_attr('device_tracker.starlink_device_location','longitude') | default(0) }},
+            "gps_accuracy": {{ state_attr('device_tracker.starlink_device_location','gps_accuracy') | default(0) }},
+            "elevation": {{ state_attr('device_tracker.starlink_device_location','altitude') | default(0) }},
+            "source_type": "gps"
+          }
+    - action: mqtt.publish
+      data:
+        topic: homeassistant/device_tracker/filtered_starlink/state
+        qos: 1
+        retain: true
+        payload: "home"
 
-# Optional: Final location update when you stop moving
-- alias: Update Starlink Location When Movement Stops
+# 5️⃣  Snapshot when movement STOPS
+- id: starlink_filtered_stop_move
+  alias: "Starlink • snapshot when movement stops"
   trigger:
     - trigger: state
       entity_id: binary_sensor.vehicle_is_moving
       from: "on"
       to: "off"
   action:
-    - action: device_tracker.see
+    - action: mqtt.publish
       data:
-        dev_id: filtered_starlink_location
-        gps:
-          - "{{ state_attr('device_tracker.starlink_device_location', 'latitude') }}"
-          - "{{ state_attr('device_tracker.starlink_device_location', 'longitude') }}"
-        gps_accuracy: "{{ state_attr('device_tracker.starlink_device_location', 'gps_accuracy') }}"
-        attributes:
-          elevation: "{{ state_attr('device_tracker.starlink_device_location', 'elevation') }}"
-  id: starlink_location_movement_stop
+        topic: homeassistant/device_tracker/filtered_starlink/attributes
+        qos: 1
+        retain: true
+        payload: >
+          {
+            "latitude": {{ state_attr('device_tracker.starlink_device_location','latitude') | default(0) }},
+            "longitude": {{ state_attr('device_tracker.starlink_device_location','longitude') | default(0) }},
+            "gps_accuracy": {{ state_attr('device_tracker.starlink_device_location','gps_accuracy') | default(0) }},
+            "elevation": {{ state_attr('device_tracker.starlink_device_location','altitude') | default(0) }},
+            "source_type": "gps"
+          }
+    - action: mqtt.publish
+      data:
+        topic: homeassistant/device_tracker/filtered_starlink/state
+        qos: 1
+        retain: true
+        payload: "home"
 
 - alias: "Main Lighting: Sync LED Dimmer with Switch"
   trigger:
@@ -127,52 +208,15 @@
         - light.shower_lighting_switch
         - light.led_controller_sc_1
 
-- id: combined_shore_power_charger
-  alias: Combined Shore‑Power Charger Logic & Sync
-  description: |
-    Turns charger ON when SOC < ON‑threshold (helper) and enable toggle is ON.
-    Turns charger OFF when SOC > OFF‑threshold, or when toggle set to OFF.
-  mode: restart
+- id: shore_charger_manual_enable_sync
+  alias: Shore Charger – Manual Enable Sync
+  mode: single
   trigger:
-    - id: enable_toggle
-      trigger: state
+    - trigger: state
       entity_id: input_boolean.shore_power_charger_enabled
-
-    - id: low_soc
-      trigger: numeric_state
-      entity_id: sensor.olins_van_bms_battery # 0‑100 %
-      below: input_number.shore_charge_on_threshold
-
-    - id: high_soc
-      trigger: numeric_state
-      entity_id: sensor.olins_van_bms_battery
-      above: input_number.shore_charge_off_threshold
-
   action:
-    # ── A) Manual enable / disable toggle ───────────────────────
     - choose:
         - conditions:
-            - condition: trigger
-              id: enable_toggle
-          sequence:
-            - if:
-                - condition: state
-                  entity_id: input_boolean.shore_power_charger_enabled
-                  state: "on"
-              then:
-                - action: switch.turn_on
-                  target:
-                    entity_id: switch.a32_pro_do8_switch04_shore_power_charger
-              else:
-                - action: switch.turn_off
-                  target:
-                    entity_id: switch.a32_pro_do8_switch04_shore_power_charger
-
-    # ── B) Battery SOC dropped below ON threshold ───────────────
-    - choose:
-        - conditions:
-            - condition: trigger
-              id: low_soc
             - condition: state
               entity_id: input_boolean.shore_power_charger_enabled
               state: "on"
@@ -180,19 +224,43 @@
             - action: switch.turn_on
               target:
                 entity_id: switch.a32_pro_do8_switch04_shore_power_charger
-
-    # ── C) Battery SOC rose above OFF threshold ────────────────
-    - choose:
         - conditions:
-            - condition: trigger
-              id: high_soc
+            - condition: state
+              entity_id: input_boolean.shore_power_charger_enabled
+              state: "off"
           sequence:
             - action: switch.turn_off
               target:
                 entity_id: switch.a32_pro_do8_switch04_shore_power_charger
 
+- id: shore_charger_reset_on_low_soc
+  alias: Shore Charger – Reset when SOC below threshold
+  description: "Power-cycle charger (OFF 10s → ON) when SOC drops below threshold"
+  mode: single
+  trigger:
+    - trigger: numeric_state
+      entity_id: sensor.olins_van_bms_battery # 0–100 %
+      below: input_number.shore_charge_reset_threshold
+      # Optional (recommended): require it to stay below for a few seconds to avoid noise
+      for: "00:00:05"
+  condition:
+    - condition: state
+      entity_id: input_boolean.shore_power_charger_enabled
+      state: "on" # only if feature is enabled
+    - condition: state
+      entity_id: switch.a32_pro_do8_switch04_shore_power_charger
+      state: "on" # only makes sense to reset if it's currently on
+  action:
+    - action: switch.turn_off
+      target:
+        entity_id: switch.a32_pro_do8_switch04_shore_power_charger
+    - delay: "00:00:10" # reset window
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_do8_switch04_shore_power_charger
+
 # ────────────────────────────────────────────────────────────────
-# Ducking in pulseaudio 
+# Ducking in pulseaudio
 # ────────────────────────────────────────────────────────────────
 # The following automation is used to setup the ducking module in pulse audio which lowers the volume of music from airplay/audio from PC when HA is playing audio through the VLC media player
 - alias: "Bootstrap ducking → VLC"
@@ -204,35 +272,40 @@
     - delay: "00:00:15" # let hassio_audio come online
     - action: shell_command.load_ducking_docker
 
-# ────────────────────────────────────────────────────────────────
-# Welcome back message
-# ────────────────────────────────────────────────────────────────
-- id: iphone_home_arrival
+# ────────────────────────────────────────────────
+# iPhone → Occupancy sensor replacement
+# ────────────────────────────────────────────────
+
+# 1. Welcome / lights when presence detected
+- id: iphone_home_arrival # keep id for history
   alias: "iPhone Home Arrival - Lights & Welcome"
-  description: "Turn off power saving mode immediately, announce return only when iPhone comes home after being away 15+ minutes"
   mode: single
   trigger:
     - trigger: state
-      entity_id: device_tracker.olin_andersons_iphone_16_pro_max
-      from: "not_home"
-      to: "home"
+      entity_id: binary_sensor.apollo_msr_2_1731d8_radar_target
+      from: "off" # sensor becomes occupied
+      to: "on"
+  condition:
+    # Suppress this welcome flow while sleeping
+    - condition: state
+      entity_id: input_boolean.sleep_mode
+      state: "off"
   action:
-    # Always turn off power saving mode immediately (no conditions)
     - action: script.power_saving_mode_off
-
-    # Only do announcement if away for 15+ minutes
     - if:
         - condition: template
+          # away ≥ 15 min
           value_template: >
-            {% set away_duration = now() - trigger.from_state.last_changed %}
-            {{ away_duration.total_seconds() >= 900 }}
+            {% set away = now() - trigger.from_state.last_changed %}
+            {{ away.total_seconds() >= 900 }}
       then:
-        # Set media player volume
         - action: media_player.volume_set
           target:
             entity_id: media_player.vlc_telnet
           data:
-            volume_level: 0.3
+            volume_level: 0.20
+
+        - delay: "00:00:02"
 
         # Calculate how long you were away and get battery percentage
         - action: tts.speak
@@ -250,7 +323,7 @@
               {% set van_battery_pct = states('sensor.olins_van_bms_battery') | default('unknown') %}
               {% set inside_temp = states('sensor.a32_pro_bme280_1_temperature') | default('unknown') %}
               {% set outside_temp = states('sensor.a32_pro_bme280_4_temperature') | default('unknown') %}
-              Welcome back Olin! You were away for 
+              Welcome back. You were away for 
               {%- if days > 0 -%}
                 {{ days }} day{% if days != 1 %}s{% endif %}
                 {%- if hours > 0 %} and {{ hours }} hour{% if hours != 1 %}s{% endif %}{% endif -%}
@@ -273,78 +346,50 @@
               The outside temperature is {{ outside_temp | round(1) }} degrees.
               {% endif %}
 
-# ────────────────────────────────────────────────────────────────
-# Auto Power Saving When Away from Van
-# ────────────────────────────────────────────────────────────────
+# 2. Auto-power-saving when leaving / returning
 - id: auto_power_saving_when_away
   alias: "Auto Power Saving When Away from Van"
-  description: "Turn on power saving mode when leaving van, turn off when returning"
   mode: single
   trigger:
-    # When you leave the van (iPhone goes away) - immediate trigger
     - id: leave_van
       trigger: state
-      entity_id: device_tracker.olin_andersons_iphone_16_pro_max
-      from: "home"
-      to: "not_home"
-
-    # When you return to the van (iPhone comes home)
-    - id: return_to_van
+      entity_id: binary_sensor.apollo_msr_2_1731d8_radar_target
+      from: "on"
+      to: "off"
+      for: "00:01:00" # away for ≥ 1 min
+    - id: return_van
       trigger: state
-      entity_id: device_tracker.olin_andersons_iphone_16_pro_max
-      from: "not_home"
-      to: "home"
-
+      entity_id: binary_sensor.apollo_msr_2_1731d8_radar_target
+      from: "off"
+      to: "on"
   condition:
-    # Simplified conditions - no time checks needed
-    - condition: template
-      value_template: >
-        {% if trigger.id == 'leave_van' %}
-          {# Always turn on power saving when leaving #}
-          true
-        {% elif trigger.id == 'return_to_van' %}
-          {# Always turn off power saving when returning #}
-          true
-        {% else %}
-          false
-        {% endif %}
-
+    # Let sleep mode fully control the environment without presence flips
+    - condition: state
+      entity_id: input_boolean.sleep_mode
+      state: "off"
   action:
     - choose:
-        # Turn ON power saving when leaving van
-        - conditions:
-            - condition: trigger
-              id: leave_van
-            # Always turn on power saving when leaving, regardless of current state
+        # Enable power-saving after 1 min away
+        - conditions: "{{ trigger.id == 'leave_van' and is_state('input_boolean.power_saving_mode','off') }}"
           sequence:
             - action: script.power_saving_mode_on
-            # Optional: Log the action
             - action: system_log.write
               data:
                 level: info
                 logger: automation.power_saving
-                message: "Power saving mode enabled - left van"
-
-        # Turn OFF power saving when returning to van
-        - conditions:
-            - condition: trigger
-              id: return_to_van
-            # Only if currently in power saving mode
-            - condition: state
-              entity_id: input_boolean.power_saving_mode
-              state: "on"
-            # Don't turn off if we're currently driving (let the driving automation handle it)
-            - condition: state
-              entity_id: binary_sensor.vehicle_is_moving
-              state: "off"
+                message: "Power saving mode enabled – away for ≥1 min"
+        # Disable when back (if not driving)
+        - conditions: >
+            {{ trigger.id == 'return_van'
+               and is_state('input_boolean.power_saving_mode','on')
+               and is_state('binary_sensor.vehicle_is_moving','off') }}
           sequence:
             - action: script.power_saving_mode_off
-            # Optional: Log the action
             - action: system_log.write
               data:
                 level: info
                 logger: automation.power_saving
-                message: "Power saving mode disabled - returned to van"
+                message: "Power saving mode disabled – presence detected"
 
 # ────────────────────────────────────────────────────────────────
 # Power Saving Mode Automation - triggers scripts when toggle changes
@@ -511,7 +556,7 @@
             - action: script.power_saving_mode_off
 
 # ────────────────────────────────────────────────────────────────
-# Ducking in pulseaudio 
+# Ducking in pulseaudio
 # ────────────────────────────────────────────────────────────────
 # The following automation is used to setup the ducking module in pulse audio which lowers the volume of music from airplay/audio from PC when HA is playing audio through the VLC media player
 - alias: "Scream audio receiver"
@@ -522,3 +567,183 @@
   action:
     - delay: "00:00:15" # let hassio_audio come online
     - action: shell_command.start_scream_receiver
+
+- alias: Shelly EM – one-second ping updater
+  mode: single # don’t queue if it takes longer than a second
+  trigger:
+    - trigger: time_pattern
+      seconds: "/1" # fires every 1 s
+  action:
+    - action: homeassistant.update_entity
+      target:
+        entity_id: binary_sensor.192_168_10_174 # <- your Ping entity
+
+- alias: Inverter, clear pending when ping changes
+  mode: queued
+  trigger:
+    - trigger: state
+      entity_id: binary_sensor.192_168_10_174 # your 1 s-updated Ping entity
+  action:
+    - action: input_boolean.turn_off
+      target: { entity_id: input_boolean.inverter_toggle_pending }
+
+# ───────────────────────────────────────────────
+#  Bed lift power – auto-off safety timer (30 s)
+# ───────────────────────────────────────────────
+- id: bed_power_auto_off_30s
+  alias: "Bed Power Supply • auto-off after 30 s"
+  mode: restart # restarts the 30 s countdown every time the switch is (re)turned on
+  trigger:
+    # Start / restart the countdown whenever the bed-power switch turns ON
+    - trigger: state
+      entity_id: switch.a32_pro_switch27_bed_power_supply
+      to: "on"
+  action:
+    # Wait exactly 30 s
+    - delay: "00:00:30"
+    # Cut power to the bed motor
+    - action: switch.turn_off
+      target:
+        entity_id: switch.a32_pro_switch27_bed_power_supply
+
+- id: keep_home_zone_on_starlink
+  alias: Keep Home zone on Starlink
+  mode: single
+  trigger:
+    - trigger: time_pattern # every 15 min
+      minutes: "/5"
+  condition:
+    - "{{ state_attr('device_tracker.starlink', 'latitude') not in [none, 'unknown', 'unavailable'] }}"
+  action:
+    - action: homeassistant.set_location
+      data:
+        latitude: "{{ state_attr('device_tracker.starlink', 'latitude')  }}"
+        longitude: "{{ state_attr('device_tracker.starlink', 'longitude') }}"
+        elevation: "{{ state_attr('device_tracker.starlink', 'altitude')  | default(0) }}"
+
+# ───────────────────────────────────────────────
+# Rolling snapshot of "last active state" @ 1 Hz
+# ───────────────────────────────────────────────
+# automation: rolling_last_active_snapshot_1hz
+- id: rolling_last_active_snapshot_1hz
+  alias: "Rolling Snapshot • Last Active State (1 Hz)"
+  mode: single
+  trigger:
+    - trigger: time_pattern
+      seconds: "/1"
+  condition:
+    - condition: state
+      entity_id: input_boolean.power_saving_mode
+      state: "off"
+  action:
+    - action: scene.create
+      data:
+        scene_id: last_active_state
+        snapshot_entities:
+          - light.led_controller_cct_1
+          - light.led_controller_cct_2
+          - light.led_controller_sc_1
+          - light.led_controller_sc_2
+          - switch.a32_pro_do8_switch06_top_monitor
+          - switch.a32_pro_do8_switch07_bottom_monitor
+          - switch.a32_pro_water_system_master_switch # ← added
+
+# automation: rolling_snapshot_bootstrap_on_start
+- id: rolling_snapshot_bootstrap_on_start
+  alias: "Rolling Snapshot • Bootstrap on HA start"
+  trigger:
+    - trigger: homeassistant
+      event: start
+  condition:
+    - condition: state
+      entity_id: input_boolean.power_saving_mode
+      state: "off"
+  action:
+    - action: scene.create
+      data:
+        scene_id: last_active_state
+        snapshot_entities:
+          - light.led_controller_cct_1
+          - light.led_controller_cct_2
+          - light.led_controller_sc_1
+          - light.led_controller_sc_2
+          - switch.a32_pro_do8_switch06_top_monitor
+          - switch.a32_pro_do8_switch07_bottom_monitor
+          - switch.a32_pro_water_system_master_switch # ← added
+
+# ────────────────────────────────────────────────────────────────
+# Shower Mode – on-activation actions
+# ────────────────────────────────────────────────────────────────
+- id: shower_mode_on_actions
+  alias: "Shower Mode – Turn on lights and recirculate"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: input_boolean.shower_mode
+      from: "off"
+      to: "on"
+  action:
+    # Snapshot current shower-related states for later restore
+    - action: scene.create
+      data:
+        scene_id: pre_shower_mode_state
+        snapshot_entities:
+          - light.shower_lighting_switch
+          - light.led_controller_sc_1
+          - switch.a32_pro_water_system_master_switch
+          - switch.a32_pro_water_system_state_main
+          - switch.a32_pro_water_system_state_recirculating_shower
+
+    # Turn shower lights on (linked via blueprint with controller)
+    - action: light.turn_on
+      target:
+        entity_id:
+          - light.shower_lighting_switch
+          - light.led_controller_sc_1
+      data:
+        brightness_pct: 100
+
+    # Ensure water system master is ON
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_water_system_master_switch
+
+    # Small delay to let master switch settle
+    - delay: "00:00:01"
+
+    # Set water system state to Recirculating Shower
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_water_system_state_recirculating_shower
+
+    # Open roof fan lid (needed for exhaust)
+    - action: cover.open_cover
+      target:
+        entity_id: cover.ag_pro_roof_fan_lid
+
+    # Set roof fan to exhaust and 60%
+    - action: fan.set_direction
+      data:
+        entity_id: fan.ag_pro_roof_fan
+        direction: forward # exhaust
+    - action: fan.turn_on
+      data:
+        entity_id: fan.ag_pro_roof_fan
+        percentage: 60
+
+# ────────────────────────────────────────────────────────────────
+# Shower Mode – off restores previous state
+# ────────────────────────────────────────────────────────────────
+- id: shower_mode_off_restore
+  alias: "Shower Mode – Restore previous state on OFF"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: input_boolean.shower_mode
+      from: "on"
+      to: "off"
+  action:
+    - action: scene.turn_on
+      target:
+        entity_id: scene.pre_shower_mode_state
+

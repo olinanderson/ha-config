@@ -55,3 +55,5 @@ devices:
     friendly_name: Shower Lighting Switch
   '0xa4c13843df45a434':
     friendly_name: LED Controller SC 2
+  '0xa4c138fd668411cd':
+    friendly_name: Battery Fan Controller

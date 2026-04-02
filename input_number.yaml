@@ -1,0 +1,36 @@
+# ================================
+# input_number.yaml
+# ================================
+main_light_warmth:
+  name: Main Light Warmth
+  initial: 400
+  min: 250
+  max: 500
+  step: 1
+
+shore_charge_reset_threshold:
+  name: "Charger Reset at %"
+  icon: mdi:power-plug
+  unit_of_measurement: "%"
+  min: 0
+  max: 100
+  step: 1
+  initial: 97
+
+acceleration_stability_threshold:
+  name: "Acceleration Stability Threshold"
+  initial: 0.5
+  min: 0.1
+  max: 2.0
+  step: 0.1
+  unit_of_measurement: "km/h/s"
+  icon: mdi:speedometer-slow
+
+vehicle_stopped_threshold:
+  name: "Vehicle Stopped Speed Threshold"
+  initial: 2
+  min: 0
+  max: 10
+  step: 0.5
+  unit_of_measurement: "km/h"
+  icon: mdi:car-brake-parking

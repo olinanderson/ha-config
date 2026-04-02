@@ -89,3 +89,43 @@ CookModeStop:
     - service: script.turn_on
       target:
         entity_id: script.cook_mode_off
+
+StartBedtimeRoutine:
+  speech:
+    text: "Starting bedtime."
+  action:
+    - service: script.turn_on
+      target:
+        entity_id: script.sleep_mode_on
+
+GoodMorning:
+  speech:
+    text: "Good morning."
+  action:
+    - service: script.turn_on
+      target:
+        entity_id: script.wake_up_routine
+
+IndoorDimmersOff:
+  speech:
+    text: "Turning off the indoor lights."
+  action:
+    - service: light.turn_off
+      target:
+        entity_id:
+          - light.led_controller_cct_1
+          - light.led_controller_cct_2
+          - light.led_controller_sc_1
+          - light.led_controller_sc_2
+
+IndoorDimmersOn:
+  speech:
+    text: "Turning on the indoor lights."
+  action:
+    - service: light.turn_on
+      target:
+        entity_id:
+          - light.led_controller_cct_1
+          - light.led_controller_cct_2
+          - light.led_controller_sc_1
+          - light.led_controller_sc_2

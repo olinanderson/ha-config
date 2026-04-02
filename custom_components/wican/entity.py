@@ -1,198 +1,104 @@
-"""Different types of WiCan entities based on DataUpdateCoordinator entities."""
+"""Base entity for WiCAN integration."""
+
+from __future__ import annotations
+
+from abc import abstractmethod
+from typing import TYPE_CHECKING
 
 from homeassistant.core import callback
+from homeassistant.helpers.device_registry import CONNECTION_NETWORK_MAC, DeviceInfo
+from homeassistant.helpers.dispatcher import async_dispatcher_connect
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from .coordinator import WiCanCoordinator
+from .const import DOMAIN
+from .coordinator import WiCANDataUpdateCoordinator
+
+if TYPE_CHECKING:
+    from homeassistant.helpers.entity import EntityDescription
+
+    from . import WiCANConfigEntry
 
 
-class WiCanEntityBase(CoordinatorEntity):
-    """WiCan entity based on DataUpdateCoordinator entity.
+class WiCANEntity(CoordinatorEntity[WiCANDataUpdateCoordinator]):
+    """Base entity using DataUpdateCoordinator."""
 
-    Attributes
-    ----------
-    coordinator: WiCanCoordinator
-        WiCan coordinator handling the device integration via the WiCan API.
-    data : dict
-        Data to be stored in the entity.
-    process_state: Any, optional
-        Method to convert status values (e.g. type conversion to float).
-
-    """
-
-    data = {}
-    coordinator: WiCanCoordinator
-    _state = False
-    process_state = None
     _attr_has_entity_name = True
-    _attr_name = None
 
-    def __init__(self, coordinator, data, process_state=None) -> None:
-        """Initialize a WiCanEntity with data, coordinator, process_state and identifiers for HomeAssistant."""
-        super().__init__(coordinator)
-        self.data = data
-        self.coordinator = coordinator
-        self.process_state = process_state
+    def __init__(
+        self,
+        config_entry: WiCANConfigEntry,
+        entity_description: EntityDescription,
+    ) -> None:
+        """Initialize the entity."""
+        super().__init__(config_entry.runtime_data.coordinator)
+        self.config_entry = config_entry
+        self._attr_unique_id = f"{config_entry.entry_id}_{entity_description.key}"
+        self.entity_description = entity_description
+        self.webhook_id = config_entry.runtime_data.webhook_id
+        self._attr_name = entity_description.key
+        self._attr_device_info = DeviceInfo(
+            connections={(DOMAIN, config_entry.entry_id)},
+            manufacturer="MeatPi",
+            model="WiCAN",
+            name=config_entry.title,
+        )
 
-        device_id = self.coordinator.data["status"]["device_id"]
+    @abstractmethod
+    def _async_handle_event(self, webhook_id: str, data: dict[str, str]) -> None:
+        """Handle the WiCAN event.
 
-        key = self.get_data("key")
-        self._attr_unique_id = "wican_" + device_id + "_" + key
-        self.id = "wican_" + device_id[-3:] + "_" + key
-        self._attr_name = self.get_data("name")
-        self.set_state()
-
-    def get_data(self, key):
-        """Provide data for a given key.
-
-        Parameters
-        ----------
-        key : Any
-            key to be used to retrieve data from the dictionary.
-
+        This method is kept for backward compatibility during migration.
+        Subclasses should override _handle_coordinator_update() instead.
         """
-        if key in self.data:
-            return self.data[key]
-        return None
 
-    def get_new_state(self):
-        """Return data from coordinator. Method defined for implementation in child classes of WiCanEntityBase.
+    async def async_added_to_hass(self) -> None:
+        """Register event callback."""
+        await super().async_added_to_hass()
 
-        Returns
-        -------
-        bool
-            Always returns False in WiCanEntityBase class.
+        # Keep dispatcher for backward compatibility during migration
+        @callback
+        def _handle_event_filtered(webhook_id: str, data: dict[str, str]) -> None:
+            if webhook_id != self.webhook_id:
+                return
+            self._async_handle_event(webhook_id, data)
 
-        """
-        return False
+        self.async_on_remove(
+            async_dispatcher_connect(self.hass, DOMAIN, _handle_event_filtered),
+        )
 
-    @callback
     def _handle_coordinator_update(self) -> None:
-        self.set_state()
+        """Handle updated data from the coordinator."""
+        # Default implementation - subclasses should override this
         self.async_write_ha_state()
 
-    def set_state(self):
-        """Set state for entity object. If process_state is set, convert state accordingly."""
-        new_state = self.get_new_state()
-        if new_state is None:
-            return
-
-        if self.process_state is not None:
-            new_state = self.process_state(new_state)
-
-        self._state = new_state
-
     @property
-    def device_info(self):
-        """Provide WiCan device info from coordinator.
+    def device_info(self) -> DeviceInfo:
+        """Return device info."""
+        info = self.config_entry.data
+        config_url = info.get("mdns")
+        if not isinstance(config_url, str) or not config_url.startswith("http"):
+            config_url = None
 
-        Returns
-        -------
-        dict
-            Dictionary provided by WiCanCoordinator device_info() method.
+        # Use device_id or MAC as stable identifier (survives hostname changes)
+        device_id = info.get("device_id") or self.config_entry.entry_id
 
-        """
-        return self.coordinator.device_info()
+        # Build device info with MAC connection if available
+        device_info_dict = {
+            "identifiers": {(DOMAIN, device_id)},
+            "manufacturer": "MeatPi",
+            "model": info.get("hw_version", "Unknown"),
+            "name": self.config_entry.title,
+            "sw_version": info.get("fw_version", "Unknown"),
+            "configuration_url": config_url,
+        }
 
-    @property
-    def available(self) -> bool:
-        """Provide WiCan device availability from coordinator.
+        # Add MAC address connection if available (from firmware)
+        mac_address = info.get("mac")
+        if mac_address:
+            device_info_dict["connections"] = {(CONNECTION_NETWORK_MAC, mac_address)}
 
-        Returns
-        -------
-        bool
-            Device availability provided by WiCanCoordinator availability() method.
+        # Add serial number if device_id available
+        if info.get("device_id"):
+            device_info_dict["serial_number"] = info.get("device_id")
 
-        """
-        return self.coordinator.available()
-
-    @property
-    def entity_category(self):
-        """Provide category of this WiCanEntity, if available.
-
-        Returns
-        -------
-        EntityCategory
-            Category of the entity (e.g. DIAGNOSTIC for some WiCan entities like "IP-Address").
-
-        """
-        return self.get_data("category")
-
-    @property
-    def state(self):
-        """Return the state of this WiCanEntity."""
-        return self._state
-
-    @property
-    def unit_of_measurement(self):
-        """Return the unit of measurement of this WiCanEntity, if any."""
-        if self.get_data("unit") == "none":
-            return None
-        else:
-            return self.get_data("unit")
-
-    @property
-    def device_class(self):
-        """Return the class of this device, from component DEVICE_CLASSES."""
-        if self.get_data("class") == "none":
-            return None
-        else:
-            return self.get_data("class")
-
-
-class WiCanStatusEntity(WiCanEntityBase):
-    """WiCan Status Entity based on WiCanEntityBase."""
-
-    def __init__(self, coordinator, data, process_state=None) -> None:
-        """Initialize the status entity same as WiCanEntityBase."""
-        super().__init__(coordinator, data, process_state)
-
-    def get_new_state(self):
-        """Provide entity status from coordindator based on key of this entity (e.g. "fw_version")."""
-        return self.coordinator.get_status(self.get_data("key"))
-
-    @property
-    def extra_state_attributes(self):
-        """Provide state attributes from WiCan device status via coordinator, if defined for entity."""
-        attributes = self.get_data("attributes")
-        if attributes is None:
-            return None
-
-        return_attrs = {}
-        for key in attributes:
-            return_attrs[key] = self.coordinator.get_status(attributes[key])
-
-        return return_attrs
-
-
-class WiCanPidEntity(WiCanEntityBase):
-    """WiCan Data Entity based on WiCanEntityBase."""
-
-    def __init__(self, coordinator, data, process_state=None) -> None:
-        """Initialize the data entity same as WiCanEntityBase."""
-        super().__init__(coordinator, data, process_state)
-
-    def get_new_state(self):
-        """Provide entity value from coordindator based on key of this entity (e.g. "SOC_BMS")."""
-        return self.coordinator.get_pid_value(self.get_data("key"))
-
-    @property
-    def extra_state_attributes(self):
-        """Provide state attributes from WiCan device PID via coordinator, if defined for entity."""
-        attributes = self.get_data("attributes")
-        if attributes is None:
-            return None
-
-        return_attrs = {}
-        for key in attributes:
-            return_attrs[key] = self.coordinator.get_pid_value(attributes[key])
-
-        return return_attrs
-
-    @property
-    def available(self) -> bool:
-        """Provide availability of the entity."""
-        if self._state is False:
-            return False
-
-        return True
+        return DeviceInfo(**device_info_dict)

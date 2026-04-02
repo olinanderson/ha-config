@@ -1,0 +1,139 @@
+# ================================
+# template/triggered.yaml
+# ================================
+# Trigger-based template sensors that use trigger: blocks
+
+# ───────────────────────────────────────────────
+# Road grade from Starlink GPS (deg & % + label)
+# ───────────────────────────────────────────────
+- trigger:
+    - trigger: state
+      entity_id: device_tracker.starlink_device_location
+      attribute: latitude
+    - trigger: state
+      entity_id: device_tracker.starlink_device_location
+      attribute: longitude
+    - trigger: state
+      entity_id: device_tracker.starlink_device_location
+      attribute: elevation
+  sensor:
+    - name: "Road Grade (deg)"
+      unique_id: road_grade_deg
+      unit_of_measurement: "°"
+      state_class: measurement
+      state: >
+        {% set f = trigger.from_state %}
+        {% set t = trigger.to_state %}
+
+        {# helper to return the last numeric value (or 0) #}
+        {% macro last_numeric_or_zero(prev) -%}
+          {%- if prev not in ['unknown','unavailable','none',''] -%}
+            {{ prev }}
+          {%- else -%}
+            0
+          {%- endif -%}
+        {%- endmacro %}
+
+        {% if f is none or t is none %}
+          {{ last_numeric_or_zero(this.state) }}
+        {% else %}
+          {% set lat1 = (f.attributes.latitude  | float(0)) %}
+          {% set lon1 = (f.attributes.longitude | float(0)) %}
+          {% set alt1 = (f.attributes.get('elevation', f.attributes.get('altitude', 0)) | float(0)) %}
+          {% set lat2 = (t.attributes.latitude  | float(0)) %}
+          {% set lon2 = (t.attributes.longitude | float(0)) %}
+          {% set alt2 = (t.attributes.get('elevation', t.attributes.get('altitude', 0)) | float(0)) %}
+          {% set acc1 = (f.attributes.get('gps_accuracy', 999) | float(999)) %}
+          {% set acc2 = (t.attributes.get('gps_accuracy', 999) | float(999)) %}
+
+          {# reject junk fixes: poor accuracy or identical points #}
+          {% if acc1 > 30 or acc2 > 30 or (lat1==lat2 and lon1==lon2) %}
+            {{ last_numeric_or_zero(this.state) }}
+          {% else %}
+            {# haversine horizontal distance (meters) #}
+            {% set R = 6371000.0 %}
+            {% set phi1 = lat1 * pi/180 %}
+            {% set phi2 = lat2 * pi/180 %}
+            {% set dphi = (lat2-lat1) * pi/180 %}
+            {% set dlmb = (lon2-lon1) * pi/180 %}
+            {% set a  = sin(dphi/2)**2 + cos(phi1)*cos(phi2)*sin(dlmb/2)**2 %}
+            {% set c  = 2*atan2(sqrt(a), sqrt(1-a)) %}
+            {% set d  = R * c %}         {# horizontal meters #}
+            {% set dz = (alt2 - alt1) %} {# meters #}
+
+            {# avoid division noise on tiny steps #}
+            {% if d < 5 %}
+              {{ last_numeric_or_zero(this.state) }}
+            {% else %}
+              {% set raw_deg = atan2(dz, d) * 180 / pi %}
+              {# light smoothing: EMA 60/40 with previous value if present #}
+              {% if this.state not in ['unknown','unavailable','none',''] %}
+                {{ (0.6*(this.state | float) + 0.4*raw_deg) | round(2) }}
+              {% else %}
+                {{ raw_deg | round(2) }}
+              {% endif %}
+            {% endif %}
+          {% endif %}
+        {% endif %}
+      availability: "true"
+
+    - name: "Road Grade (%)"
+      unique_id: road_grade_percent
+      unit_of_measurement: "%"
+      state_class: measurement
+      state: >
+        {# helper to return last numeric or 0 #}
+        {% macro last_numeric_or_zero(prev) -%}
+          {%- if prev not in ['unknown','unavailable','none',''] -%}
+            {{ prev }}
+          {%- else -%}
+            0
+          {%- endif -%}
+        {%- endmacro %}
+
+        {% set deg = states('sensor.road_grade_deg') %}
+        {% if deg in ['unknown','unavailable','none',''] %}
+          {{ last_numeric_or_zero(this.state) }}
+        {% else %}
+          {{ (tan((deg | float) * pi/180) * 100) | round(2) }}
+        {% endif %}
+      availability: "true"
+
+    - name: "Hill Aggression"
+      unique_id: hill_aggression
+      state: >
+        {% set g = states('sensor.road_grade_deg') | float(0) %}
+        {% set a = abs(g) %}
+        {% if a < 1.0 %} Flat
+        {% elif a < 3.0 %} Gentle {{ 'up' if g>0 else 'down' }}
+        {% elif a < 6.0 %} Moderate {{ 'up' if g>0 else 'down' }}
+        {% elif a < 10.0 %} Steep {{ 'up' if g>0 else 'down' }}
+        {% else %} Very steep {{ 'up' if g>0 else 'down' }}
+        {% endif %}
+      icon: >
+        {% set g = states('sensor.road_grade_deg') | float(0) %}
+        {% if g >= 6 %} mdi:terrain
+        {% elif g >= 3 %} mdi:triangle
+        {% elif g <= -6 %} mdi:terrain
+        {% elif g <= -3 %} mdi:triangle-outline
+        {% else %} mdi:minus
+        {% endif %}
+
+# ─── Fuel level • "sticky" mean (trigger-based) ───
+- trigger:
+    - trigger: state
+      entity_id: sensor.wican_fuel_5_min_mean
+    - trigger: time_pattern
+      minutes: "/1"
+  sensor:
+    - name: Stable Fuel Level
+      unique_id: stable_fuel_level
+      unit_of_measurement: "%"
+      state: >
+        {% set mean = states('sensor.wican_fuel_5_min_mean') %}
+        {% if mean not in ['unavailable', 'unknown', 'none'] %}
+          {{ mean | float | round(2) }}
+        {% else %}
+          {{ this.state }}
+        {% endif %}
+      availability: "true"

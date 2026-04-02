@@ -1,0 +1,31 @@
+# ================================
+# input_boolean.yaml
+# ================================
+speedtest_running:
+  name: "Speedtest Running"
+  initial: off
+
+shore_power_charger_enabled:
+  name: "Shore Power Charger On/Off"
+  initial: off
+
+power_saving_mode:
+  name: "Power Saving Mode"
+  icon: mdi:battery-heart-variant
+
+sleep_mode:
+  name: "Sleep Mode"
+  icon: mdi:sleep
+
+shower_mode:
+  name: "Shower Mode"
+  icon: mdi:shower
+
+windows_audio_stream:
+  name: "Windows Audio Stream"
+  icon: mdi:music-note-bluetooth
+  initial: on
+
+inverter_toggle_pending:
+  name: Inverter toggle pending
+  icon: mdi:progress-clock

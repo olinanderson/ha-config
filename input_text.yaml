@@ -1,0 +1,10 @@
+# ================================
+# input_text.yaml
+# ================================
+previous_fuel_level:
+  name: "Previous Fuel Level"
+  initial: "0"
+
+previous_speed:
+  name: "Previous Speed"
+  initial: "0"

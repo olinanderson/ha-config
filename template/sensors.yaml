@@ -1,0 +1,244 @@
+# ================================
+# template/sensors.yaml
+# ================================
+# Regular (polling) template sensors
+
+- sensor:
+    # ─── Last-good value caching ───
+    - name: "Ambient Air Temp (last good)"
+      unique_id: ambient_air_temp_last
+      unit_of_measurement: "°C"
+      state: >
+        {% if states('sensor.wican_ambient_air_temperature') not in ['unknown','unavailable'] %}
+          {{ states('sensor.wican_ambient_air_temperature') }}
+        {% else %}
+          {{ this.state if this.state not in ['unknown','unavailable'] else '0' }}
+        {% endif %}
+
+    - name: "Coolant Temp (last good)"
+      unique_id: coolant_temp_last
+      unit_of_measurement: "°C"
+      state: >
+        {% if states('sensor.wican_coolant_temperature') not in ['unknown','unavailable'] %}
+          {{ states('sensor.wican_coolant_temperature') }}
+        {% else %}
+          {{ this.state if this.state not in ['unknown','unavailable'] else '0' }}
+        {% endif %}
+
+    - name: "Road Grade % (last good)"
+      unique_id: road_grade_percent_last
+      unit_of_measurement: "%"
+      state: >
+        {% if states('sensor.road_grade_percent') not in ['unknown','unavailable'] %}
+          {{ states('sensor.road_grade_percent') }}
+        {% else %}
+          {{ this.state if this.state not in ['unknown','unavailable'] else '0' }}
+        {% endif %}
+
+    # ─── Battery charging / discharging split ───
+    - name: "Battery Charging"
+      unit_of_measurement: "W"
+      state: >
+        {% set power = states('sensor.olins_van_bms_power') | float(0) %}
+        {{ power if power > 0 else 0 }}
+
+    - name: "Battery Discharging"
+      unit_of_measurement: "W"
+      state: >
+        {% set power = states('sensor.olins_van_bms_power') | float(0) %}
+        {{ (power * -1) if power < 0 else 0 }}
+
+    # ─── Starlink throughput (human-readable) ───
+    - name: "Starlink Downlink Throughput (Mbps)"
+      unique_id: starlink_downlink_throughput_mbps
+      unit_of_measurement: "Mbps"
+      state: >
+        {{ (states('sensor.starlink_downlink_throughput') | float(0) / 1000000) | round(2) }}
+
+    - name: "Starlink Uplink Throughput (Mbps)"
+      unique_id: starlink_uplink_throughput_mbps
+      unit_of_measurement: "Mbps"
+      state: >
+        {{ (states('sensor.starlink_uplink_throughput') | float(0) / 1000000) | round(2) }}
+
+    # ─── MPPT solar aggregates ───
+    - name: "Total MPPT PV Power"
+      unique_id: total_mppt_pv_power
+      unit_of_measurement: "W"
+      state: >
+        {{ (states('sensor.a32_pro_mppt1_pv_power')|float(0) +
+            states('sensor.a32_pro_mppt2_pv_power')|float(0))|round(2) }}
+
+    - name: "Average MPPT Output Voltage"
+      unique_id: average_mppt_output_voltage
+      unit_of_measurement: "V"
+      state: >
+        {{ ((states('sensor.a32_pro_mppt1_output_voltage')|float(0) +
+             states('sensor.a32_pro_mppt2_output_voltage')|float(0)) / 2)|round(2) }}
+
+    - name: "Total MPPT Output Current"
+      unique_id: total_mppt_output_current
+      unit_of_measurement: "A"
+      state: >
+        {{ (states('sensor.a32_pro_mppt1_output_current')|float(0) +
+            states('sensor.a32_pro_mppt2_output_current')|float(0))|round(2) }}
+
+    - name: "Total MPPT Yield Today"
+      unique_id: total_mppt_yield_today
+      unit_of_measurement: Wh
+      state: >
+        {% set mppt1_kwh = states('sensor.a32_pro_mppt1_yield_today')|float(0) %}
+        {% set mppt2_kwh = states('sensor.a32_pro_mppt2_yield_today')|float(0) %}
+        {{ ((mppt1_kwh + mppt2_kwh) * 1000) | round(2) }}
+
+    # ─── Propane tank calculations ───
+    - name: Propane Tank Percentage
+      unique_id: propane_tank_percentage
+      unit_of_measurement: "%"
+      state: >
+        {% set wall   = 3.175 %}
+        {% set side   = 203.0 %}
+        {% set R      = (304.0 - 2*wall) / 2 %}
+        {% set H      = side + R %}
+        {% set Ec = R / 2 %}
+        {% set d_raw = states('sensor.pro_check_f317_tank_level') | float(0) %}
+        {% set h_liq = [ [ d_raw - wall, 0 ] | max, H ] | min %}
+        {% set V_hemi = (1/3) * pi * R**3 %}
+        {% set V_cyl  = side * pi * R**2 %}
+        {% set V_max  = 2*V_hemi + V_cyl %}
+        {% if h_liq <= Ec %}
+          {% set V_liq = pi*R**2 * ((2/3)*h_liq - (h_liq**3)/(3*Ec**2)) %}
+        {% elif h_liq <= Ec + side %}
+          {% set V_liq = V_hemi + (h_liq - Ec)*pi*R**2 %}
+        {% else %}
+          {% set h2 = h_liq - (Ec + side) %}
+          {% set V_liq = V_hemi + V_cyl +
+                          pi*R**2 * ((2/3)*h2 - (h2**3)/(3*Ec**2)) %}
+        {% endif %}
+        {{ (100 * V_liq / (0.8 * V_max)) | round(1) }}
+
+    - name: "Propane – Raw Distance"
+      unit_of_measurement: mm
+      state: "{{ states('sensor.pro_check_f317_tank_level') | float(0) }}"
+
+    - name: "Propane – Liquid Depth"
+      unit_of_measurement: mm
+      state: "{{ (states('sensor.pro_check_f317_tank_level') | float(0)) - 3.175 }}"
+
+    - name: "Propane – Liquid Volume"
+      unit_of_measurement: L
+      state: >
+        {% set pct = states('sensor.propane_tank_percentage') | float(0) %}
+        {{ (pct / 100 * 0.8 * 21.0) | round(2) }}
+
+    # ─── Power sensors (24V / 12V) ───
+    - name: "Air Conditioning Power (24V)"
+      unique_id: air_conditioning_power_24v
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+      state: >
+        {% set current = states('sensor.a32_pro_s5140_channel_4_current_24v_air_conditioning')|float(0) %}
+        {% set voltage = states('sensor.olins_van_bms_voltage')|float(0) %}
+        {{ ((current | abs) * voltage)|round(2) }}
+
+    - name: "All 24V Devices Power (24V)"
+      unique_id: all_24v_devices_power_24v
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+      state: >
+        {% set current = states('sensor.a32_pro_s5140_channel_5_current_24v_24v_devices')|float(0) %}
+        {% set voltage = states('sensor.olins_van_bms_voltage')|float(0) %}
+        {{ ((current | abs) * voltage)|round(2) }}
+
+    - name: "All 12V Devices Power (24V)"
+      unique_id: all_12v_devices_power_24v
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+      state: >
+        {% set current = states('sensor.a32_pro_s5140_channel_6_current_24v_12v_devices')|float(0) %}
+        {% set voltage = states('sensor.olins_van_bms_voltage')|float(0) %}
+        {{ ((current | abs) * voltage)|round(2) }}
+
+    - name: "Inverter Power (24V)"
+      unique_id: inverter_power_24v
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+      state: >
+        {% set current = states('sensor.a32_pro_s5140_channel_7_current_24v_inverter')|float(0) %}
+        {% set voltage = states('sensor.olins_van_bms_voltage')|float(0) %}
+        {{ ((current | abs) * voltage)|round(2) }}
+
+    - name: "Alternator Charger Power (24V)"
+      unique_id: alternator_charger_power_24v
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+      state: >
+        {% set current = states('sensor.a32_pro_s5140_channel_8_current_24v_alternator_charger')|float(0) %}
+        {% set voltage = states('sensor.olins_van_bms_voltage')|float(0) %}
+        {{ ((current | abs) * voltage)|round(2) }}
+
+    - name: "Battery Heater Power (12V)"
+      unique_id: battery_heater_power_12v
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+      state: >
+        {% set current = states('sensor.a32_pro_s5140_channel_13_current_12v_battery_heater')|float(0) %}
+        {% set voltage = states('sensor.a32_pro_smart_battery_sense_12v_voltage')|float(0) %}
+        {{ ((current | abs) * voltage)|round(2) }}
+
+    - name: "Roof Fan Power (12V)"
+      unique_id: roof_fan_power_12v
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+      state: >
+        {% set current = states('sensor.a32_pro_s5140_channel_14_current_12v_roof_fan')|float(0) %}
+        {% set voltage = states('sensor.a32_pro_smart_battery_sense_12v_voltage')|float(0) %}
+        {{ ((current | abs) * voltage)|round(2) }}
+
+    - name: "Bed Motor Power (24V)"
+      unique_id: bed_motor_power_24v
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+      state: >
+        {% set current = states('sensor.a32_pro_s5140_channel_15_current_24v_bed_motor')|float(0) %}
+        {% set voltage = states('sensor.olins_van_bms_voltage')|float(0) %}
+        {{ ((current | abs) * voltage)|round(2) }}
+
+    - name: "Shore Power Charger Power (24V)"
+      unique_id: shore_power_charger_power_24v
+      unit_of_measurement: "W"
+      device_class: power
+      state_class: measurement
+      state: >
+        {% set current = states('sensor.a32_pro_s5140_channel_16_current_24v_shore_power_charger')|float(0) %}
+        {% set voltage = states('sensor.olins_van_bms_voltage')|float(0) %}
+        {{ ((current | abs) * voltage)|round(2) }}
+
+    - name: Roof Fan Direction
+      state: >
+        {% set d = state_attr('fan.ag_pro_roof_fan','direction') %}
+        {{ 'Exhaust' if d == 'forward' else 'Intake' if d == 'reverse' else 'Unknown' }}
+
+    # ─── Vehicle location (from WiCAN) ───
+    - name: "Vehicle Location"
+      unique_id: vehicle_location
+      state: >
+        {% set lat = states('sensor.wican_latitude') | float(0) %}
+        {% set lon = states('sensor.wican_longitude') | float(0) %}
+        {% if lat != 0 and lon != 0 %}
+          {{ lat }}, {{ lon }}
+        {% else %}
+          Unavailable
+        {% endif %}
+      attributes:
+        latitude: "{{ states('sensor.wican_latitude') }}"
+        longitude: "{{ states('sensor.wican_longitude') }}"
+      icon: mdi:map-marker

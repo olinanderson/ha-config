@@ -1,0 +1,19 @@
+# ================================
+# mqtt/device_tracker.yaml
+# ================================
+
+# ───── Filtered Starlink GPS tracker ─────
+- state_topic: "homeassistant/device_tracker/filtered_starlink/state"
+  json_attributes_topic: "homeassistant/device_tracker/filtered_starlink/attributes"
+  name: "Filtered Location"
+  unique_id: filtered_starlink_location
+  icon: mdi:satellite-variant
+  payload_home: "home"
+  payload_not_home: "not_home"
+  source_type: gps
+  qos: 1
+  device:
+    identifiers: ["filtered_starlink"]
+    manufacturer: "Home Assistant"
+    model: "Filtered Location Tracker"
+    name: "Starlink"

@@ -1,0 +1,100 @@
+# ================================
+# integrations/sensor.yaml
+# ================================
+# Platform-based sensors: statistics, history_stats, integration (Riemann sum)
+
+# ─── Fuel level • 5-minute rolling mean ───
+- platform: statistics
+  name: "WiCAN Fuel 5 min mean"
+  entity_id: sensor.wican_fuel
+  state_characteristic: mean
+  max_age:
+    minutes: 5
+  sampling_size: 300
+
+# ─── Hydronic heater run-time tracking ───
+- platform: history_stats
+  name: "Hydronic Heater Total On-Time"
+  entity_id: switch.a32_pro_switch24_hydronic_heater
+  state: "on"
+  type: time
+  start: "{{ as_datetime('2025-01-24 00:00:00') }}"
+  end: "{{ now() }}"
+
+# ─── Riemann sum energy integrations (Wh) ───
+- platform: integration
+  name: "Air Conditioning Energy (Wh)"
+  unique_id: "air_conditioning_energy_wh"
+  source: sensor.air_conditioning_power_24v
+  method: trapezoidal
+  round: 2
+
+- platform: integration
+  name: "All 24V Devices Energy (Wh)"
+  unique_id: "all_24v_devices_energy_wh"
+  source: sensor.all_24v_devices_power_24v
+  method: trapezoidal
+  round: 2
+
+- platform: integration
+  name: "All 12 Devices Energy (Wh)"
+  unique_id: "all_12v_devices_energy_wh"
+  source: sensor.all_12v_devices_power_24v
+  method: trapezoidal
+  round: 2
+
+- platform: integration
+  name: "Inverter Energy (Wh)"
+  unique_id: "inverter_energy_wh"
+  source: sensor.inverter_power_24v
+  method: trapezoidal
+  round: 2
+
+- platform: integration
+  name: "Alternator Charger Energy (Wh)"
+  unique_id: "alternator_charger_energy_wh"
+  source: sensor.alternator_charger_power_24v
+  method: trapezoidal
+  round: 2
+
+- platform: integration
+  name: "Battery Heater Energy (Wh)"
+  unique_id: "battery_heater_energy_wh"
+  source: sensor.battery_heater_power_12v
+  method: trapezoidal
+  round: 2
+
+- platform: integration
+  name: "Roof Fan Energy (Wh)"
+  unique_id: "roof_fan_energy_wh"
+  source: sensor.roof_fan_power_12v
+  method: trapezoidal
+  round: 2
+
+- platform: integration
+  name: "Bed Motor Energy (Wh)"
+  unique_id: "bed_motor_energy_wh"
+  source: sensor.bed_motor_power_24v
+  method: trapezoidal
+  round: 2
+
+- platform: integration
+  name: "Shore Power Charger Energy (Wh)"
+  unique_id: "shore_power_charger_energy_wh"
+  source: sensor.shore_power_charger_power_24v
+  method: trapezoidal
+  round: 2
+
+- platform: integration
+  name: "MPPT1 Energy (Wh)"
+  unique_id: "mppt1_energy_wh"
+  source: sensor.a32_pro_mppt1_pv_power
+  method: trapezoidal
+  round: 2
+
+- platform: integration
+  name: "MPPT2 Energy (Wh)"
+  unique_id: "mppt2_energy_wh"
+  source: sensor.a32_pro_mppt2_pv_power
+  method: trapezoidal
+  round: 2

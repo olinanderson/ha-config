@@ -6,6 +6,20 @@
 esphome:
   name: ag-pro
   friendly_name: AG Pro
+  # on_boot:
+  #   priority: 200
+  #   then:
+  #     - script.execute: ac_reset_state
+
+# Put substitutions early so they're available everywhere
+substitutions:
+  MAX_SPEED: "6"          # easy tweak later
+  # Thresholds picked from your CSV (off ≲ ~4 W; on ≳ ~20 W)
+  # Use a small gap (hysteresis) so we don't chatter at the boundary.
+  AC_OFF_W: "8.0"         # <= this is considered OFF
+  AC_ON_W:  "12.0"        # >= this is considered ON
+  AC_POWER_DELAY_ON:  "8s"    # require sustained draw before saying ON
+  AC_POWER_DELAY_OFF: "20s"   # require sustained ~0 before saying OFF
 
 esp32:
   board: esp32dev
@@ -36,20 +50,26 @@ wifi:
 
 captive_portal:
 
+uart:
+  - id: zigbee_uart
+    tx_pin: GPIO33
+    rx_pin: GPIO32
+    baud_rate: 115200
+
 # ─────────────────────────────────────────────────────────────────────────────
 # IR
 # ─────────────────────────────────────────────────────────────────────────────
 remote_receiver:
-  - pin: GPIO23
-    tolerance: 25%
-    filter: 50us
-    idle: 10000us
-    dump: all
+  pin: GPIO23
+  tolerance: 25%
+  filter: 50us
+  idle: 10000us
+  dump: all
 
 remote_transmitter:
-  - id: transmitter_main
-    pin: GPIO2         # <- warning: strapping pin – use at your own risk
-    carrier_duty_percent: 50%
+  id: transmitter_main
+  pin: GPIO2         # <- warning: strapping pin – use at your own risk
+  carrier_duty_percent: 50%
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Globals
@@ -60,168 +80,208 @@ globals:
     restore_value: no
     initial_value: '0.0'
 
-  # ---- A/C shadow-state ------------------------------------------------------
-  - id: ac_power_on          # true = unit believed ON
-    type: bool
-    restore_value: no
-    initial_value: 'false'
+  # # ---- A/C shadow-state ------------------------------------------------------
+  # - id: ac_power_on          # true = unit believed ON
+  #   type: bool
+  #   restore_value: no
+  #   initial_value: 'false'
 
-  - id: ac_set_temp          # current set-point we *think* the unit has (°C)
-    type: int
-    restore_value: no
-    initial_value: '26'      # the A/C boots at 26 °C
+  # - id: ac_set_temp          # current set-point we *think* the unit has (°C)
+  #   type: int
+  #   restore_value: no
+  #   initial_value: '26'      # the A/C boots at 26 °C
 
-  - id: ac_fan_speed         # 1 … 6 (A/C boots at speed 4)
-    type: int
-    restore_value: no
-    initial_value: '4'
+  # - id: ac_fan_speed         # 1 … 6 (A/C boots at speed 4)
+  #   type: int
+  #   restore_value: no
+  #   initial_value: '4'
 
-number:
-  - platform: template
-    id: ac_setpoint_num
-    name: "AC Set-Point"
-    min_value: 16
-    max_value: 32
-    step: 1
-    restore_value: yes
-    optimistic: true
-    on_value:
-      - script.execute:
-          id: _ac_setpoint_handler
-          x: !lambda 'return x;'
+  # # 0 = idle, 1 = TEMP adjust mode, 2 = SPEED adjust mode
+  # - id: ac_adjust_mode
+  #   type: int
+  #   restore_value: no
+  #   initial_value: '0'
+
+  # # true while the 3s adjust-window is “live”
+  # - id: ac_window_live
+  #   type: bool
+  #   restore_value: no
+  #   initial_value: 'false'
+
+  # # true during the 30s compressor shutdown; ignore inputs while true
+  # - id: ac_in_shutdown
+  #   type: bool
+  #   restore_value: no
+  #   initial_value: 'false'
+
+  # # Track whether we believe we’ve positively identified the state since boot.
+  # - id: ac_state_known
+  #   type: bool
+  #   restore_value: no
+  #   initial_value: 'false'
+
+# number:
+#   - platform: template
+#     id: ac_setpoint_num
+#     name: "AC Set-Point"
+#     min_value: 16
+#     max_value: 32
+#     step: 1
+#     restore_value: yes
+#     optimistic: true
+#     on_value:
+#       - script.execute:
+#           id: _ac_setpoint_handler
+#           x: !lambda 'return x;'
 
 ###############################################################################
 # External **indoor temperature** coming from the other ESPHome node
 ###############################################################################
-sensor:
-  - platform: homeassistant
-    id: cabin_temp
-    entity_id: sensor.a32_pro_bme280_1_temperature
-    accuracy_decimals: 1        # keep 0.1 °C resolution
-    unit_of_measurement: "°C"   # keep HA happy
-    device_class: "temperature"
-    state_class: "measurement"
-    internal: false             # export it back if you want to see it in HA
+# sensor:
+#   - platform: homeassistant
+#     id: cabin_temp
+#     entity_id: sensor.a32_pro_bme280_1_temperature
+#     accuracy_decimals: 1        # keep 0.1 °C resolution
+#     unit_of_measurement: "°C"   # keep HA happy
+#     device_class: "temperature"
+#     state_class: "measurement"
+#     internal: false             # export it back if you want to see it in HA
+
+#   # Home Assistant power (W)
+#   - platform: homeassistant
+#     id: ac_power_w
+#     entity_id: sensor.air_conditioning_power_24v
+#     device_class: power
+#     unit_of_measurement: "W"
+#     accuracy_decimals: 1
+#     # Smooth + tame bursts so the binary sensor below only sees slow changes
+#     filters:
+#       - sliding_window_moving_average:
+#           window_size: 10        # last ~10 samples
+#           send_every: 1
+#       - throttle: 1s             # don't spam
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Binary ON/OFF from power
+# ─────────────────────────────────────────────────────────────────────────────
+# binary_sensor:
+#   # True = we've received at least one power sample from HA since boot
+#   - platform: template
+#     id: ac_power_known
+#     internal: true
+#     lambda: |-
+#       return id(ac_power_w).has_state();
+
+#   # True = “power looks ON” after debouncing and hysteresis
+#   - platform: template
+#     id: ac_power_live
+#     name: "AC Power Live"
+#     device_class: power
+#     lambda: |-
+#       if (!id(ac_power_w).has_state()) return false;
+#       const float w = id(ac_power_w).state;
+#       // Hysteresis using last state
+#       static bool last = false;
+#       if (last) {               // was ON -> need to drop below OFF threshold
+#         last = (w >= atof("${AC_OFF_W}"));
+#       } else {                  // was OFF -> need to rise above ON threshold
+#         last = (w >= atof("${AC_ON_W}"));
+#       }
+#       return last;
+#     filters:
+#       - delayed_on:  ${AC_POWER_DELAY_ON}
+#       - delayed_off: ${AC_POWER_DELAY_OFF}
+#     on_press:
+#       - lambda: |-
+#           id(ac_power_on) = true;     // keep your shadow state in sync
+#     on_release:
+#       - lambda: |-
+#           id(ac_power_on) = false;
 
 ###############################################################################
 # 24 V Air-Conditioner – thermostat climate object
 ###############################################################################
-climate:
-  - platform: thermostat
-    id: ac_thermostat
-    name: "24 V Air-Conditioner"
+# climate:
+#   - platform: thermostat
+#     id: ac_thermostat
+#     name: "24 V Air-Conditioner"
 
-    # ------------------------------------------------------------------------
-    # INPUT SENSOR (indoor temperature)
-    # ------------------------------------------------------------------------
-    sensor: cabin_temp                 # <-- your BME-280 sensor from HA
+#     # ------------------------------------------------------------------------
+#     # INPUT SENSOR (indoor temperature)
+#     # ------------------------------------------------------------------------
+#     sensor: cabin_temp
 
-    # ------------------------------------------------------------------------
-    # UI look & feel
-    # ------------------------------------------------------------------------
-    visual:
-      min_temperature: 16
-      max_temperature: 32
-      temperature_step: 1
+#     # ------------------------------------------------------------------------
+#     # UI look & feel
+#     # ------------------------------------------------------------------------
+#     visual:
+#       min_temperature: 16
+#       max_temperature: 32
+#       temperature_step: 1
 
-    # ------------------------------------------------------------------------
-    # SAFETY TIMERS (required when you define *_action blocks)
-    # ------------------------------------------------------------------------
-    min_idle_time:              5s
-    min_cooling_off_time:       5s
-    min_cooling_run_time:       5s
-    min_fanning_off_time:       5s
-    min_fanning_run_time:       5s
+#     # ------------------------------------------------------------------------
+#     # CORE ACTIONS – what to do when the thermostat changes state
+#     # ------------------------------------------------------------------------
+#     cool_action:
+#       - switch.turn_on: ac_cool_sw     # start compressor + blower relay
+#     fan_only_action:
+#       - switch.turn_on: ac_cool_sw     # just the blower
+#       - number.set:                    # push set-point far away (prevent cool)
+#           id: ac_setpoint_num
+#           value: 32
+#     idle_action:
+#       - switch.turn_off: ac_cool_sw    # stop everything
 
-    # ------------------------------------------------------------------------
-    # CORE ACTIONS – what to do when the thermostat changes state
-    # ------------------------------------------------------------------------
-    cool_action:
-      - switch.turn_on: ac_cool_sw     # start compressor + blower relay
-    fan_only_action:
-      - switch.turn_on: ac_cool_sw     # just the blower
-      - number.set:                    # push set-point far away (prevent cool)
-          id: ac_setpoint_num
-          value: 32
-    idle_action:
-      - switch.turn_off: ac_cool_sw    # stop everything
+#     # SAFETY / physical constraints (match the AC)
+#     min_idle_time:              30s
+#     min_cooling_off_time:       30s
+#     min_cooling_run_time:       5s
+#     min_fanning_off_time:       5s
+#     min_fanning_run_time:       5s
 
-    # ------------------------------------------------------------------------
-    # MODE CHANGE HOOKS (manual mode buttons)
-    # ------------------------------------------------------------------------
-    off_mode:
-      - switch.turn_off: ac_cool_sw
-    cool_mode:
-      - switch.turn_on: ac_cool_sw
-    fan_only_mode:
-      - switch.turn_on: ac_cool_sw
-      - number.set:
-          id: ac_setpoint_num
-          value: 32
+#     # when the target temperature changes in HA, use our smarter handler
+#     target_temperature_change_action:
+#       - lambda: |-
+#           id(_ac_setpoint_handler).execute(id(ac_thermostat).target_temperature);
 
-    # ------------------------------------------------------------------------
-    # SYNCHRONISE THE FAN SPEED DIAL
-    # ------------------------------------------------------------------------
-    target_temperature_change_action:
-      # whenever the set-point is nudged (HA card, rotary encoder, …)
-      - lambda: |-
-          /* pass the new target temperature to our helper script */
-          id(_ac_setpoint_handler)->execute(
-            id(ac_thermostat).target_temperature
-          );
+#     # ------------------------------------------------------------------------
+#     # GLUE: keep the six-step fan in-sync with climate power
+#     # ------------------------------------------------------------------------
+#     on_state:
+#       - lambda: |-
+#           const bool cooling = (x.mode == climate::CLIMATE_MODE_COOL) ||
+#                                (x.mode == climate::CLIMATE_MODE_FAN_ONLY);
+#           const bool draw    = id(ac_power_live).state;
+#           if (id(ac_state_known) && (cooling != draw)) {
+#             ESP_LOGW("ac", "Climate/power mismatch; running reset.");
+#             id(ac_state_known) = false;
+#             id(ac_reset_state).execute();
+#           }
 
-    # ------------------------------------------------------------------------
-    # GLUE: keep the six-step fan in-sync with climate power
-    # ------------------------------------------------------------------------
-    on_state:
-      - if:
-          condition:
-            lambda: 'return x.mode != climate::CLIMATE_MODE_OFF;'
-          then:
-            - fan.turn_on: ac_speed_fan      # climate ON  → fan ON
-          else:
-            - fan.turn_off: ac_speed_fan     # climate OFF → fan OFF
-
-substitutions:
-  MAX_SPEED: "6"          # easy tweak later
-
+# ─────────────────────────────────────────────────────────────────────────────
+# A/C blower – 6-step template fan
+# ─────────────────────────────────────────────────────────────────────────────
 fan:
-  # ──────────────────────────────────────────────
-  # A/C blower – 6-step template fan
-  # ──────────────────────────────────────────────
-  - platform: template
-    id: ac_speed_fan
-    name: "A/C Fan"
-    speed_count: 6
-    restore_mode: RESTORE_DEFAULT_OFF
+#   - platform: template
+#     id: ac_speed_fan
+#     name: "A/C Fan"
+#     speed_count: 6
+#     restore_mode: RESTORE_DEFAULT_OFF
 
-    # called every time the dial/slider changes
-    on_speed_set:
-      - script.execute:
-          id: _ac_fan_handler
-          # build the string "SPEED1" … "SPEED6" from **x**
-          x: !lambda |-
-            char buf[8];
-            snprintf(buf, sizeof(buf), "SPEED%d", x);   // <-- no macro clash
-            return std::string(buf);
+#     # Every time the dial changes, pass the numeric speed (1..6)
+#     on_speed_set:
+#       - script.execute:
+#           id: _ac_fan_handler
+#           spd: !lambda 'return x;'
 
-    # Block people from switching the fan off while the climate object is on
-    on_turn_off:
-      - if:
-          condition:
-            lambda: 'return id(ac_thermostat).mode != climate::CLIMATE_MODE_OFF;'
-          then:
-            - logger.log: "Fan OFF denied (climate running)"
-            - fan.turn_on: ac_speed_fan
-
-    # Block people from switching the fan on while the climate object is off
-    on_turn_on:
-      - if:
-          condition:
-            lambda: 'return id(ac_thermostat).mode == climate::CLIMATE_MODE_OFF;'
-          then:
-            - logger.log: "Fan ON denied (climate off)"
-            - fan.turn_off: ac_speed_fan
+#     # Block turning the fan OFF while climate object is ON
+#     on_turn_off:
+#       - if:
+#           condition:
+#             lambda: 'return id(ac_thermostat).mode != climate::CLIMATE_MODE_OFF;'
+#           then:
+#             - logger.log: "A/C Fan OFF denied (climate running)"
+#             - fan.turn_on: ac_speed_fan
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fan entity (10-step speed fan)
@@ -268,15 +328,33 @@ output:
             - switch.template.publish:
                 id: ceiling_fan_mode
                 state: OFF
+
   - platform: template          # speed – captures the float sent by the fan
     id: roof_fan_speed_out
     type: float
     write_action:
       - lambda: id(fan_output_float) = state;
+
+      # If we’re going above 0% speed, ensure we're not in ceiling mode,
+      # and the lid is OPEN before we send the first speed IR.
       - if:
           condition:
             lambda: 'return state > 0.0f;'
           then:
+            # If using roof mode (NOT ceiling fan) and lid is still closed, open it first
+            - if:
+                condition:
+                  and:
+                    - fan.is_on: roof_fan
+                    - switch.is_off: ceiling_fan_mode
+                    - lambda: 'return id(roof_fan_lid).position <= 0.5f;'
+                then:
+                  - cover.template.publish:
+                      id: roof_fan_lid
+                      state: OPEN
+                  # small pause so our optimistic cover state flips before dispatch
+                  - delay: 400ms
+
             - script.execute: roof_fan_dispatch
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -335,14 +413,14 @@ cover:
 # Misc switches
 # ─────────────────────────────────────────────────────────────────────────────
 switch:
-  - platform: template                # A/C cooling “power”
-    id: ac_cool_sw
-    name: "AC Cooling Dummy"
-    optimistic: true
-    turn_on_action:
-      - script.execute: ac_turn_on
-    turn_off_action:
-      - script.execute: ac_turn_off
+  # - platform: template                # A/C cooling “power”
+  #   id: ac_cool_sw
+  #   name: "AC Cooling Dummy"
+  #   optimistic: true
+  #   turn_on_action:
+  #     - script.execute: ac_turn_on
+  #   turn_off_action:
+  #     - script.execute: ac_turn_off
 
   - platform: template
     id: ceiling_fan_mode
@@ -373,71 +451,10 @@ switch:
                 state: OPEN
 
 script:
-  - id: ac_turn_on
-    mode: queued
-    then:
-      - if:
-          condition:
-            lambda: 'return !id(ac_power_on);'   # only if we think it’s OFF
-          then:
-            - script.execute: air_conditioner_on_off   # send IR toggle
-            - lambda: 'id(ac_power_on) = true;'        # remember new state
-
-  - id: ac_turn_off
-    mode: queued
-    then:
-      - if:
-          condition:
-            lambda: 'return id(ac_power_on);'    # only if we think it’s ON
-          then:
-            - script.execute: air_conditioner_on_off   # send IR toggle
-            - lambda: 'id(ac_power_on) = false;'       # remember new state
-
-  # walk set-point up/down until the real unit matches
-  - id: _ac_setpoint_handler
-    mode: queued
-    parameters:
-      x: float
-    then:
-      - lambda: |-
-          int wanted = int(roundf(x));
-          while (wanted > id(ac_set_temp)) {
-            id(air_conditioner_temp_up).execute();
-            id(ac_set_temp)++;
-            delay(450);
-          }
-          while (wanted < id(ac_set_temp)) {
-            id(air_conditioner_temp_down).execute();
-            id(ac_set_temp)--;
-            delay(450);
-          }
-
-  # react to fan-speed changes
-  - id: _ac_fan_handler
-    mode: queued
-    parameters:
-      x: string
-    then:
-      - lambda: |-
-          int target_speed = id(ac_fan_speed);
-          if (x == "LOW")    target_speed = 1;
-          if (x == "MEDIUM") target_speed = 3;
-          if (x == "HIGH")   target_speed = 6;
-
-          while (target_speed > id(ac_fan_speed)) {
-            id(air_conditioner_speed_up).execute();
-            id(ac_fan_speed)++;
-            delay(350);
-          }
-          while (target_speed < id(ac_fan_speed)) {
-            id(air_conditioner_speed_down).execute();
-            id(ac_fan_speed)--;
-            delay(350);
-          }
-  
-# ─────────────────────────────────────────────────────────────────────────────
-# Dispatcher script – chooses the correct IR command
-# ─────────────────────────────────────────────────────────────────────────────
+  # ───────────────────────────────────────────────────────────────────────────
+  # Dispatcher script – chooses the correct IR command
+  #   (references specific IR scripts that appear later in the file)
+  # ───────────────────────────────────────────────────────────────────────────
   - id: roof_fan_dispatch
     mode: restart
     then:
@@ -451,8 +468,11 @@ script:
 
           /* -----  OFF  --------------------------------------------------- */
           if (!pwr) {
-            (lidOpen ? id(roof_fan_off_and_open)
-                     : id(roof_fan_off_and_closed))->execute();
+            if (lidOpen) {
+              id(roof_fan_off_and_open).execute();
+            } else {
+              id(roof_fan_off_and_closed).execute();
+            }
             return;
           }
 
@@ -486,6 +506,269 @@ script:
           else                  next = tbl_in[step];
 
           if (next) next->execute();
+
+#   # --- 3s adjust-window: stays live while restarted; drops to idle at timeout
+#   - id: ac_adjust_window
+#     mode: restart
+#     then:
+#       - lambda: |-
+#           id(ac_window_live) = true;
+#       - delay: 3s
+#       - lambda: |-
+#           id(ac_window_live) = false;
+#           id(ac_adjust_mode) = 0;
+
+#   # --- 30s shutdown hold after OFF
+#   - id: ac_shutdown_hold
+#     mode: restart
+#     then:
+#       - lambda: |-
+#           id(ac_in_shutdown) = true;
+#           id(ac_adjust_mode) = 0;
+#           id(ac_window_live) = false;
+#       - delay: 30s
+#       - lambda: |-
+#           id(ac_in_shutdown) = false;
+
+#   - id: ac_turn_on
+#     mode: queued
+#     then:
+#       - if:
+#           condition:
+#             and:
+#               - lambda: 'return !id(ac_in_shutdown);'
+#               - or:
+#                   - not:
+#                       binary_sensor.is_on: ac_power_live       # measured OFF
+#                   - lambda: 'return !id(ac_state_known);'      # or unknown
+#           then:
+#             - logger.log: "[AC] Turning ON…"
+#             - script.execute: air_conditioner_on_off
+#             - delay: 8s
+#             - if:
+#                 condition:
+#                   binary_sensor.is_on: ac_power_live
+#                 then:
+#                   - lambda: |-
+#                       id(ac_power_on) = true;
+#                       id(ac_state_known) = true;
+#                       id(ac_set_temp)  = 26;
+#                       id(ac_fan_speed) = 4;
+#                 else:
+#                   # One more nudge with STRONG, then give up
+#                   - script.execute: air_conditioner_strong
+#                   - delay: 6s
+#                   - if:
+#                       condition:
+#                         binary_sensor.is_on: ac_power_live
+#                       then:
+#                         - lambda: |-
+#                             id(ac_power_on) = true;
+#                             id(ac_state_known) = true;
+#                       else:
+#                         - logger.log: "[AC] ON failed (no power draw)."
+
+#   - id: ac_turn_off
+#     mode: queued
+#     then:
+#       - if:
+#           condition:
+#             or:
+#               - binary_sensor.is_on: ac_power_live        # measured ON
+#               - lambda: 'return !id(ac_state_known);'     # or unknown
+#           then:
+#             - logger.log: "[AC] Turning OFF…"
+#             - script.execute: air_conditioner_on_off
+#             - delay: 10s
+#             - if:
+#                 condition:
+#                   not:
+#                     binary_sensor.is_on: ac_power_live
+#                 then:
+#                   - lambda: |-
+#                       id(ac_power_on) = false;
+#                       id(ac_state_known) = true;
+#                 else:
+#                   # We must’ve toggled the wrong way first; toggle again.
+#                   - script.execute: air_conditioner_on_off
+#                   - delay: 10s
+#                   - if:
+#                       condition:
+#                         not:
+#                           binary_sensor.is_on: ac_power_live
+#                       then:
+#                         - lambda: |-
+#                             id(ac_power_on) = false;
+#                             id(ac_state_known) = true;
+#                       else:
+#                         - logger.log: "[AC] OFF failed (still drawing power)."
+#       - script.execute: ac_shutdown_hold
+
+#   # --- Setpoint handler uses measured power
+#   - id: _ac_setpoint_handler
+#     mode: queued
+#     parameters:
+#       x: float
+#     then:
+#       - lambda: |-
+#           if (!id(ac_power_live).state || id(ac_in_shutdown)) {
+#             ESP_LOGI("ac", "Temp change ignored (power off or shutdown hold)");
+#             return;
+#           }
+
+#           auto clamp = [](int v, int lo, int hi){
+#             if (v < lo) return lo;
+#             if (v > hi) return hi;
+#             return v;
+#           };
+#           int wanted = clamp(int(roundf(x)), 16, 32);
+
+#           // Ensure we're in TEMP adjust mode; if not (or window expired), prime with one UP
+#           if (!(id(ac_adjust_mode) == 1 && id(ac_window_live))) {
+#             id(air_conditioner_temp_up).execute();
+#             id(ac_set_temp) = clamp(id(ac_set_temp) + 1, 16, 32);
+#             id(ac_adjust_mode) = 1;
+#             id(ac_adjust_window).execute();
+#             delay(250);
+#           }
+
+#           // Walk to target, refreshing the 3s window each keypress
+#           while (wanted > id(ac_set_temp)) {
+#             id(air_conditioner_temp_up).execute();
+#             id(ac_set_temp) = clamp(id(ac_set_temp) + 1, 16, 32);
+#             id(ac_adjust_window).execute();
+#             delay(250);
+#           }
+#           while (wanted < id(ac_set_temp)) {
+#             id(air_conditioner_temp_down).execute();
+#             id(ac_set_temp) = clamp(id(ac_set_temp) - 1, 16, 32);
+#             id(ac_adjust_window).execute();
+#             delay(250);
+#           }
+
+#   # --- Fan-speed handler uses measured power
+#   - id: _ac_fan_handler
+#     mode: queued
+#     parameters:
+#       spd: int
+#     then:
+#       - lambda: |-
+#           if (!id(ac_power_live).state || id(ac_in_shutdown)) {
+#             ESP_LOGI("ac", "Speed change ignored (power off or shutdown hold)");
+#             return;
+#           }
+
+#           auto clamp = [](int v, int lo, int hi){
+#             if (v < lo) return lo;
+#             if (v > hi) return hi;
+#             return v;
+#           };
+#           int wanted = clamp(spd, 1, 6);
+
+#           if (wanted == id(ac_fan_speed)) {
+#             ESP_LOGD("ac", "Speed already %d; nothing to do", wanted);
+#             return;
+#           }
+
+#           // Ensure SPEED adjust mode; if not (or window expired), prime toward target
+#           if (!(id(ac_adjust_mode) == 2 && id(ac_window_live))) {
+#             if (wanted > id(ac_fan_speed)) {
+#               id(air_conditioner_speed_up).execute();
+#               id(ac_fan_speed) = clamp(id(ac_fan_speed) + 1, 1, 6);
+#             } else {
+#               id(air_conditioner_speed_down).execute();
+#               id(ac_fan_speed) = clamp(id(ac_fan_speed) - 1, 1, 6);
+#             }
+#             id(ac_adjust_mode) = 2;
+#             id(ac_adjust_window).execute();
+#             delay(250);
+#           }
+
+#           // Walk to target, refreshing the 3s window each keypress
+#           while (wanted > id(ac_fan_speed)) {
+#             id(air_conditioner_speed_up).execute();
+#             id(ac_fan_speed) = clamp(id(ac_fan_speed) + 1, 1, 6);
+#             id(ac_adjust_window).execute();
+#             delay(250);
+#           }
+#           while (wanted < id(ac_fan_speed)) {
+#             id(air_conditioner_speed_down).execute();
+#             id(ac_fan_speed) = clamp(id(ac_fan_speed) - 1, 1, 6);
+#             id(ac_adjust_window).execute();
+#             delay(250);
+#           }
+
+#   - id: ac_reset_state
+#     mode: restart
+#     then:
+#       - logger.log: "[AC] Discovering state using power feedback…"
+
+#       # Case 0: we already have fresh power – trivial
+#       - if:
+#           condition:
+#             binary_sensor.is_on: ac_power_known
+#           then:
+#             - if:
+#                 condition:
+#                   binary_sensor.is_on: ac_power_live
+#                 then:
+#                   - lambda: |-
+#                       id(ac_power_on)    = true;
+#                       id(ac_state_known) = true;
+#                       ESP_LOGI("ac", "Power indicates ON; state known.");
+#                 else:
+#                   - lambda: |-
+#                       id(ac_power_on)    = false;
+#                       id(ac_state_known) = true;
+#                       ESP_LOGI("ac", "Power indicates OFF; state known.");
+#           else:
+#             - logger.log: "[AC] No power samples yet; probing…"
+
+#       # Probe 1: try to turn ON (toggle), then wait for watts to rise
+#       - script.execute: air_conditioner_on_off
+#       - delay: 8s
+#       - if:
+#           condition:
+#             binary_sensor.is_on: ac_power_live
+#           then:
+#             - lambda: |-
+#                 id(ac_power_on)    = true;
+#                 id(ac_state_known) = true;
+#                 ESP_LOGI("ac", "AC drew power after ON/OFF -> ON (known).");
+#           else:
+#             # Probe 2: maybe we just turned it *off* (unknown start). Toggle again.
+#             - logger.log: "[AC] Still no draw; toggling again…"
+#             - script.execute: air_conditioner_on_off
+#             - delay: 8s
+#             - if:
+#                 condition:
+#                   binary_sensor.is_on: ac_power_live
+#                 then:
+#                   - lambda: |-
+#                       id(ac_power_on)    = true;
+#                       id(ac_state_known) = true;
+#                       ESP_LOGI("ac", "AC drew power after second toggle -> ON (known).");
+#                 else:
+#                   # Probe 3: while ON, STRONG usually increases wattage; try it
+#                   - logger.log: "[AC] Trying STRONG to stimulate draw…"
+#                   - script.execute: air_conditioner_strong
+#                   - delay: 6s
+#                   - if:
+#                       condition:
+#                         binary_sensor.is_on: ac_power_live
+#                       then:
+#                         - lambda: |-
+#                             id(ac_power_on)    = true;
+#                             id(ac_state_known) = true;
+#                             ESP_LOGI("ac", "AC drew power after STRONG -> ON (known).");
+#                       else:
+#                         # Give up: consider it OFF (known off)
+#                         - lambda: |-
+#                             id(ac_power_on)    = false;
+#                             id(ac_state_known) = true;
+#                             ESP_LOGW("ac", "No power after probes; assuming OFF (known).");
+
+# # (IR scripts start below this point in your original file)
 
 
 ###############################################################################
@@ -821,98 +1104,79 @@ button:
   - platform: template
     name: "Creality T100 Speakers - Standby"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_standby
+      - script.execute: creality_t100_speakers_standby
   - platform: template
     name: "Creality T100 Speakers - Input"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_input
+      - script.execute: creality_t100_speakers_input
   - platform: template
     name: "Creality T100 Speakers - Reset"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_reset
+      - script.execute: creality_t100_speakers_reset
   - platform: template
     name: "Creality T100 Speakers - BT Pair"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_bt_pair
+      - script.execute: creality_t100_speakers_bt_pair
   - platform: template
     name: "Creality T100 Speakers - EQ Music"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_eq_music
+      - script.execute: creality_t100_speakers_eq_music
   - platform: template
     name: "Creality T100 Speakers - EQ Cinema"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_eq_cinema
+      - script.execute: creality_t100_speakers_eq_cinema
   - platform: template
     name: "Creality T100 Speakers - EQ Concert"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_eq_concert
+      - script.execute: creality_t100_speakers_eq_concert
   - platform: template
     name: "Creality T100 Speakers - EQ Gaming"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_eq_gaming
+      - script.execute: creality_t100_speakers_eq_gaming
   - platform: template
     name: "Creality T100 Speakers - BT/USB Stop"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_bt_usb_stop
+      - script.execute: creality_t100_speakers_bt_usb_stop
   - platform: template
     name: "Creality T100 Speakers - BT/USB PlayPause"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_bt_usb_play_pause
+      - script.execute: creality_t100_speakers_bt_usb_play_pause
   - platform: template
     name: "Creality T100 Speakers - BT/USB Next Song"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_bt_usb_next_song
+      - script.execute: creality_t100_speakers_bt_usb_next_song
   - platform: template
     name: "Creality T100 Speakers - BT/USB Previous Song"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_bt_usb_previous_song
+      - script.execute: creality_t100_speakers_bt_usb_previous_song
   - platform: template
     name: "Creality T100 Speakers - Treble Down"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_treble_down
+      - script.execute: creality_t100_speakers_treble_down
   - platform: template
     name: "Creality T100 Speakers - Treble Up"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_treble_up
+      - script.execute: creality_t100_speakers_treble_up
   - platform: template
     name: "Creality T100 Speakers - Bass Down"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_bass_down
+      - script.execute: creality_t100_speakers_bass_down
   - platform: template
     name: "Creality T100 Speakers - Bass Up"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_bass_up
+      - script.execute: creality_t100_speakers_bass_up
   - platform: template
     name: "Creality T100 Speakers - Volume Down"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_volume_down
+      - script.execute: creality_t100_speakers_volume_down
   - platform: template
     name: "Creality T100 Speakers - Volume Mute"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_volume_mute
+      - script.execute: creality_t100_speakers_volume_mute
   - platform: template
     name: "Creality T100 Speakers - Volume Up"
     on_press:
-      then:
-        - script.execute: creality_t100_speakers_volume_up
+      - script.execute: creality_t100_speakers_volume_up
 
 ###############################################################################
 # Button Definitions for 24V Air Conditioner
@@ -920,53 +1184,43 @@ button:
   - platform: template
     name: "24V AC - On/Off"
     on_press:
-      then:
-        - script.execute: air_conditioner_on_off
+      - script.execute: air_conditioner_on_off
   - platform: template
     name: "24V AC - Swing Flap"
     on_press:
-      then:
-        - script.execute: air_conditioner_swing_flap
+      - script.execute: air_conditioner_swing_flap
   - platform: template
     name: "24V AC - Temp Up"
     on_press:
-      then:
-        - script.execute: air_conditioner_temp_up
+      - script.execute: air_conditioner_temp_up
   - platform: template
     name: "24V AC - Temp Down"
     on_press:
-      then:
-        - script.execute: air_conditioner_temp_down
+      - script.execute: air_conditioner_temp_down
   - platform: template
     name: "24V AC - Speed Down"
     on_press:
-      then:
-        - script.execute: air_conditioner_speed_down
+      - script.execute: air_conditioner_speed_down
   - platform: template
     name: "24V AC - Speed Up"
     on_press:
-      then:
-        - script.execute: air_conditioner_speed_up
+      - script.execute: air_conditioner_speed_up
   - platform: template
     name: "24V AC - Fresh Air"
     on_press:
-      then:
-        - script.execute: air_conditioner_fresh_air
+      - script.execute: air_conditioner_fresh_air
   - platform: template
     name: "24V AC - Strong"
     on_press:
-      then:
-        - script.execute: air_conditioner_strong
+      - script.execute: air_conditioner_strong
   - platform: template
     name: "24V AC - ECO"
     on_press:
-      then:
-        - script.execute: air_conditioner_eco
+      - script.execute: air_conditioner_eco
   - platform: template
     name: "24V AC - Sleep"
     on_press:
-      then:
-        - script.execute: air_conditioner_sleep
+      - script.execute: air_conditioner_sleep
 
 ###############################################################################
 # Button Definitions for IR Fan Control
@@ -976,172 +1230,134 @@ button:
   - platform: template
     name: "Roof Fan - Off & Open"
     on_press:
-      then:
-        - script.execute: roof_fan_off_and_open
+      - script.execute: roof_fan_off_and_open
   - platform: template
     name: "Roof Fan - Off & Closed"
     on_press:
-      then:
-        - script.execute: roof_fan_off_and_closed
+      - script.execute: roof_fan_off_and_closed
 
   # Roof Fan On, Closed (Ceiling Fan) – Speed Control
   - platform: template
     name: "Roof Fan - On Closed, Speed 10%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_closed_speed_10
+      - script.execute: roof_fan_on_closed_speed_10
   - platform: template
     name: "Roof Fan - On Closed, Speed 20%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_closed_speed_20
+      - script.execute: roof_fan_on_closed_speed_20
   - platform: template
     name: "Roof Fan - On Closed, Speed 30%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_closed_speed_30
+      - script.execute: roof_fan_on_closed_speed_30
   - platform: template
     name: "Roof Fan - On Closed, Speed 40%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_closed_speed_40
+      - script.execute: roof_fan_on_closed_speed_40
   - platform: template
     name: "Roof Fan - On Closed, Speed 50%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_closed_speed_50
+      - script.execute: roof_fan_on_closed_speed_50
   - platform: template
     name: "Roof Fan - On Closed, Speed 60%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_closed_speed_60
+      - script.execute: roof_fan_on_closed_speed_60
   - platform: template
     name: "Roof Fan - On Closed, Speed 70%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_closed_speed_70
+      - script.execute: roof_fan_on_closed_speed_70
   - platform: template
     name: "Roof Fan - On Closed, Speed 80%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_closed_speed_80
+      - script.execute: roof_fan_on_closed_speed_80
   - platform: template
     name: "Roof Fan - On Closed, Speed 90%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_closed_speed_90
+      - script.execute: roof_fan_on_closed_speed_90
   - platform: template
     name: "Roof Fan - On Closed, Speed 100%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_closed_speed_100
+      - script.execute: roof_fan_on_closed_speed_100
 
   # Roof Fan On, Open – Air Out Mode (Speeds 10% to 100%)
   - platform: template
     name: "Roof Fan (Open, Air Out) - Speed 10%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_out_speed_10
+      - script.execute: roof_fan_on_open_air_out_speed_10
   - platform: template
     name: "Roof Fan (Open, Air Out) - Speed 20%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_out_speed_20
+      - script.execute: roof_fan_on_open_air_out_speed_20
   - platform: template
     name: "Roof Fan (Open, Air Out) - Speed 30%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_out_speed_30
+      - script.execute: roof_fan_on_open_air_out_speed_30
   - platform: template
     name: "Roof Fan (Open, Air Out) - Speed 40%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_out_speed_40
+      - script.execute: roof_fan_on_open_air_out_speed_40
   - platform: template
     name: "Roof Fan (Open, Air Out) - Speed 50%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_out_speed_50
+      - script.execute: roof_fan_on_open_air_out_speed_50
   - platform: template
     name: "Roof Fan (Open, Air Out) - Speed 60%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_out_speed_60
+      - script.execute: roof_fan_on_open_air_out_speed_60
   - platform: template
     name: "Roof Fan (Open, Air Out) - Speed 70%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_out_speed_70
+      - script.execute: roof_fan_on_open_air_out_speed_70
   - platform: template
     name: "Roof Fan (Open, Air Out) - Speed 80%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_out_speed_80
+      - script.execute: roof_fan_on_open_air_out_speed_80
   - platform: template
     name: "Roof Fan (Open, Air Out) - Speed 90%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_out_speed_90
+      - script.execute: roof_fan_on_open_air_out_speed_90
   - platform: template
     name: "Roof Fan (Open, Air Out) - Speed 100%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_out_speed_100
+      - script.execute: roof_fan_on_open_air_out_speed_100
 
   # Roof Fan On, Open – Air In Mode (Speeds 10% to 100%)
   - platform: template
     name: "Roof Fan (Open, Air In) - Speed 10%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_in_speed_10
+      - script.execute: roof_fan_on_open_air_in_speed_10
   - platform: template
     name: "Roof Fan (Open, Air In) - Speed 20%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_in_speed_20
+      - script.execute: roof_fan_on_open_air_in_speed_20
   - platform: template
     name: "Roof Fan (Open, Air In) - Speed 30%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_in_speed_30
+      - script.execute: roof_fan_on_open_air_in_speed_30
   - platform: template
     name: "Roof Fan (Open, Air In) - Speed 40%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_in_speed_40
+      - script.execute: roof_fan_on_open_air_in_speed_40
   - platform: template
     name: "Roof Fan (Open, Air In) - Speed 50%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_in_speed_50
+      - script.execute: roof_fan_on_open_air_in_speed_50
   - platform: template
     name: "Roof Fan (Open, Air In) - Speed 60%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_in_speed_60
+      - script.execute: roof_fan_on_open_air_in_speed_60
   - platform: template
     name: "Roof Fan (Open, Air In) - Speed 70%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_in_speed_70
+      - script.execute: roof_fan_on_open_air_in_speed_70
   - platform: template
     name: "Roof Fan (Open, Air In) - Speed 80%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_in_speed_80
+      - script.execute: roof_fan_on_open_air_in_speed_80
   - platform: template
     name: "Roof Fan (Open, Air In) - Speed 90%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_in_speed_90
+      - script.execute: roof_fan_on_open_air_in_speed_90
   - platform: template
     name: "Roof Fan (Open, Air In) - Speed 100%"
     on_press:
-      then:
-        - script.execute: roof_fan_on_open_air_in_speed_100
-
-uart:
-  - id: zigbee_uart
-    tx_pin: GPIO33
-    rx_pin: GPIO32
-    baud_rate: 115200
+      - script.execute: roof_fan_on_open_air_in_speed_100
