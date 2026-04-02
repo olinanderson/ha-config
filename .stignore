@@ -1,52 +1,71 @@
-// Syncthing ignore patterns for HA config
-// Matches .gitignore exclusions
+// ============================================
+// Syncthing ignore patterns for HA config sync
+// Matches .gitignore — skip HA runtime, secrets, managed dirs
+// ============================================
 
-// Database files (large, constantly changing)
+// --- Databases & Logs ---
+home-assistant.log*
 home-assistant_v2.db
 home-assistant_v2.db-shm
 home-assistant_v2.db-wal
-home-assistant.log
-home-assistant.log.*
+*.db-journal
+*.pid
 
-// Runtime / cache
-.cloud
-.storage
-deps
-tts
-__pycache__
-
-// Secrets
+// --- Sensitive files ---
 secrets.yaml
+.ssh
 ssh_keys
 
-// Custom components (managed by HACS)
+// --- HA runtime / internal ---
+.cloud
+.storage
+.shopping_list.json
+.ha_run.lock
+.HA_VERSION
+.cache
+
+// --- Dependencies & generated ---
+deps
+tts
+
+// --- HACS / custom components ---
 custom_components
 
-// Themes (managed by HACS)
-themes
-
-// Blueprints (managed by HA)
-blueprints
-
-// Static assets
+// --- Frontend assets ---
 www
 
-// Zigbee2MQTT (managed separately)
-zigbee2mqtt
+// --- Blueprints (stock HA) ---
+blueprints
 
-// Syncthing own files
-.ha-sync
-.stfolder
-.stversions
+// --- Themes (HACS-managed) ---
+themes
 
-// Git
+// --- Backups ---
+yaml_backups
+
+// --- ESPHome build artifacts ---
+esphome/.esphome
+
+// --- Zigbee2MQTT runtime ---
+zigbee2mqtt/database.db
+zigbee2mqtt/log
+zigbee2mqtt/state.json
+zigbee2mqtt/coordinator_backup.json
+
+// --- Git internals ---
 .git
 
-// OS junk
-Thumbs.db
+// --- OS / Editor junk ---
+__pycache__
+*.pyc
 .DS_Store
-
-// Temp files
-*.tmp
-*~
+Thumbs.db
 *.swp
+*.swo
+*~
+
+// --- Sync tooling ---
+.ha-sync
+
+// --- VS Code workspace settings ---
+.vscode
