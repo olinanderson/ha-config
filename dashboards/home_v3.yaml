@@ -141,24 +141,27 @@ views:
             show_label: true
             label: |
               [[[
-                var t1 = parseFloat(states['sensor.a32_pro_bme280_1_temperature'].state);
-                var t2 = parseFloat(states['sensor.a32_pro_bme280_2_temperature'].state);
-                var t4 = parseFloat(states['sensor.a32_pro_bme280_4_temperature'].state);
-                var h1 = parseFloat(states['sensor.a32_pro_bme280_1_relative_humidity'].state);
+                function s(id){ var v=states[id]; if(!v || v.state === 'unknown' || v.state === 'unavailable' || v.state == null) return NaN; var n = Number(v.state); return isNaN(n)?NaN:n; }
+                function fmt(n,dec){ return isNaN(n) ? '—' : n.toFixed(dec); }
+
+                var t1 = s('sensor.a32_pro_bme280_1_temperature');
+                var t2 = s('sensor.a32_pro_bme280_2_temperature');
+                var t4 = s('sensor.a32_pro_bme280_4_temperature');
+                var h1 = s('sensor.a32_pro_bme280_1_relative_humidity');
 
                 return `<div style="display:flex; gap:24px; justify-content:center; align-items:center; padding:2px 0;">
                   <div style="text-align:center;">
-                    <div style="font-size:26px; font-weight:600; letter-spacing:-0.5px; color:var(--primary-text-color);">${t1.toFixed(1)}°</div>
-                    <div style="font-size:11px; color:var(--secondary-text-color); margin-top:1px;">Inside · ${h1.toFixed(0)}%</div>
+                    <div style="font-size:26px; font-weight:600; letter-spacing:-0.5px; color:var(--primary-text-color);">${fmt(t1,1)}°</div>
+                    <div style="font-size:11px; color:var(--secondary-text-color); margin-top:1px;">Inside · ${fmt(h1,0)}%</div>
                   </div>
                   <div style="width:1px; height:32px; background:var(--divider-color);"></div>
                   <div style="text-align:center;">
-                    <div style="font-size:26px; font-weight:600; letter-spacing:-0.5px; color:var(--primary-text-color);">${t2.toFixed(1)}°</div>
+                    <div style="font-size:26px; font-weight:600; letter-spacing:-0.5px; color:var(--primary-text-color);">${fmt(t2,1)}°</div>
                     <div style="font-size:11px; color:var(--secondary-text-color); margin-top:1px;">Cab</div>
                   </div>
                   <div style="width:1px; height:32px; background:var(--divider-color);"></div>
                   <div style="text-align:center;">
-                    <div style="font-size:26px; font-weight:600; letter-spacing:-0.5px; color:var(--primary-text-color);">${t4.toFixed(1)}°</div>
+                    <div style="font-size:26px; font-weight:600; letter-spacing:-0.5px; color:var(--primary-text-color);">${fmt(t4,1)}°</div>
                     <div style="font-size:11px; color:var(--secondary-text-color); margin-top:1px;">Outside</div>
                   </div>
                 </div>`;
@@ -178,11 +181,37 @@ views:
               rows: 2
 
           # ── Thermostat ──
-          - type: custom:better-thermostat-ui-card
-            entity: climate.a32_pro_van_hydronic_heating_pid
-            grid_options:
-              columns: full
-              rows: auto
+          - type: vertical-stack
+            cards:
+              - type: custom:button-card
+                entity: climate.a32_pro_van_hydronic_heating_pid
+                show_icon: false
+                show_state: false
+                show_name: false
+                show_label: true
+                label: |
+                  [[[
+                    var cl = states['climate.a32_pro_van_hydronic_heating_pid'];
+                    var cur = NaN;
+                    if (cl && cl.attributes && cl.attributes.current_temperature != null) {
+                      cur = parseFloat(cl.attributes.current_temperature);
+                    } else if (states['sensor.a32_pro_bme280_1_temperature'] && states['sensor.a32_pro_bme280_1_temperature'].state && !isNaN(parseFloat(states['sensor.a32_pro_bme280_1_temperature'].state))) {
+                      cur = parseFloat(states['sensor.a32_pro_bme280_1_temperature'].state);
+                    }
+                    var setTemp = (cl && cl.attributes && (cl.attributes.temperature || cl.attributes.target_temp || cl.attributes.target_temperature)) ? (cl.attributes.temperature || cl.attributes.target_temp || cl.attributes.target_temperature) : null;
+
+                    return `<div style="text-align:center; padding:8px 0;">
+                      <div style="font-size:36px; font-weight:700;">${isNaN(cur) ? '—' : cur.toFixed(1)}°</div>
+                      <div style="font-size:13px; color:var(--secondary-text-color); margin-top:4px;">Set ${setTemp == null ? '—' : parseFloat(setTemp).toFixed(1) + '°'}</div>
+                    </div>`;
+                  ]]]
+                tap_action:
+                  action: more-info
+              - type: custom:better-thermostat-ui-card
+                entity: climate.a32_pro_van_hydronic_heating_pid
+                grid_options:
+                  columns: full
+                  rows: auto
 
           # ── Climate controls row (3-up) ──
           - type: custom:button-card
@@ -483,64 +512,70 @@ views:
             show_label: true
             label: |
               [[[
-                var soc = parseFloat(states['sensor.olins_van_bms_battery'].state);
-                var current = parseFloat(states['sensor.olins_van_bms_current'].state);
-                var voltage = parseFloat(states['sensor.olins_van_bms_voltage'].state);
-                var power = parseFloat(states['sensor.olins_van_bms_power'].state);
-                var stored = parseFloat(states['sensor.olins_van_bms_stored_energy'].state);
-                var temp = parseFloat(states['sensor.olins_van_bms_temperature'].state);
+                function s(id){ var v=states[id]; if(!v || v.state === 'unknown' || v.state === 'unavailable' || v.state == null) return NaN; var n = Number(v.state); return isNaN(n)?NaN:n; }
+                function fmt(n,dec){ return isNaN(n) ? '—' : n.toFixed(dec); }
 
-                var socColor = soc < 30 ? 'var(--error-color)' : soc < 65 ? 'var(--warning-color)' : 'var(--success-color)';
-                var status = current > 0.5 ? 'Charging' : current < -0.5 ? 'Discharging' : 'Idle';
-                var statusColor = current > 0.5 ? 'var(--success-color)' : current < -0.5 ? 'var(--warning-color)' : 'var(--secondary-text-color)';
+                var soc = s('sensor.olins_van_bms_battery');
+                var current = s('sensor.olins_van_bms_current');
+                var voltage = s('sensor.olins_van_bms_voltage');
+                var power = s('sensor.olins_van_bms_power');
+                var stored = s('sensor.olins_van_bms_stored_energy');
+                var temp = s('sensor.olins_van_bms_temperature');
+
+                var socNum = isNaN(soc) ? 0 : soc;
+                var socColor = socNum < 30 ? 'var(--error-color)' : socNum < 65 ? 'var(--warning-color)' : 'var(--success-color)';
+                var status = (current > 0.5) ? 'Charging' : (current < -0.5) ? 'Discharging' : 'Idle';
+                var statusColor = (current > 0.5) ? 'var(--success-color)' : (current < -0.5) ? 'var(--warning-color)' : 'var(--secondary-text-color)';
 
                 // Time estimate
                 var timeStr = '';
-                if (current > 0.5) {
+                if (current > 0.5 && !isNaN(power) && !isNaN(stored)) {
                   var whRemaining = 8700 - stored;
-                  var hours = whRemaining / Math.abs(power);
-                  if (hours < 48) {
+                  var hours = Math.abs(power) > 0 ? whRemaining / Math.abs(power) : NaN;
+                  if (!isNaN(hours) && hours < 48) {
                     var h = Math.floor(hours);
                     var m = Math.round((hours - h) * 60);
                     timeStr = h + 'h ' + m + 'm to full';
                   }
-                } else if (current < -0.5) {
-                  var hours = stored / Math.abs(power);
-                  if (hours < 48) {
+                } else if (current < -0.5 && !isNaN(power) && !isNaN(stored)) {
+                  var hours = Math.abs(power) > 0 ? stored / Math.abs(power) : NaN;
+                  if (!isNaN(hours) && hours < 48) {
                     var h = Math.floor(hours);
                     var m = Math.round((hours - h) * 60);
                     timeStr = h + 'h ' + m + 'm remaining';
                   }
                 }
 
+                var dispSoc = isNaN(soc) ? '—' : Math.round(soc) + '%';
+
                 return `<div style="padding:4px 0;">
                   <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:8px;">
-                    <span style="font-size:36px; font-weight:700; letter-spacing:-1px; color:${socColor};">${soc}%</span>
+                    <span style="font-size:36px; font-weight:700; letter-spacing:-1px; color:${socColor};">${dispSoc}</span>
                     <span style="font-size:13px; font-weight:500; color:${statusColor};">${status}</span>
                   </div>
                   <div style="width:100%; height:6px; background:var(--divider-color); border-radius:3px; margin-bottom:12px; overflow:hidden;">
-                    <div style="width:${soc}%; height:100%; background:${socColor}; border-radius:3px; transition:width 1s ease;"></div>
+                    <div style="width:${isNaN(soc) ? 0 : soc}%; height:100%; background:${socColor}; border-radius:3px; transition:width 1s ease;"></div>
                   </div>
                   <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
                     <div>
                       <div style="font-size:11px; color:var(--secondary-text-color);">Voltage</div>
-                      <div style="font-size:15px; font-weight:600;">${voltage.toFixed(1)}V</div>
+                      <div style="font-size:15px; font-weight:600;">${fmt(voltage,1)}V</div>
                     </div>
                     <div>
                       <div style="font-size:11px; color:var(--secondary-text-color);">Current</div>
-                      <div style="font-size:15px; font-weight:600;">${current.toFixed(1)}A</div>
+                      <div style="font-size:15px; font-weight:600;">${fmt(current,1)}A</div>
                     </div>
                     <div>
                       <div style="font-size:11px; color:var(--secondary-text-color);">Power</div>
-                      <div style="font-size:15px; font-weight:600;">${Math.abs(power).toFixed(0)}W</div>
+                      <div style="font-size:15px; font-weight:600;">${isNaN(power) ? '—' : Math.abs(power).toFixed(0)}W</div>
                     </div>
                     <div>
                       <div style="font-size:11px; color:var(--secondary-text-color);">Stored</div>
-                      <div style="font-size:15px; font-weight:600;">${(stored/1000).toFixed(1)} kWh</div>
+                      <div style="font-size:15px; font-weight:600;">${isNaN(stored) ? '—' : (stored/1000).toFixed(1)} kWh</div>
                     </div>
                     <div>
                       <div style="font-size:11px; color:var(--secondary-text-color);">Temp</div>
-                      <div style="font-size:15px; font-weight:600;">${temp.toFixed(1)}°C</div>
+                      <div style="font-size:15px; font-weight:600;">${fmt(temp,1)}°C</div>
                     </div>
                     <div>
                       <div style="font-size:11px; color:var(--secondary-text-color);">Estimate</div>
@@ -575,12 +610,13 @@ views:
             show_label: true
             label: |
               [[[
-                var pv = parseFloat(states['sensor.total_mppt_pv_power'].state) || 0;
-                var yield1 = parseFloat(states['sensor.a32_pro_mppt1_yield_today'].state) || 0;
-                var yield2 = parseFloat(states['sensor.a32_pro_mppt2_yield_today'].state) || 0;
+                function s(id, d){ return (states[id] && states[id].state && states[id].state !== 'unknown' && states[id].state !== 'unavailable') ? parseFloat(states[id].state) : d; }
+                var pv = s('sensor.total_mppt_pv_power', 0);
+                var yield1 = s('sensor.a32_pro_mppt1_yield_today', 0);
+                var yield2 = s('sensor.a32_pro_mppt2_yield_today', 0);
                 var totalYield = ((yield1 + yield2) * 1000).toFixed(0);
-                var pv1 = parseFloat(states['sensor.a32_pro_mppt1_pv_power'].state) || 0;
-                var pv2 = parseFloat(states['sensor.a32_pro_mppt2_pv_power'].state) || 0;
+                var pv1 = s('sensor.a32_pro_mppt1_pv_power', 0);
+                var pv2 = s('sensor.a32_pro_mppt2_pv_power', 0);
                 var pvColor = pv > 50 ? 'var(--success-color)' : 'var(--secondary-text-color)';
 
                 return `<div style="padding:4px 0;">
@@ -845,14 +881,18 @@ views:
             show_label: true
             label: |
               [[[
-                var tracker = states['device_tracker.olin_andersons_iphone_16_pro_max'];
-                var isHome = tracker.state === 'home';
-                var dur = (Date.now() / 1000) - Date.parse(tracker.last_changed) / 1000;
-                var m = Math.floor(dur / 60);
-                var d = Math.floor(m / 1440);
-                var h = Math.floor((m % 1440) / 60);
-                var mm = m % 60;
-                var timeStr = (d > 0 ? d + 'd ' : '') + (h > 0 ? h + 'h ' : '') + mm + 'm';
+                function s(id){ var v=states[id]; return v ? v : null; }
+                var tracker = s('device_tracker.olin_andersons_iphone_16_pro_max');
+                var isHome = tracker && tracker.state === 'home';
+                var timeStr = 'Unknown';
+                if (tracker && tracker.last_changed) {
+                  var dur = (Date.now() / 1000) - Date.parse(tracker.last_changed) / 1000;
+                  var m = Math.floor(dur / 60);
+                  var d = Math.floor(m / 1440);
+                  var h = Math.floor((m % 1440) / 60);
+                  var mm = m % 60;
+                  timeStr = (d > 0 ? d + 'd ' : '') + (h > 0 ? h + 'h ' : '') + mm + 'm';
+                }
 
                 var starlink = states['binary_sensor.starlink_ethernet_speeds'];
                 var slOk = starlink && starlink.state === 'off';
@@ -952,16 +992,19 @@ views:
             show_label: true
             label: |
               [[[
+                function sAttr(obj, key){ if(!obj) return NaN; var v = obj[key]; var n = Number(v); return isNaN(n) ? NaN : n; }
+                function fmt(n,dec){ return isNaN(n) ? '—' : n.toFixed(dec); }
+
                 var w = states['weather.pirateweather'];
                 if (!w || w.state === 'unavailable') return 'Weather unavailable';
 
                 var a = w.attributes || {};
-                var temp = parseFloat(a.temperature);
-                var feelsLike = a.apparent_temperature != null ? parseFloat(a.apparent_temperature) : null;
-                var humidity = a.humidity;
-                var windSpd = a.wind_speed ? (parseFloat(a.wind_speed) * 1.60934).toFixed(0) : '—';
-                var windBearing = a.wind_bearing != null ? parseFloat(a.wind_bearing) : null;
-                var pressure = a.pressure ? parseFloat(a.pressure).toFixed(0) : null;
+                var temp = sAttr(a,'temperature');
+                var feelsLike = (a.apparent_temperature != null) ? sAttr(a,'apparent_temperature') : NaN;
+                var humidity = a.humidity != null ? a.humidity : '—';
+                var windSpd = a.wind_speed ? (Number(a.wind_speed) * 1.60934) : NaN;
+                var windBearing = a.wind_bearing != null ? sAttr(a,'wind_bearing') : NaN;
+                var pressure = a.pressure ? Number(a.pressure) : NaN;
                 var cond = w.state;
 
                 // Wind direction from bearing
@@ -1016,7 +1059,7 @@ views:
                 var updatedStr = diffMin < 1 ? 'just now' : diffMin < 60 ? diffMin + ' min ago' : Math.floor(diffMin/60) + 'h ' + (diffMin%60) + 'm ago';
 
                 // Feels like string
-                var feelsStr = feelsLike !== null ? 'Feels like ' + feelsLike.toFixed(0) + '°' : '';
+                var feelsStr = !isNaN(feelsLike) ? 'Feels like ' + Math.round(feelsLike) + '°' : '';
 
                 return `<div style="padding:2px 0;">
                   <div style="display:flex; align-items:center; gap:5px; margin-bottom:10px;">
@@ -1028,7 +1071,7 @@ views:
                     <div style="display:flex; align-items:center; gap:12px;">
                       <ha-icon icon="${icon}" style="--mdc-icon-size:48px; color:var(--info-color); opacity:0.7;"></ha-icon>
                       <div>
-                        <div style="font-size:38px; font-weight:700; letter-spacing:-2px; line-height:1;">${temp.toFixed(0)}°<span style="font-size:16px; font-weight:400; letter-spacing:0; color:var(--secondary-text-color);">C</span></div>
+                        <div style="font-size:38px; font-weight:700; letter-spacing:-2px; line-height:1;">${isNaN(temp) ? '—' : Math.round(temp) + '°'}<span style="font-size:16px; font-weight:400; letter-spacing:0; color:var(--secondary-text-color);">C</span></div>
                         ${feelsStr ? '<div style="font-size:12px; color:var(--secondary-text-color); margin-top:2px;">' + feelsStr + '</div>' : ''}
                       </div>
                     </div>

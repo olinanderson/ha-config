@@ -29,7 +29,9 @@ deps
 tts
 
 // --- HACS / custom components ---
+// Ignore all custom_components except vanlife_tracker (active dev)
 custom_components
+!custom_components/vanlife_tracker
 
 // --- Frontend assets ---
 www
