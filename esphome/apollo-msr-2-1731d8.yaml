@@ -9,7 +9,7 @@ esphome:
   friendly_name: ${friendly_name}
 api:
   encryption:
-    key: clDu5FF4Nb0QyZxafYaRZxE+Si5GJNec2grx6+0kIno=
+    key: !secret apollo_msr2_api_key
 
 logger:
   level: INFO

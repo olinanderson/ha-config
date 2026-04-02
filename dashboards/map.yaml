@@ -1,0 +1,14 @@
+title: Map
+views:
+  - title: Travel Map
+    path: map
+    type: panel
+    cards:
+      - type: map
+        default_zoom: 12
+        hours_to_show: 2
+        entities:
+          # Starlink GPS — shows route trail from history
+          - entity: device_tracker.starlink_device_location
+          # iPhone
+          - entity: device_tracker.olin_andersons_iphone_16_pro_max

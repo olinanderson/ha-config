@@ -1,0 +1,27 @@
+{
+  // Disable Red Hat YAML validation entirely for this workspace
+  // All YAML here is HA/ESPHome which uses custom tags (!lambda, !include, !secret)
+  // ESPHome extension provides its own validation for esphome/*.yaml
+  "yaml.validate": false,
+  "yaml.customTags": [
+    "!lambda scalar",
+    "!lambda mapping",
+    "!lambda sequence",
+    "!include scalar",
+    "!include mapping",
+    "!include_dir_list scalar",
+    "!include_dir_merge_list scalar",
+    "!include_dir_merge_named scalar",
+    "!include_dir_named scalar",
+    "!secret scalar",
+    "!extend mapping",
+    "!remove mapping"
+  ],
+  // Dissociate esphome yaml files from the Red Hat YAML extension
+  "files.associations": {
+    "esphome/*.yaml": "yaml"
+  },
+  "[yaml]": {
+    "editor.defaultFormatter": "redhat.vscode-yaml"
+  }
+}

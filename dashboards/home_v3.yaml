@@ -184,7 +184,7 @@ views:
               columns: full
               rows: auto
 
-          # ── Climate controls row (2-up) ──
+          # ── Climate controls row (3-up) ──
           - type: custom:button-card
             entity: light.a32_pro_a32_pro_dac_0
             name: Blower Fan
@@ -220,7 +220,7 @@ views:
                 - font-size: 12px
                 - color: var(--secondary-text-color)
             grid_options:
-              columns: 6
+              columns: 4
               rows: 2
 
           - type: custom:button-card
@@ -253,7 +253,40 @@ views:
                 - font-weight: 500
                 - color: var(--primary-text-color)
             grid_options:
-              columns: 6
+              columns: 4
+              rows: 2
+
+          - type: custom:button-card
+            entity: input_boolean.hot_water_mode
+            name: Hot Water
+            icon: mdi:water-boiler
+            show_state: false
+            tap_action:
+              action: toggle
+            state:
+              - value: 'on'
+                styles:
+                  icon:
+                    - color: var(--warning-color)
+              - value: 'off'
+                styles:
+                  icon:
+                    - color: var(--disabled-text-color)
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 12px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+              icon:
+                - width: 24px
+              name:
+                - font-size: 13px
+                - font-weight: 500
+                - color: var(--primary-text-color)
+            grid_options:
+              columns: 4
               rows: 2
 
           # ── Heating details (compact inline card) ──
@@ -266,11 +299,40 @@ views:
               [[[
                 var coolant = states['sensor.a32_pro_s5140_channel_34_temperature_blower_coolant'];
                 var blowerAir = states['sensor.a32_pro_s5140_channel_35_temperature_blower_air'];
+                var heater = states['switch.a32_pro_switch24_hydronic_heater'];
+                var hotWater = states['input_boolean.hot_water_mode'];
+                var climate = states['climate.a32_pro_van_hydronic_heating_pid'];
 
                 var coolVal = coolant ? parseFloat(coolant.state).toFixed(1) : '—';
                 var blowerVal = blowerAir ? parseFloat(blowerAir.state).toFixed(1) : '—';
 
-                return `<div style="display:flex; gap:24px; justify-content:center; align-items:center;">
+                var heaterOn = heater && heater.state === 'on';
+                var hwMode = hotWater && hotWater.state === 'on';
+                var climateOn = climate && climate.state !== 'off';
+
+                // Determine mode label
+                var modeIcon = '';
+                var modeText = '';
+                var modeColor = 'var(--secondary-text-color)';
+                if (heaterOn && climateOn && hwMode) {
+                  modeIcon = 'mdi:water-boiler';
+                  modeText = 'Heating air + water';
+                  modeColor = 'var(--warning-color)';
+                } else if (heaterOn && hwMode && !climateOn) {
+                  modeIcon = 'mdi:water-boiler';
+                  modeText = 'Hot water only';
+                  modeColor = 'var(--info-color)';
+                } else if (heaterOn && climateOn) {
+                  modeIcon = 'mdi:air-filter';
+                  modeText = 'Heating air (+ water passthrough)';
+                  modeColor = 'var(--warning-color)';
+                } else if (heaterOn) {
+                  modeIcon = 'mdi:radiator';
+                  modeText = 'Heater on (manual)';
+                  modeColor = 'var(--warning-color)';
+                }
+
+                var temps = `<div style="display:flex; gap:24px; justify-content:center; align-items:center;">
                   <div style="display:flex; align-items:center; gap:6px;">
                     <ha-icon icon="mdi:coolant-temperature" style="--mdc-icon-size:16px; color:var(--info-color);"></ha-icon>
                     <span style="font-size:12px;">Coolant ${coolVal}°C</span>
@@ -280,6 +342,15 @@ views:
                     <span style="font-size:12px;">Blower Air ${blowerVal}°C</span>
                   </div>
                 </div>`;
+
+                if (modeText) {
+                  temps += `<div style="display:flex; align-items:center; gap:6px; justify-content:center; margin-top:6px;">
+                    <ha-icon icon="${modeIcon}" style="--mdc-icon-size:14px; color:${modeColor};"></ha-icon>
+                    <span style="font-size:11px; color:${modeColor};">${modeText}</span>
+                  </div>`;
+                }
+
+                return temps;
               ]]]
             styles:
               card:
@@ -291,6 +362,100 @@ views:
               label:
                 - font-size: 12px
                 - color: var(--primary-text-color)
+            grid_options:
+              columns: full
+              rows: 1
+
+          # ── Heater status message ──
+          - type: custom:button-card
+            entity: sensor.a32_pro_hydronic_heater_status
+            show_name: false
+            show_state: false
+            show_icon: false
+            show_label: true
+            show_entity_picture: false
+            label: |
+              [[[
+                var status = entity ? entity.state : 'Unknown';
+                if (status === 'Idle.' || status === 'unavailable' || status === 'unknown') return '';
+
+                var icon = 'mdi:radiator';
+                var color = 'var(--secondary-text-color)';
+                if (status.includes('Low fuel lockout')) {
+                  icon = 'mdi:fuel-cell';
+                  color = 'var(--error-color)';
+                } else if (status.includes('Retrying')) {
+                  icon = 'mdi:restart';
+                  color = 'var(--warning-color)';
+                } else if (status.includes('failed')) {
+                  icon = 'mdi:radiator-off';
+                  color = 'var(--error-color)';
+                } else if (status.includes('warming') || status.includes('running')) {
+                  icon = 'mdi:radiator';
+                  color = 'var(--success-color)';
+                } else if (status.includes('Waiting')) {
+                  icon = 'mdi:timer-sand';
+                  color = 'var(--info-color)';
+                } else if (status.includes('Cooldown')) {
+                  icon = 'mdi:timer-sand';
+                  color = 'var(--warning-color)';
+                }
+
+                return `<div style="display:flex; align-items:center; gap:8px; justify-content:center;">
+                  <ha-icon icon="${icon}" style="--mdc-icon-size:16px; color:${color};"></ha-icon>
+                  <span style="font-size:12px; color:${color};">${status}</span>
+                </div>`;
+              ]]]
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 8px 16px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - display: |
+                    [[[
+                      var status = entity ? entity.state : '';
+                      return (status === 'Idle.' || status === 'unavailable' || status === 'unknown' || status === '') ? 'none' : 'block';
+                    ]]]
+              label:
+                - font-size: 12px
+                - color: var(--primary-text-color)
+            grid_options:
+              columns: full
+              rows: 1
+
+          # ── Low fuel lockout override button (only visible when locked out) ──
+          - type: custom:button-card
+            entity: input_boolean.heater_low_fuel_lockout
+            name: Override Fuel Lockout
+            icon: mdi:shield-off-outline
+            show_state: false
+            tap_action:
+              action: call-service
+              service: input_boolean.turn_off
+              service_data:
+                entity_id: input_boolean.heater_low_fuel_lockout
+              confirmation:
+                text: "Override fuel lockout and allow heater to start?"
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 2px solid var(--error-color)
+                - border-radius: 12px
+                - padding: 10px 16px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - display: |
+                    [[[
+                      return entity.state === 'on' ? 'block' : 'none';
+                    ]]]
+              icon:
+                - color: var(--error-color)
+                - width: 20px
+              name:
+                - font-size: 13px
+                - font-weight: 500
+                - color: var(--error-color)
             grid_options:
               columns: full
               rows: 1

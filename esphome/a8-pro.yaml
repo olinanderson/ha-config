@@ -1,25 +1,20 @@
 ###############################################################################
-#  A8-PRO ESPHome firmware – roof-fan / IR hub
+#  A8-PRO ESPHome firmware – roof-fan / IR hub / AC climate controller
 #  board: esp32dev  –  IR TX GPIO2  –  IR RX GPIO23
 ###############################################################################
 
 esphome:
   name: ag-pro
   friendly_name: AG Pro
-  # on_boot:
-  #   priority: 200
-  #   then:
-  #     - script.execute: ac_reset_state
 
 # Put substitutions early so they're available everywhere
 substitutions:
   MAX_SPEED: "6"          # easy tweak later
-  # Thresholds picked from your CSV (off ≲ ~4 W; on ≳ ~20 W)
-  # Use a small gap (hysteresis) so we don't chatter at the boundary.
-  AC_OFF_W: "8.0"         # <= this is considered OFF
-  AC_ON_W:  "12.0"        # >= this is considered ON
-  AC_POWER_DELAY_ON:  "8s"    # require sustained draw before saying ON
-  AC_POWER_DELAY_OFF: "20s"   # require sustained ~0 before saying OFF
+  AC_DEFAULT_TEMP: "26"   # temp the AC starts at when powered on
+  AC_DEFAULT_FAN: "4"     # fan level the AC starts at when powered on (1L–6L)
+  AC_MIN_TEMP: "16"
+  AC_MAX_TEMP: "32"
+  AC_SHUTDOWN_MS: "30000" # compressor stop-down period (30s)
 
 esp32:
   board: esp32dev
@@ -32,10 +27,10 @@ esp32:
 logger:
 api:
   encryption:
-    key: "eAfqYMbU14k/xiU515AOQpr2WZuqm863nUA/10X4MMg="
+    key: !secret ag_pro_api_key
 ota:
   - platform: esphome
-    password: "bf7d55d33d30d31978cd24480bfebecf"
+    password: !secret ag_pro_ota_password
 
 wifi:
   ssid: !secret wifi_ssid
@@ -46,7 +41,7 @@ wifi:
     subnet: 255.255.255.0
   ap:
     ssid: "AG-Pro Fallback Hotspot"
-    password: "c0N3J6gZyR1w"
+    password: !secret ag_pro_ap_password
 
 captive_portal:
 
@@ -80,212 +75,87 @@ globals:
     restore_value: no
     initial_value: '0.0'
 
-  # # ---- A/C shadow-state ------------------------------------------------------
-  # - id: ac_power_on          # true = unit believed ON
-  #   type: bool
-  #   restore_value: no
-  #   initial_value: 'false'
-
-  # - id: ac_set_temp          # current set-point we *think* the unit has (°C)
-  #   type: int
-  #   restore_value: no
-  #   initial_value: '26'      # the A/C boots at 26 °C
-
-  # - id: ac_fan_speed         # 1 … 6 (A/C boots at speed 4)
-  #   type: int
-  #   restore_value: no
-  #   initial_value: '4'
-
-  # # 0 = idle, 1 = TEMP adjust mode, 2 = SPEED adjust mode
-  # - id: ac_adjust_mode
-  #   type: int
-  #   restore_value: no
-  #   initial_value: '0'
-
-  # # true while the 3s adjust-window is “live”
-  # - id: ac_window_live
-  #   type: bool
-  #   restore_value: no
-  #   initial_value: 'false'
-
-  # # true during the 30s compressor shutdown; ignore inputs while true
-  # - id: ac_in_shutdown
-  #   type: bool
-  #   restore_value: no
-  #   initial_value: 'false'
-
-  # # Track whether we believe we’ve positively identified the state since boot.
-  # - id: ac_state_known
-  #   type: bool
-  #   restore_value: no
-  #   initial_value: 'false'
-
-# number:
-#   - platform: template
-#     id: ac_setpoint_num
-#     name: "AC Set-Point"
-#     min_value: 16
-#     max_value: 32
-#     step: 1
-#     restore_value: yes
-#     optimistic: true
-#     on_value:
-#       - script.execute:
-#           id: _ac_setpoint_handler
-#           x: !lambda 'return x;'
-
-###############################################################################
-# External **indoor temperature** coming from the other ESPHome node
-###############################################################################
-# sensor:
-#   - platform: homeassistant
-#     id: cabin_temp
-#     entity_id: sensor.a32_pro_bme280_1_temperature
-#     accuracy_decimals: 1        # keep 0.1 °C resolution
-#     unit_of_measurement: "°C"   # keep HA happy
-#     device_class: "temperature"
-#     state_class: "measurement"
-#     internal: false             # export it back if you want to see it in HA
-
-#   # Home Assistant power (W)
-#   - platform: homeassistant
-#     id: ac_power_w
-#     entity_id: sensor.air_conditioning_power_24v
-#     device_class: power
-#     unit_of_measurement: "W"
-#     accuracy_decimals: 1
-#     # Smooth + tame bursts so the binary sensor below only sees slow changes
-#     filters:
-#       - sliding_window_moving_average:
-#           window_size: 10        # last ~10 samples
-#           send_every: 1
-#       - throttle: 1s             # don't spam
+  # ── AC climate controller state ──
+  - id: ac_assumed_on
+    type: bool
+    restore_value: yes
+    initial_value: 'false'
+  - id: ac_target_temp
+    type: int
+    restore_value: yes
+    initial_value: '${AC_DEFAULT_TEMP}'
+  - id: ac_current_temp
+    type: int
+    restore_value: yes
+    initial_value: '${AC_DEFAULT_TEMP}'
+  - id: ac_fan_level
+    type: int
+    restore_value: yes
+    initial_value: '${AC_DEFAULT_FAN}'
+  - id: ac_current_fan
+    type: int
+    restore_value: yes
+    initial_value: '${AC_DEFAULT_FAN}'
+  - id: ac_shutdown_active
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
 # ─────────────────────────────────────────────────────────────────────────────
-# Binary ON/OFF from power
+# HA sensor imports (for AC power feedback)
 # ─────────────────────────────────────────────────────────────────────────────
-# binary_sensor:
-#   # True = we've received at least one power sample from HA since boot
-#   - platform: template
-#     id: ac_power_known
-#     internal: true
-#     lambda: |-
-#       return id(ac_power_w).has_state();
+sensor:
+  - platform: homeassistant
+    id: ac_power_sensor
+    entity_id: sensor.air_conditioning_power_24v
+    on_value:
+      - lambda: |-
+          // If power > 12 W the AC is confirmed running
+          bool hw_on = x > 12.0f;
+          if (hw_on && !id(ac_assumed_on)) {
+            // AC turned on externally (via physical remote?)
+            id(ac_assumed_on) = true;
+            id(ac_current_temp) = ${AC_DEFAULT_TEMP};
+            id(ac_current_fan)  = ${AC_DEFAULT_FAN};
+          }
+          if (!hw_on && id(ac_assumed_on) && !id(ac_shutdown_active)) {
+            // AC turned off externally
+            id(ac_assumed_on) = false;
+          }
+  - platform: homeassistant
+    id: ac_room_temp
+    entity_id: sensor.bme280_1_temperature
+    unit_of_measurement: "°C"
+    filters:
+      - heartbeat: 30s
 
-#   # True = “power looks ON” after debouncing and hysteresis
-#   - platform: template
-#     id: ac_power_live
-#     name: "AC Power Live"
-#     device_class: power
-#     lambda: |-
-#       if (!id(ac_power_w).has_state()) return false;
-#       const float w = id(ac_power_w).state;
-#       // Hysteresis using last state
-#       static bool last = false;
-#       if (last) {               // was ON -> need to drop below OFF threshold
-#         last = (w >= atof("${AC_OFF_W}"));
-#       } else {                  // was OFF -> need to rise above ON threshold
-#         last = (w >= atof("${AC_ON_W}"));
-#       }
-#       return last;
-#     filters:
-#       - delayed_on:  ${AC_POWER_DELAY_ON}
-#       - delayed_off: ${AC_POWER_DELAY_OFF}
-#     on_press:
-#       - lambda: |-
-#           id(ac_power_on) = true;     // keep your shadow state in sync
-#     on_release:
-#       - lambda: |-
-#           id(ac_power_on) = false;
+text_sensor:
+  - platform: template
+    name: "24V AC Status"
+    id: ac_status_text
+    icon: mdi:air-conditioner
+    lambda: |-
+      if (id(ac_shutdown_active))
+        return std::string("Shutdown (compressor cooldown)");
+      if (!id(ac_assumed_on))
+        return std::string("Off");
+      char buf[48];
+      snprintf(buf, sizeof(buf), "Cooling — %d°C, Fan %d/6",
+               id(ac_current_temp), id(ac_current_fan));
+      return std::string(buf);
+    update_interval: 5s
 
-###############################################################################
-# 24 V Air-Conditioner – thermostat climate object
-###############################################################################
-# climate:
-#   - platform: thermostat
-#     id: ac_thermostat
-#     name: "24 V Air-Conditioner"
-
-#     # ------------------------------------------------------------------------
-#     # INPUT SENSOR (indoor temperature)
-#     # ------------------------------------------------------------------------
-#     sensor: cabin_temp
-
-#     # ------------------------------------------------------------------------
-#     # UI look & feel
-#     # ------------------------------------------------------------------------
-#     visual:
-#       min_temperature: 16
-#       max_temperature: 32
-#       temperature_step: 1
-
-#     # ------------------------------------------------------------------------
-#     # CORE ACTIONS – what to do when the thermostat changes state
-#     # ------------------------------------------------------------------------
-#     cool_action:
-#       - switch.turn_on: ac_cool_sw     # start compressor + blower relay
-#     fan_only_action:
-#       - switch.turn_on: ac_cool_sw     # just the blower
-#       - number.set:                    # push set-point far away (prevent cool)
-#           id: ac_setpoint_num
-#           value: 32
-#     idle_action:
-#       - switch.turn_off: ac_cool_sw    # stop everything
-
-#     # SAFETY / physical constraints (match the AC)
-#     min_idle_time:              30s
-#     min_cooling_off_time:       30s
-#     min_cooling_run_time:       5s
-#     min_fanning_off_time:       5s
-#     min_fanning_run_time:       5s
-
-#     # when the target temperature changes in HA, use our smarter handler
-#     target_temperature_change_action:
-#       - lambda: |-
-#           id(_ac_setpoint_handler).execute(id(ac_thermostat).target_temperature);
-
-#     # ------------------------------------------------------------------------
-#     # GLUE: keep the six-step fan in-sync with climate power
-#     # ------------------------------------------------------------------------
-#     on_state:
-#       - lambda: |-
-#           const bool cooling = (x.mode == climate::CLIMATE_MODE_COOL) ||
-#                                (x.mode == climate::CLIMATE_MODE_FAN_ONLY);
-#           const bool draw    = id(ac_power_live).state;
-#           if (id(ac_state_known) && (cooling != draw)) {
-#             ESP_LOGW("ac", "Climate/power mismatch; running reset.");
-#             id(ac_state_known) = false;
-#             id(ac_reset_state).execute();
-#           }
-
-# ─────────────────────────────────────────────────────────────────────────────
-# A/C blower – 6-step template fan
-# ─────────────────────────────────────────────────────────────────────────────
-fan:
-#   - platform: template
-#     id: ac_speed_fan
-#     name: "A/C Fan"
-#     speed_count: 6
-#     restore_mode: RESTORE_DEFAULT_OFF
-
-#     # Every time the dial changes, pass the numeric speed (1..6)
-#     on_speed_set:
-#       - script.execute:
-#           id: _ac_fan_handler
-#           spd: !lambda 'return x;'
-
-#     # Block turning the fan OFF while climate object is ON
-#     on_turn_off:
-#       - if:
-#           condition:
-#             lambda: 'return id(ac_thermostat).mode != climate::CLIMATE_MODE_OFF;'
-#           then:
-#             - logger.log: "A/C Fan OFF denied (climate running)"
-#             - fan.turn_on: ac_speed_fan
+binary_sensor:
+  - platform: template
+    name: "24V AC Compressor Shutdown"
+    id: ac_shutdown_sensor
+    icon: mdi:timer-sand
+    lambda: 'return id(ac_shutdown_active);'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fan entity (10-step speed fan)
 # ─────────────────────────────────────────────────────────────────────────────
+fan:
   - platform: speed
     name: "Roof Fan"
     id: roof_fan
@@ -335,7 +205,7 @@ output:
     write_action:
       - lambda: id(fan_output_float) = state;
 
-      # If we’re going above 0% speed, ensure we're not in ceiling mode,
+      # If we're going above 0% speed, ensure we're not in ceiling mode,
       # and the lid is OPEN before we send the first speed IR.
       - if:
           condition:
@@ -413,15 +283,6 @@ cover:
 # Misc switches
 # ─────────────────────────────────────────────────────────────────────────────
 switch:
-  # - platform: template                # A/C cooling “power”
-  #   id: ac_cool_sw
-  #   name: "AC Cooling Dummy"
-  #   optimistic: true
-  #   turn_on_action:
-  #     - script.execute: ac_turn_on
-  #   turn_off_action:
-  #     - script.execute: ac_turn_off
-
   - platform: template
     id: ceiling_fan_mode
     name: "Ceiling Fan Mode"
@@ -449,6 +310,101 @@ switch:
             - cover.template.publish:
                 id: roof_fan_lid
                 state: OPEN
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Climate entity – 24V Mini-Split AC (IR-controlled)
+#
+#   The mini-split has its own internal thermostat.  We use the ESPHome
+#   thermostat platform purely as a UI wrapper:
+#     – "Cool" mode  → IR power-on + sync to target temp/fan
+#     – "Off" mode   → IR power-off
+#     – Target temp   → IR temp_up/temp_down presses to match
+#     – Fan modes     → IR speed_up/speed_down presses to match
+#     – Swing toggle  → IR swing_flap
+#
+#   The BME280 room-temp sensor (on A32 Pro) is imported from HA for the
+#   "current temperature" readout.  Hysteresis is set very wide so the
+#   thermostat never auto-triggers cool/idle — we control everything
+#   manually through the mode and target_temperature_change actions.
+#
+#   Power-on defaults: 26 °C, fan level 4 (1L–6L).
+#   30 s compressor stop-down enforced via min_cooling_off_time.
+#   "Reinitialize" button re-syncs assumed ↔ actual state.
+# ─────────────────────────────────────────────────────────────────────────────
+climate:
+  - platform: thermostat
+    name: "24V Air Conditioner"
+    id: ac_climate
+    sensor: ac_room_temp
+    min_idle_time: 5s
+    min_cooling_off_time: ${AC_SHUTDOWN_MS}ms
+    min_cooling_run_time: 5s
+    startup_delay: true        # enforce compressor delay on boot
+    cool_deadband: 50.0       # effectively disable auto-trigger
+    cool_overrun: 50.0        # effectively disable auto-trigger
+    visual:
+      min_temperature: ${AC_MIN_TEMP}
+      max_temperature: ${AC_MAX_TEMP}
+      temperature_step: 1.0
+    default_preset: Normal
+    on_boot_restore_from: memory
+    preset:
+      - name: Normal
+        default_target_temperature_high: ${AC_DEFAULT_TEMP}
+        fan_mode: MEDIUM
+      - name: eco
+        default_target_temperature_high: 28
+        fan_mode: LOW
+      - name: boost
+        default_target_temperature_high: 18
+        fan_mode: HIGH
+
+    # ── Mode changes (user selects COOL / OFF in the HA UI) ──
+    #    Because the deadband is 50 °C, cool_action will never auto-fire.
+    #    The REAL on/off work is done by cool_mode / off_mode.
+    cool_action:
+      - logger.log: "AC thermostat cool_action (auto-trigger — should never fire)"
+    idle_action:
+      - logger.log: "AC thermostat idle (no action — AC manages its own thermostat)"
+    cool_mode:
+      - script.execute: ac_turn_on
+    off_mode:
+      - script.execute: ac_turn_off
+
+    # ── Target temperature changed ──
+    target_temperature_change_action:
+      - lambda: |-
+          int new_temp = (int)id(ac_climate).target_temperature;
+          if (new_temp < ${AC_MIN_TEMP}) new_temp = ${AC_MIN_TEMP};
+          if (new_temp > ${AC_MAX_TEMP}) new_temp = ${AC_MAX_TEMP};
+          id(ac_target_temp) = new_temp;
+          if (id(ac_assumed_on) && !id(ac_shutdown_active)) {
+            id(ac_sync_temp).execute();
+          }
+
+    # ── Fan modes: LOW=2, MEDIUM=4, HIGH=6 ──
+    fan_mode_low_action:
+      - lambda: |-
+          id(ac_fan_level) = 2;
+          if (id(ac_assumed_on) && !id(ac_shutdown_active))
+            id(ac_sync_fan).execute();
+    fan_mode_medium_action:
+      - lambda: |-
+          id(ac_fan_level) = 4;
+          if (id(ac_assumed_on) && !id(ac_shutdown_active))
+            id(ac_sync_fan).execute();
+    fan_mode_high_action:
+      - lambda: |-
+          id(ac_fan_level) = 6;
+          if (id(ac_assumed_on) && !id(ac_shutdown_active))
+            id(ac_sync_fan).execute();
+    min_fan_mode_switching_time: 2s
+
+    # ── Swing mode ──
+    swing_vertical_action:
+      - script.execute: air_conditioner_swing_flap
+    swing_off_action:
+      - script.execute: air_conditioner_swing_flap
 
 script:
   # ───────────────────────────────────────────────────────────────────────────
@@ -506,269 +462,6 @@ script:
           else                  next = tbl_in[step];
 
           if (next) next->execute();
-
-#   # --- 3s adjust-window: stays live while restarted; drops to idle at timeout
-#   - id: ac_adjust_window
-#     mode: restart
-#     then:
-#       - lambda: |-
-#           id(ac_window_live) = true;
-#       - delay: 3s
-#       - lambda: |-
-#           id(ac_window_live) = false;
-#           id(ac_adjust_mode) = 0;
-
-#   # --- 30s shutdown hold after OFF
-#   - id: ac_shutdown_hold
-#     mode: restart
-#     then:
-#       - lambda: |-
-#           id(ac_in_shutdown) = true;
-#           id(ac_adjust_mode) = 0;
-#           id(ac_window_live) = false;
-#       - delay: 30s
-#       - lambda: |-
-#           id(ac_in_shutdown) = false;
-
-#   - id: ac_turn_on
-#     mode: queued
-#     then:
-#       - if:
-#           condition:
-#             and:
-#               - lambda: 'return !id(ac_in_shutdown);'
-#               - or:
-#                   - not:
-#                       binary_sensor.is_on: ac_power_live       # measured OFF
-#                   - lambda: 'return !id(ac_state_known);'      # or unknown
-#           then:
-#             - logger.log: "[AC] Turning ON…"
-#             - script.execute: air_conditioner_on_off
-#             - delay: 8s
-#             - if:
-#                 condition:
-#                   binary_sensor.is_on: ac_power_live
-#                 then:
-#                   - lambda: |-
-#                       id(ac_power_on) = true;
-#                       id(ac_state_known) = true;
-#                       id(ac_set_temp)  = 26;
-#                       id(ac_fan_speed) = 4;
-#                 else:
-#                   # One more nudge with STRONG, then give up
-#                   - script.execute: air_conditioner_strong
-#                   - delay: 6s
-#                   - if:
-#                       condition:
-#                         binary_sensor.is_on: ac_power_live
-#                       then:
-#                         - lambda: |-
-#                             id(ac_power_on) = true;
-#                             id(ac_state_known) = true;
-#                       else:
-#                         - logger.log: "[AC] ON failed (no power draw)."
-
-#   - id: ac_turn_off
-#     mode: queued
-#     then:
-#       - if:
-#           condition:
-#             or:
-#               - binary_sensor.is_on: ac_power_live        # measured ON
-#               - lambda: 'return !id(ac_state_known);'     # or unknown
-#           then:
-#             - logger.log: "[AC] Turning OFF…"
-#             - script.execute: air_conditioner_on_off
-#             - delay: 10s
-#             - if:
-#                 condition:
-#                   not:
-#                     binary_sensor.is_on: ac_power_live
-#                 then:
-#                   - lambda: |-
-#                       id(ac_power_on) = false;
-#                       id(ac_state_known) = true;
-#                 else:
-#                   # We must’ve toggled the wrong way first; toggle again.
-#                   - script.execute: air_conditioner_on_off
-#                   - delay: 10s
-#                   - if:
-#                       condition:
-#                         not:
-#                           binary_sensor.is_on: ac_power_live
-#                       then:
-#                         - lambda: |-
-#                             id(ac_power_on) = false;
-#                             id(ac_state_known) = true;
-#                       else:
-#                         - logger.log: "[AC] OFF failed (still drawing power)."
-#       - script.execute: ac_shutdown_hold
-
-#   # --- Setpoint handler uses measured power
-#   - id: _ac_setpoint_handler
-#     mode: queued
-#     parameters:
-#       x: float
-#     then:
-#       - lambda: |-
-#           if (!id(ac_power_live).state || id(ac_in_shutdown)) {
-#             ESP_LOGI("ac", "Temp change ignored (power off or shutdown hold)");
-#             return;
-#           }
-
-#           auto clamp = [](int v, int lo, int hi){
-#             if (v < lo) return lo;
-#             if (v > hi) return hi;
-#             return v;
-#           };
-#           int wanted = clamp(int(roundf(x)), 16, 32);
-
-#           // Ensure we're in TEMP adjust mode; if not (or window expired), prime with one UP
-#           if (!(id(ac_adjust_mode) == 1 && id(ac_window_live))) {
-#             id(air_conditioner_temp_up).execute();
-#             id(ac_set_temp) = clamp(id(ac_set_temp) + 1, 16, 32);
-#             id(ac_adjust_mode) = 1;
-#             id(ac_adjust_window).execute();
-#             delay(250);
-#           }
-
-#           // Walk to target, refreshing the 3s window each keypress
-#           while (wanted > id(ac_set_temp)) {
-#             id(air_conditioner_temp_up).execute();
-#             id(ac_set_temp) = clamp(id(ac_set_temp) + 1, 16, 32);
-#             id(ac_adjust_window).execute();
-#             delay(250);
-#           }
-#           while (wanted < id(ac_set_temp)) {
-#             id(air_conditioner_temp_down).execute();
-#             id(ac_set_temp) = clamp(id(ac_set_temp) - 1, 16, 32);
-#             id(ac_adjust_window).execute();
-#             delay(250);
-#           }
-
-#   # --- Fan-speed handler uses measured power
-#   - id: _ac_fan_handler
-#     mode: queued
-#     parameters:
-#       spd: int
-#     then:
-#       - lambda: |-
-#           if (!id(ac_power_live).state || id(ac_in_shutdown)) {
-#             ESP_LOGI("ac", "Speed change ignored (power off or shutdown hold)");
-#             return;
-#           }
-
-#           auto clamp = [](int v, int lo, int hi){
-#             if (v < lo) return lo;
-#             if (v > hi) return hi;
-#             return v;
-#           };
-#           int wanted = clamp(spd, 1, 6);
-
-#           if (wanted == id(ac_fan_speed)) {
-#             ESP_LOGD("ac", "Speed already %d; nothing to do", wanted);
-#             return;
-#           }
-
-#           // Ensure SPEED adjust mode; if not (or window expired), prime toward target
-#           if (!(id(ac_adjust_mode) == 2 && id(ac_window_live))) {
-#             if (wanted > id(ac_fan_speed)) {
-#               id(air_conditioner_speed_up).execute();
-#               id(ac_fan_speed) = clamp(id(ac_fan_speed) + 1, 1, 6);
-#             } else {
-#               id(air_conditioner_speed_down).execute();
-#               id(ac_fan_speed) = clamp(id(ac_fan_speed) - 1, 1, 6);
-#             }
-#             id(ac_adjust_mode) = 2;
-#             id(ac_adjust_window).execute();
-#             delay(250);
-#           }
-
-#           // Walk to target, refreshing the 3s window each keypress
-#           while (wanted > id(ac_fan_speed)) {
-#             id(air_conditioner_speed_up).execute();
-#             id(ac_fan_speed) = clamp(id(ac_fan_speed) + 1, 1, 6);
-#             id(ac_adjust_window).execute();
-#             delay(250);
-#           }
-#           while (wanted < id(ac_fan_speed)) {
-#             id(air_conditioner_speed_down).execute();
-#             id(ac_fan_speed) = clamp(id(ac_fan_speed) - 1, 1, 6);
-#             id(ac_adjust_window).execute();
-#             delay(250);
-#           }
-
-#   - id: ac_reset_state
-#     mode: restart
-#     then:
-#       - logger.log: "[AC] Discovering state using power feedback…"
-
-#       # Case 0: we already have fresh power – trivial
-#       - if:
-#           condition:
-#             binary_sensor.is_on: ac_power_known
-#           then:
-#             - if:
-#                 condition:
-#                   binary_sensor.is_on: ac_power_live
-#                 then:
-#                   - lambda: |-
-#                       id(ac_power_on)    = true;
-#                       id(ac_state_known) = true;
-#                       ESP_LOGI("ac", "Power indicates ON; state known.");
-#                 else:
-#                   - lambda: |-
-#                       id(ac_power_on)    = false;
-#                       id(ac_state_known) = true;
-#                       ESP_LOGI("ac", "Power indicates OFF; state known.");
-#           else:
-#             - logger.log: "[AC] No power samples yet; probing…"
-
-#       # Probe 1: try to turn ON (toggle), then wait for watts to rise
-#       - script.execute: air_conditioner_on_off
-#       - delay: 8s
-#       - if:
-#           condition:
-#             binary_sensor.is_on: ac_power_live
-#           then:
-#             - lambda: |-
-#                 id(ac_power_on)    = true;
-#                 id(ac_state_known) = true;
-#                 ESP_LOGI("ac", "AC drew power after ON/OFF -> ON (known).");
-#           else:
-#             # Probe 2: maybe we just turned it *off* (unknown start). Toggle again.
-#             - logger.log: "[AC] Still no draw; toggling again…"
-#             - script.execute: air_conditioner_on_off
-#             - delay: 8s
-#             - if:
-#                 condition:
-#                   binary_sensor.is_on: ac_power_live
-#                 then:
-#                   - lambda: |-
-#                       id(ac_power_on)    = true;
-#                       id(ac_state_known) = true;
-#                       ESP_LOGI("ac", "AC drew power after second toggle -> ON (known).");
-#                 else:
-#                   # Probe 3: while ON, STRONG usually increases wattage; try it
-#                   - logger.log: "[AC] Trying STRONG to stimulate draw…"
-#                   - script.execute: air_conditioner_strong
-#                   - delay: 6s
-#                   - if:
-#                       condition:
-#                         binary_sensor.is_on: ac_power_live
-#                       then:
-#                         - lambda: |-
-#                             id(ac_power_on)    = true;
-#                             id(ac_state_known) = true;
-#                             ESP_LOGI("ac", "AC drew power after STRONG -> ON (known).");
-#                       else:
-#                         # Give up: consider it OFF (known off)
-#                         - lambda: |-
-#                             id(ac_power_on)    = false;
-#                             id(ac_state_known) = true;
-#                             ESP_LOGW("ac", "No power after probes; assuming OFF (known).");
-
-# # (IR scripts start below this point in your original file)
 
 
 ###############################################################################
@@ -870,6 +563,7 @@ script:
           transmitter_id: transmitter_main
           data: "0000 006D 0022 0000 015B 00AD 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0016 0016 0016 0016 0017 003F 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0040 0017 0015 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0017 0015 0016 0040 0016 0016 0016 0016 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0017 0181"
 
+
 ###############################################################################
 # 24V Air Conditioner Scripts
 ###############################################################################
@@ -923,6 +617,146 @@ script:
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0022 0000 015B 00AB 0018 0014 0017 0015 0017 0015 0017 0015 0017 0015 0017 0015 0017 0015 0016 0016 0016 0040 0017 003F 0016 0040 0016 0040 0017 003F 0016 0040 0016 0040 0016 0040 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0016 0040 0017 0015 0017 003F 0017 003F 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0181"
+
+###############################################################################
+# AC Climate Controller Scripts
+#
+#   These scripts bridge the climate entity ↔ IR commands.
+#   They track assumed temp/fan state in globals and send the correct
+#   number of temp_up/temp_down or speed_up/speed_down presses.
+###############################################################################
+
+  # ── Turn ON: send IR toggle, mark assumed on, sync to target ──
+  - id: ac_turn_on
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: 'return id(ac_shutdown_active);'
+          then:
+            - logger.log: "AC turn-on blocked — compressor shutdown in progress"
+            - lambda: 'return;'
+      - if:
+          condition:
+            lambda: 'return id(ac_assumed_on);'
+          then:
+            - logger.log: "AC already assumed on — skipping turn-on"
+            - lambda: 'return;'
+      - logger.log: "AC: sending ON toggle"
+      - script.execute: air_conditioner_on_off
+      - delay: 1500ms
+      # After power-on the AC starts at default temp/fan
+      - lambda: |-
+          id(ac_assumed_on)   = true;
+          id(ac_current_temp) = ${AC_DEFAULT_TEMP};
+          id(ac_current_fan)  = ${AC_DEFAULT_FAN};
+          // Read desired target from the climate entity
+          id(ac_target_temp) = (int)id(ac_climate).target_temperature;
+      - script.execute: ac_sync_temp
+      - script.wait: ac_sync_temp
+      - script.execute: ac_sync_fan
+      - script.wait: ac_sync_fan
+
+  # ── Turn OFF: send IR toggle, start shutdown timer ──
+  - id: ac_turn_off
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: 'return !id(ac_assumed_on);'
+          then:
+            - logger.log: "AC already assumed off — skipping turn-off"
+            - lambda: 'return;'
+      - logger.log: "AC: sending OFF toggle"
+      - script.execute: air_conditioner_on_off
+      - lambda: |-
+          id(ac_assumed_on)       = false;
+          id(ac_shutdown_active)  = true;
+      - delay: ${AC_SHUTDOWN_MS}ms
+      - lambda: |-
+          id(ac_shutdown_active) = false;
+          ESP_LOGI("ac", "Compressor shutdown period complete");
+
+  # ── Sync temperature: press temp_up/temp_down to reach target ──
+  - id: ac_sync_temp
+    mode: restart
+    then:
+      - lambda: |-
+          ESP_LOGI("ac", "Syncing temp: %d -> %d", id(ac_current_temp), id(ac_target_temp));
+      - while:
+          condition:
+            lambda: 'return id(ac_current_temp) < id(ac_target_temp);'
+          then:
+            - script.execute: air_conditioner_temp_up
+            - delay: 400ms
+            - lambda: 'id(ac_current_temp) += 1;'
+      - while:
+          condition:
+            lambda: 'return id(ac_current_temp) > id(ac_target_temp);'
+          then:
+            - script.execute: air_conditioner_temp_down
+            - delay: 400ms
+            - lambda: 'id(ac_current_temp) -= 1;'
+      - lambda: |-
+          ESP_LOGI("ac", "Temp synced to %d", id(ac_current_temp));
+
+  # ── Sync fan speed: press speed_up/speed_down to reach target ──
+  - id: ac_sync_fan
+    mode: restart
+    then:
+      - while:
+          condition:
+            lambda: 'return id(ac_current_fan) < id(ac_fan_level);'
+          then:
+            - script.execute: air_conditioner_speed_up
+            - delay: 400ms
+            - lambda: 'id(ac_current_fan) += 1;'
+      - while:
+          condition:
+            lambda: 'return id(ac_current_fan) > id(ac_fan_level);'
+          then:
+            - script.execute: air_conditioner_speed_down
+            - delay: 400ms
+            - lambda: 'id(ac_current_fan) -= 1;'
+      - lambda: |-
+          ESP_LOGI("ac", "Fan synced to level %d", id(ac_current_fan));
+
+  # ── Reinitialize: power-cycle the AC and re-sync all state ──
+  #    Use when IR commands were missed and state is out of sync.
+  - id: ac_reinitialize
+    mode: single
+    then:
+      - logger.log:
+          level: WARN
+          format: "AC REINITIALIZE: power-cycling to re-sync state"
+      # Step 1: If assumed on, turn off first
+      - if:
+          condition:
+            lambda: 'return id(ac_assumed_on);'
+          then:
+            - script.execute: air_conditioner_on_off
+            - lambda: |-
+                id(ac_assumed_on)      = false;
+                id(ac_shutdown_active) = true;
+            - delay: ${AC_SHUTDOWN_MS}ms
+            - lambda: 'id(ac_shutdown_active) = false;'
+      # Step 2: Turn on (AC will start at defaults)
+      - script.execute: air_conditioner_on_off
+      - delay: 1500ms
+      - lambda: |-
+          id(ac_assumed_on)   = true;
+          id(ac_current_temp) = ${AC_DEFAULT_TEMP};
+          id(ac_current_fan)  = ${AC_DEFAULT_FAN};
+          // Read desired targets from the climate entity
+          id(ac_target_temp) = (int)id(ac_climate).target_temperature;
+      # Step 3: Sync to desired targets
+      - script.execute: ac_sync_temp
+      - script.wait: ac_sync_temp
+      - script.execute: ac_sync_fan
+      - script.wait: ac_sync_fan
+      - lambda: |-
+          ESP_LOGI("ac", "Reinitialize complete: %d C, fan %d",
+                   id(ac_target_temp), id(ac_fan_level));
 
 ###############################################################################
 # IR Fan Control Scripts
@@ -1099,7 +933,7 @@ script:
 
 button:
 ###############################################################################
-# Button Definitions for 24V Air Conditioner
+# Button Definitions for Creality T100 Speakers
 ###############################################################################    
   - platform: template
     name: "Creality T100 Speakers - Standby"
@@ -1134,19 +968,19 @@ button:
     on_press:
       - script.execute: creality_t100_speakers_eq_gaming
   - platform: template
-    name: "Creality T100 Speakers - BT/USB Stop"
+    name: "Creality T100 Speakers - BT-USB Stop"
     on_press:
       - script.execute: creality_t100_speakers_bt_usb_stop
   - platform: template
-    name: "Creality T100 Speakers - BT/USB PlayPause"
+    name: "Creality T100 Speakers - BT-USB PlayPause"
     on_press:
       - script.execute: creality_t100_speakers_bt_usb_play_pause
   - platform: template
-    name: "Creality T100 Speakers - BT/USB Next Song"
+    name: "Creality T100 Speakers - BT-USB Next Song"
     on_press:
       - script.execute: creality_t100_speakers_bt_usb_next_song
   - platform: template
-    name: "Creality T100 Speakers - BT/USB Previous Song"
+    name: "Creality T100 Speakers - BT-USB Previous Song"
     on_press:
       - script.execute: creality_t100_speakers_bt_usb_previous_song
   - platform: template
@@ -1182,7 +1016,7 @@ button:
 # Button Definitions for 24V Air Conditioner
 ###############################################################################  
   - platform: template
-    name: "24V AC - On/Off"
+    name: "24V AC - On-Off"
     on_press:
       - script.execute: air_conditioner_on_off
   - platform: template
@@ -1221,6 +1055,13 @@ button:
     name: "24V AC - Sleep"
     on_press:
       - script.execute: air_conditioner_sleep
+
+  # ── AC Climate Controller buttons ──
+  - platform: template
+    name: "24V AC - Reinitialize"
+    icon: mdi:restart
+    on_press:
+      - script.execute: ac_reinitialize
 
 ###############################################################################
 # Button Definitions for IR Fan Control

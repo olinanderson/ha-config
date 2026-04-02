@@ -197,10 +197,12 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 |---|---|
 | `climate.a32_pro_van_hydronic_heating_pid` | PID thermostat |
 | `switch.a32_pro_switch24_hydronic_heater` | Hydronic heater relay |
-| `sensor.a32_pro_hydronic_heater_power_supply_lockout_status` | Lockout status text |
+| `sensor.a32_pro_hydronic_heater_status` | Heater status text (retry state, fuel lockout, cooldown) |
 | `sensor.a32_pro_coolant_blower_heating_pid_climate_result` | PID output (0–1) |
 | `light.a32_pro_a32_pro_dac_0` | Blower matrix (DAC fan speed as light entity) |
 | `switch.a32_pro_fan_override_manual_on_off` | Fan manual override |
+| `input_boolean.hot_water_mode` | Hot water mode — keeps heater running when climate is OFF |
+| `input_boolean.heater_low_fuel_lockout` | Low fuel lockout — blocks heater when fuel < 25% after failed retry |
 
 ### Roof Fan
 | Entity | Description |
@@ -331,6 +333,8 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 | `input_boolean.speedtest_running` | Speedtest in progress |
 | `input_boolean.windows_audio_stream` | Windows Scream audio enabled |
 | `input_boolean.inverter_toggle_pending` | Inverter toggle in progress |
+| `input_boolean.hot_water_mode` | Hot water mode — keeps hydronic heater on when climate turns off |
+| `input_boolean.heater_low_fuel_lockout` | Low fuel heater lockout — auto-set when fuel < 25% after failed retry, auto-cleared when fuel > 30% |
 | `input_number.main_light_warmth` | Main light CCT (250–500 mireds) |
 | `input_number.shore_charge_reset_threshold` | Shore charger reset SOC % |
 | `input_number.acceleration_stability_threshold` | Accel threshold (km/h/s) |
@@ -540,3 +544,105 @@ Used in `old_home.yaml`:
 - **Fuel level** is noisy from OBD — use `sensor.stable_fuel_level` or `sensor.wican_fuel_5_min_mean`.
 - **Roof fan direction**: `forward` = exhaust, `reverse` = intake.
 - **Scenes are all dynamic** — `scenes.yaml` is empty. They're created via `scene.create` in scripts/automations.
+
+---
+
+## Hydronic Heating System — Architecture & Coolant Loop
+
+The van has a **gasoline-fired hydronic heater** (**Espar Hydronic S3 B5E**) that heats
+coolant in a closed loop. The coolant circulates through multiple heat exchangers before
+returning to the heater. This is the core climate and hot water system for the van.
+
+The heater is controlled via a single **signal wire** — applying 12V turns it on,
+removing 12V turns it off. ESPHome drives this through a relay (`hydronic_heater_on_off_physical`).
+
+### Sensor Mounting
+
+- **Coolant temp** (`s5140_ch34_temp`): NTC probe aluminum-taped to the outside of one
+  of the water-to-water heat exchangers. Reads surface temperature, not true inline
+  coolant temp — expect it to lag and read lower than actual coolant.
+- **Blower air temp** (`s5140_ch35_temp`): NTC probe dangling inside one of the blower
+  matrix air ducts. Reads the heated air output temperature.
+
+### Coolant Loop (physical order)
+
+```
+Espar Hydronic S3 B5E (gasoline burner, 12V signal wire on/off)
+  │
+  ├─► Water-to-Water Heat Exchanger #1 — MAIN water system
+  │     (heats fresh water for sink/faucet via counterflow plate HX)
+  │     [coolant temp NTC aluminum-taped to this HX housing]
+  │
+  ├─► Water-to-Water Heat Exchanger #2 — RECIRCULATING SHOWER loop
+  │     (heats recirculating shower water via counterflow plate HX)
+  │
+  ├─► Air Blower Matrix (water-to-air heater core + PID-controlled fan)
+  │     - Blows hot air into cabin for space heating
+  │     - Fan speed controlled via DAC output (`light.a32_pro_a32_pro_dac_0`)
+  │     - PID climate entity: `climate.a32_pro_van_hydronic_heating_pid`
+  │     - Coolant temp sensor: `sensor.a32_pro_s5140_channel_34_temperature_blower_coolant`
+  │     - Blower air temp sensor: `sensor.a32_pro_s5140_channel_35_temperature_blower_air`
+  │     [air temp NTC dangling in blower duct]
+  │
+  └─► Return to heater (exits cabin, passes engine bay, loops back)
+```
+
+### Key Implications
+
+- **The water HX's are upstream of the air matrix.** When the heater runs, the water
+  systems always get heated first — even if climate (air heating) is the reason the
+  heater is on. The dashboard reflects this: "Heating air (+ water passthrough)".
+- **Hot Water Mode** (`input_boolean.hot_water_mode`): Keeps the hydronic heater running
+  even when the PID climate entity is turned OFF. Use case: you want hot water at the
+  sink/shower but don't need cabin air heating. The blower fan can be off while coolant
+  still circulates through the water HXs.
+- **Both modes simultaneously**: When climate is ON *and* hot water mode is ON, the
+  dashboard shows "Heating air + water". When climate turns off but hot water mode stays
+  on, the heater keeps running and the dashboard shows "Hot water only".
+- **Coolant temperature** (`s5140_ch34_temp`) is measured at the blower matrix inlet —
+  this is *after* the water HXs have extracted some heat, so it reads lower than the
+  heater outlet temperature.
+
+### Heater Startup & Retry Logic (ESPHome)
+
+When the PID climate entity turns ON:
+1. ESPHome starts `heater_start_with_retry` script
+2. Records baseline coolant temp, turns on heater relay
+3. Waits **5 minutes**, checks if coolant rose ≥ 2°C
+4. If yes → state 3 ("running, confirmed")
+5. If no → cycles heater off/on (retry), waits another 5 min
+6. If retry succeeds → state 3; if fails + fuel < 25% → state 5 (fuel lockout);
+   otherwise → state 4 (failed)
+
+### Low Fuel Lockout
+
+- **Trigger**: Heater fails to start after retry AND `sensor.stable_fuel_level` < 25%
+- **Effect**: Sets `input_boolean.heater_low_fuel_lockout` ON → ESPHome blocks heater
+  startup, dashboard shows red lockout message + override button
+- **Auto-clear**: HA automation clears lockout when fuel rises above 30% for 2 min
+- **Manual override**: Dashboard button (with confirmation dialog)
+
+### Heater Status Messages (`sensor.a32_pro_hydronic_heater_status`)
+
+| State | Message |
+|---|---|
+| 0 (idle, heater off) | "Idle." (hidden on dashboard) |
+| 1 (first attempt) | "Starting heater -> Waiting for coolant to warm up..." |
+| 2 (retrying) | "First attempt failed -> Retrying..." |
+| 3 (confirmed) | "Heater running -> Coolant warming up." |
+| 4 (failed) | "Heater failed to start after retry." |
+| 5 (fuel lockout) | "Low fuel lockout (XX%) -> Refuel or override from dashboard." |
+| Running (no retry) | "Heater running." |
+| Cooldown | "Cooldown -> Xs before power can be removed." |
+
+### Dashboard Heating Mode Context
+
+The heating details card on the home dashboard shows contextual mode labels:
+
+| Condition | Label |
+|---|---|
+| Heater ON + Climate ON + Hot Water ON | "Heating air + water" (orange) |
+| Heater ON + Hot Water ON + Climate OFF | "Hot water only" (blue) |
+| Heater ON + Climate ON + Hot Water OFF | "Heating air (+ water passthrough)" (orange) |
+| Heater ON (manual, no mode active) | "Heater on (manual)" (orange) |
+| Heater OFF | No label shown |

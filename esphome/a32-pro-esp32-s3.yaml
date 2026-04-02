@@ -46,12 +46,13 @@ api:
 
 esp32_ble_tracker:
   scan_parameters:
-    interval: 1100ms
-    window: 1100ms
+    interval: 1200ms
+    window: 800ms
     active: true
 
 bluetooth_proxy:
   active: true
+  cache_services: true
 
 ota:
   platform: esphome
@@ -77,17 +78,6 @@ time:
     id: real_time_clock
     timezone: "UTC"  # or your preferred timezone
     
-# wifi:
-#   ssid: KinCony
-#   password: a12345678
-
-#   # Enable fallback hotspot (captive portal) in case wifi connection fails
-#   ap:
-#     ssid: "A32-Pro Fallback Hotspot"
-#     password: "25JYfblp8QJP"
-
-# captive_portal:
-
 ethernet:
   type: W5500
   manual_ip:
@@ -128,34 +118,17 @@ pcf8574:
 
 uart:
   - id: mbus
-    baud_rate: 19200 
-    debug:
-      direction: BOTH
-      dummy_receiver: true
-      after:
-        timeout: 1000ms
+    baud_rate: 19200
     tx_pin: 9
     rx_pin: 8
 
   - id: uart_tuya
     baud_rate: 115200
-    debug:
-      direction: BOTH
-      dummy_receiver: true
-      after:
-        timeout: 10ms
     tx_pin: 15
     rx_pin: 16
 
   - id: uart_sim7600
     baud_rate: 115200
-    debug:
-      direction: BOTH
-      dummy_receiver: true
-      after:
-        timeout: 10ms
-      sequence:
-        - lambda: UARTDebug::log_string(direction, bytes);
     tx_pin: 18
     rx_pin: 17
 
@@ -192,11 +165,11 @@ modbus_controller:
   - id: s5140
     address: 5
     modbus_id: modbus1
-    update_interval: 100ms      # poll less often
+    update_interval: 250ms
 
 button: 
   - platform: template
-    name: "Inverter On/Off Toggle"
+    name: "Inverter On-Off Toggle"
     on_press:
       then:
         - script.execute: push_inverter
@@ -221,11 +194,6 @@ switch:
     uart_id: uart_sim7600
     name: "UART 4G"
     data: "AT+CGSN\r\n" # read 4G SIM7600 ID
-
-  # - platform: uart
-  #   uart_id: uart_tuya
-  #   name: "UART TUYA2"
-  #   data: [0x55, 0xaa, 0x03, 0x00, 0x00, 0x01, 0x01, 0x04]
 
   # Kincony D08 Expansion Relay Module
   - platform: gpio
@@ -618,7 +586,7 @@ switch:
 
     # Coolant Blower
   - platform: template
-    name: "Coolant Blower Mode (Auto/Manual)"
+    name: "Coolant Blower Mode (Auto-Manual)"
     id: blower_mode_switch
      # Return true if in Auto mode
     lambda: |-
@@ -760,6 +728,16 @@ switch:
       - switch.turn_off: heating_pads_auto_thermostat_grey_water_tank_x2_on_off
 
 binary_sensor:
+  # Import HA input_boolean for hot water mode
+  - platform: homeassistant
+    id: ha_hot_water_mode
+    entity_id: input_boolean.hot_water_mode
+
+  # Import HA input_boolean for low fuel heater lockout
+  - platform: homeassistant
+    id: ha_heater_fuel_lockout
+    entity_id: input_boolean.heater_low_fuel_lockout
+
   - platform: gpio
     name: DI01
     pin:
@@ -1237,28 +1215,51 @@ text_sensor:
     name: "MPPT2 Error reason"
     type: CHARGER_ERROR
 
-# Template text sensor for lockout status
+# Heater status text sensor (replaces old lockout-only sensor)
   - platform: template
-    name: "Hydronic Heater Power Supply Lockout Status"
-    id: heater_ps_lockout_status
+    name: "Hydronic Heater Status"
+    id: heater_status_text
     update_interval: 1s
     lambda: |-
+      int state = id(heater_retry_state);
+      bool heater_on = id(hydronic_heater_on_off).state;
       float now_sec = id(real_time_clock).now().timestamp;
       float last_off = id(hydronic_heater_last_off_timestamp);
-      bool heater_on = id(hydronic_heater_on_off).state;
-      if (heater_on) {
-        return {"Hydronic heater RUNNING -> Turn off hydronic heater and wait for cooldown before removing power."};
-      } else {
-        float diff = now_sec - last_off;
-        if (diff < 180.0) {
-          float remain = 180.0 - diff;
-          char buffer[120];
-          sprintf(buffer, "Cooldown active -> ~%.0f s left before removing power is allowed.", remain);
-          return {buffer};
-        } else {
-          return {"No lockout -> Safe to kill power (resets any fault codes)."};
-        }
+
+      // Priority 1: retry state machine messages
+      if (state == 1 && heater_on) {
+        return {"Starting heater -> Waiting for coolant to warm up..."};
       }
+      if (state == 2 && heater_on) {
+        return {"First attempt failed -> Retrying..."};
+      }
+      if (state == 3) {
+        return {"Heater running -> Coolant warming up."};
+      }
+      if (state == 4) {
+        return {"Heater failed to start after retry."};
+      }
+      if (state == 5) {
+        float fuel = id(ha_stable_fuel_level).state;
+        if (std::isnan(fuel)) fuel = 0;
+        char buf[120];
+        sprintf(buf, "Low fuel lockout (%.0f%%) -> Refuel or override from dashboard.", fuel);
+        return {buf};
+      }
+
+      // Priority 2: power supply cooldown lockout
+      if (heater_on) {
+        return {"Heater running."};
+      }
+      float diff = now_sec - last_off;
+      if (last_off > 0 && diff < 180.0) {
+        float remain = 180.0 - diff;
+        char buffer[80];
+        sprintf(buffer, "Cooldown -> %.0fs before power can be removed.", remain);
+        return {buffer};
+      }
+
+      return {"Idle."};
 
 gp8403:
   id: my_gp8403
@@ -1290,7 +1291,117 @@ globals:
     restore_value: no
     initial_value: 'false'
 
+  # Heater retry state machine:
+  #   0 = idle
+  #   1 = first attempt (waiting for warmup)
+  #   2 = retrying (second attempt)
+  #   3 = running (warmup confirmed)
+  #   4 = failed (both attempts failed)
+  #   5 = locked out (low fuel after failed retry)
+  - id: heater_retry_state
+    type: int
+    restore_value: no
+    initial_value: '0'
+
+  # Coolant temperature recorded when heater was started
+  - id: heater_start_coolant_temp
+    type: float
+    restore_value: no
+    initial_value: '0.0'
+
 script:
+  ########################################################################
+  #  heater_start_with_retry – starts the hydronic heater and monitors   #
+  #  coolant temperature. If coolant doesn't rise by at least 2°C in     #
+  #  5 minutes, turns heater off/on once (retry). If the second attempt  #
+  #  also fails after 5 minutes, gives up and sets state to failed.      #
+  ########################################################################
+  - id: heater_start_with_retry
+    mode: restart
+    then:
+      # Record starting coolant temperature
+      - lambda: |-
+          float temp = id(s5140_ch34_temp).state;
+          if (std::isnan(temp)) temp = 0.0;
+          id(heater_start_coolant_temp) = temp;
+          id(heater_retry_state) = 1;
+          ESP_LOGI("HEATER", "Starting heater. Coolant baseline: %.1f C", temp);
+      # Turn on the heater
+      - switch.turn_on: hydronic_heater_on_off_physical
+      # Wait 5 minutes for warmup
+      - delay: 5min
+      # Check if coolant warmed up (at least 2 C rise)
+      - lambda: |-
+          float now_temp = id(s5140_ch34_temp).state;
+          float start_temp = id(heater_start_coolant_temp);
+          if (std::isnan(now_temp)) now_temp = start_temp;
+          float rise = now_temp - start_temp;
+          ESP_LOGI("HEATER", "First check: start=%.1f now=%.1f rise=%.1f", start_temp, now_temp, rise);
+          if (rise >= 2.0) {
+            id(heater_retry_state) = 3;
+            ESP_LOGI("HEATER", "Coolant warming -> heater is working.");
+          }
+      # If already confirmed working, stop here
+      - if:
+          condition:
+            lambda: 'return id(heater_retry_state) == 3;'
+          then:
+            - logger.log:
+                level: INFO
+                format: "Heater confirmed working on first attempt."
+          else:
+            # First attempt failed - retry
+            - logger.log:
+                level: WARN
+                format: "Heater first attempt failed -> coolant did not warm up. Retrying..."
+            - lambda: 'id(heater_retry_state) = 2;'
+            # Cycle the heater off then on
+            - switch.turn_off: hydronic_heater_on_off_physical
+            - delay: 10s
+            - switch.turn_on: hydronic_heater_on_off_physical
+            # Record new baseline for retry
+            - lambda: |-
+                float temp = id(s5140_ch34_temp).state;
+                if (std::isnan(temp)) temp = 0.0;
+                id(heater_start_coolant_temp) = temp;
+                ESP_LOGI("HEATER", "Retry started. New coolant baseline: %.1f C", temp);
+            # Wait another 5 minutes
+            - delay: 5min
+            # Final check
+            - lambda: |-
+                float now_temp = id(s5140_ch34_temp).state;
+                float start_temp = id(heater_start_coolant_temp);
+                if (std::isnan(now_temp)) now_temp = start_temp;
+                float rise = now_temp - start_temp;
+                float fuel = id(ha_stable_fuel_level).state;
+                if (std::isnan(fuel)) fuel = 100.0;  // assume OK if unknown
+                ESP_LOGI("HEATER", "Retry check: start=%.1f now=%.1f rise=%.1f fuel=%.0f%%", start_temp, now_temp, rise, fuel);
+                if (rise >= 2.0) {
+                  id(heater_retry_state) = 3;
+                  ESP_LOGI("HEATER", "Coolant warming on retry -> heater is working.");
+                } else if (fuel < 25.0) {
+                  id(heater_retry_state) = 5;
+                  ESP_LOGW("HEATER", "Heater failed + fuel low (%.0f%%) -> locking out.", fuel);
+                } else {
+                  id(heater_retry_state) = 4;
+                  ESP_LOGW("HEATER", "Heater failed to start after retry. Giving up.");
+                }
+            # If fuel is low after failure, activate the HA lockout boolean
+            - if:
+                condition:
+                  lambda: 'return id(heater_retry_state) == 5;'
+                then:
+                  - homeassistant.service:
+                      service: input_boolean.turn_on
+                      data:
+                        entity_id: input_boolean.heater_low_fuel_lockout
+                  - switch.turn_off: hydronic_heater_on_off_physical
+                  - lambda: |-
+                      id(hydronic_heater_last_off_timestamp) = id(real_time_clock).now().timestamp;
+                  - logger.log:
+                      level: WARN
+                      format: "Low fuel lockout activated -> heater turned OFF."
+
   ########################################################################
   #  set_water_state – switch between the three operating modes of the   #
   #  water system.                                                       #
@@ -1417,10 +1528,50 @@ climate:
             - lambda: |-
                 id(blower_active) = true;
                 ESP_LOGI("CLIMATE", "Climate is ON. PID enabled.");
+            # Start the heater with retry logic (only if not already running/retrying/locked out)
+            - if:
+                condition:
+                  and:
+                    - switch.is_on: hydronic_heater_power_supply_control
+                    - switch.is_off: hydronic_heater_on_off_physical
+                    - lambda: 'return !id(heater_start_with_retry).is_running();'
+                    - lambda: 'return !id(ha_heater_fuel_lockout).state;'
+                then:
+                  - script.execute: heater_start_with_retry
+                  - logger.log:
+                      level: INFO
+                      format: "Climate ON -> Starting heater with retry logic."
+                else:
+                  - if:
+                      condition:
+                        lambda: 'return id(ha_heater_fuel_lockout).state;'
+                      then:
+                        - lambda: 'id(heater_retry_state) = 5;'
+                        - logger.log:
+                            level: WARN
+                            format: "Climate ON but heater locked out (low fuel). Override from dashboard."
           else:
             - lambda: |-
                 id(blower_active) = false;
                 ESP_LOGI("CLIMATE", "Climate is OFF. PID disabled.");
+            # Stop the retry script if running
+            - script.stop: heater_start_with_retry
+            - lambda: 'id(heater_retry_state) = 0;'
+            # Turn off the hydronic heater UNLESS hot water mode is active
+            - if:
+                condition:
+                  lambda: 'return id(ha_hot_water_mode).state;'
+                then:
+                  - logger.log:
+                      level: INFO
+                      format: "Climate OFF but Hot Water Mode is ON - keeping hydronic heater running."
+                else:
+                  - switch.turn_off: hydronic_heater_on_off_physical
+                  - lambda: |-
+                      id(hydronic_heater_last_off_timestamp) = id(real_time_clock).now().timestamp;
+                  - logger.log:
+                      level: INFO
+                      format: "Climate OFF -> Hydronic heater turned OFF."
           
                   
   # 1) Battery Heater Thermostat
@@ -1530,11 +1681,17 @@ light:
     gamma_correct: 1.0
 
 sensor:
+  # Import stable fuel level from HA (for heater low-fuel lockout)
+  - platform: homeassistant
+    id: ha_stable_fuel_level
+    entity_id: sensor.stable_fuel_level
+    unit_of_measurement: "%"
+
   - platform: adc
     pin: 7
     name: "A32 Pro A1 Voltage"
     update_interval: 5s
-    attenuation: 11db
+    attenuation: 12db
     filters:
       - lambda:
           if (x >= 3.11) {
@@ -1548,7 +1705,7 @@ sensor:
     pin: 6
     name: "A32 Pro A2 Voltage"
     update_interval: 5s
-    attenuation: 11db
+    attenuation: 12db
     filters:
       # - multiply: 1.51515
       - lambda:
@@ -1564,7 +1721,7 @@ sensor:
     name: "A32 Pro A3 Current"
     update_interval: 5s
     unit_of_measurement: mA
-    attenuation: 11db
+    attenuation: 12db
     filters:
       - multiply: 6.66666666
   - platform: adc
@@ -1572,7 +1729,7 @@ sensor:
     name: "A32 Pro A4 Current"
     update_interval: 5s
     unit_of_measurement: mA
-    attenuation: 11db
+    attenuation: 12db
     filters:
       - multiply: 6.66666666
 
@@ -1590,6 +1747,8 @@ sensor:
     address: 100
     register_type: holding
     unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
     value_type: U_WORD
     accuracy_decimals: 2
     filters:
@@ -1643,6 +1802,8 @@ sensor:
     address: 101
     register_type: holding
     unit_of_measurement: "V"
+    device_class: voltage
+    state_class: measurement
     value_type: U_WORD
     accuracy_decimals: 2
     filters:
@@ -1668,7 +1829,7 @@ sensor:
   - platform: modbus_controller
     modbus_controller_id: s5140
     id: shower_tank_voltage         
-    name: "S5140 Channel 3 Voltage - Shower Tank Level Sensor (on/off, capacitive proximity sensor)"
+    name: "S5140 Channel 3 Voltage - Shower Tank Level Sensor (capacitive proximity sensor)"
     address: 102
     register_type: holding
     unit_of_measurement: "V"
@@ -1690,6 +1851,8 @@ sensor:
     address: 103
     register_type: holding
     unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
     value_type: U_WORD
     accuracy_decimals: 2
     filters:
@@ -1701,6 +1864,8 @@ sensor:
     address: 104
     register_type: holding
     unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
     value_type: U_WORD
     accuracy_decimals: 2
     filters:
@@ -1712,6 +1877,8 @@ sensor:
     address: 105
     register_type: holding
     unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
     value_type: U_WORD
     accuracy_decimals: 2
     filters:
@@ -1723,6 +1890,8 @@ sensor:
     address: 106
     register_type: holding
     unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
     value_type: U_WORD
     accuracy_decimals: 2
     filters:
@@ -1734,99 +1903,12 @@ sensor:
     address: 107
     register_type: holding
     unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
     value_type: U_WORD
     accuracy_decimals: 2
     filters:
       - lambda: "return (x / 100.0) * (100.0 / 5.0);"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 9 Current (12V) - Battery Heater"
-  #   address: 108
-  #   register_type: holding
-  #   unit_of_measurement: "A"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return -1 * (x / 100.0) * (10.0 / 5.0);"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 10 Current (12V) - Roof Fan"
-  #   address: 109
-  #   register_type: holding
-  #   unit_of_measurement: "A"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return -1 * (x / 100.0) * (10.0 / 5.0);"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 11 Current (24V) - Bed Motor"
-  #   address: 110
-  #   register_type: holding
-  #   unit_of_measurement: "A"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return -1 * (x / 100.0) * (10.0 / 5.0);"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 12 Current (24V) - Shore Power Charger"
-  #   address: 111
-  #   register_type: holding
-  #   unit_of_measurement: "A"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return (x / 100.0) * (70.0 / 5.0);"
-
-  # Channels 9–16: 4–20mA (Divide by 100 for scaling)
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 9 Current"
-  #   address: 108
-  #   register_type: holding
-  #   unit_of_measurement: "mA"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 10 Current"
-  #   address: 109
-  #   register_type: holding
-  #   unit_of_measurement: "mA"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 11 Current"
-  #   address: 110
-  #   register_type: holding
-  #   unit_of_measurement: "mA"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 12 Current"
-  #   address: 111
-  #   register_type: holding
-  #   unit_of_measurement: "mA"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100.0;"
 
   - platform: modbus_controller
     modbus_controller_id: s5140
@@ -1834,6 +1916,8 @@ sensor:
     address: 112
     register_type: holding
     unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
     value_type: U_WORD
     accuracy_decimals: 2
     filters:
@@ -1845,6 +1929,8 @@ sensor:
     address: 113
     register_type: holding
     unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
     value_type: U_WORD
     accuracy_decimals: 2
     filters:
@@ -1856,6 +1942,8 @@ sensor:
     address: 114
     register_type: holding
     unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
     value_type: U_WORD
     accuracy_decimals: 2
     filters:
@@ -1867,210 +1955,27 @@ sensor:
     address: 115
     register_type: holding
     unit_of_measurement: "A"
+    device_class: current
+    state_class: measurement
     value_type: U_WORD
     accuracy_decimals: 2
     filters:
       - lambda: "return (x / 100.0) * (70.0 / 5.0);"
 
-  #  # Channels 17–28: 0–5V (Divide by 100 for scaling)
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 17 Voltage"
-  #   address: 116
-  #   register_type: holding
-  #   unit_of_measurement: "V"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100.0"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 18 Voltage"
-  #   address: 117
-  #   register_type: holding
-  #   unit_of_measurement: "A"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 19 Current (24V) - Bed Motor"
-  #   address: 118
-  #   register_type: holding
-  #   unit_of_measurement: "A"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return -1 * (x / 100.0) * (20.0 / 5.0);"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 20 Current (24V) - Shore Power Charger"
-  #   address: 119
-  #   register_type: holding
-  #   unit_of_measurement: "A"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return (x / 100.0) * (70.0 / 5.0);"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 21 Voltage"
-  #   address: 120
-  #   register_type: holding
-  #   unit_of_measurement: "V"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 22 Voltage"
-  #   address: 121
-  #   register_type: holding
-  #   unit_of_measurement: "V"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 23 Voltage"
-  #   address: 122
-  #   register_type: holding
-  #   unit_of_measurement: "V"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 24 Voltage"
-  #   address: 123
-  #   register_type: holding
-  #   unit_of_measurement: "V"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 25 Voltage"
-  #   address: 124
-  #   register_type: holding
-  #   unit_of_measurement: "V"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 26 Voltage"
-  #   address: 125
-  #   register_type: holding
-  #   unit_of_measurement: "V"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 27 Voltage"
-  #   address: 126
-  #   register_type: holding
-  #   unit_of_measurement: "V"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 28 Voltage"
-  #   address: 127
-  #   register_type: holding
-  #   unit_of_measurement: "V"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 2
-  #   filters:
-  #     - lambda: "return x / 100.0;"
-
-  # # Channels 29–40: 10K NTC Thermistor (Divide by 10 for scaling)
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 29 Temperature"
-  #   address: 128
-  #   register_type: holding
-  #   unit_of_measurement: "°C"
-  #   value_type: S_WORD
-  #   accuracy_decimals: 1
-  #   filters:
-  #     - lambda: "return x / 10.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 30 Temperature"
-  #   address: 129
-  #   register_type: holding
-  #   unit_of_measurement: "°C"
-  #   value_type: S_WORD
-  #   accuracy_decimals: 1
-  #   filters:
-  #     - lambda: "return x / 10.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 31 Temperature"
-  #   address: 130
-  #   register_type: holding
-  #   unit_of_measurement: "°C"
-  #   value_type: S_WORD
-  #   accuracy_decimals: 1
-  #   filters:
-  #     - lambda: "return x / 10.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 32 Temperature"
-  #   address: 131
-  #   register_type: holding
-  #   unit_of_measurement: "°C"
-  #   value_type: S_WORD
-  #   accuracy_decimals: 1
-  #   filters:
-  #     - lambda: "return x / 10.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: s5140
-  #   name: "S5140 Channel 33 Temperature"
-  #   address: 132
-  #   register_type: holding
-  #   unit_of_measurement: "°C"
-  #   value_type: S_WORD
-  #   accuracy_decimals: 1
-  #   filters:
-  #     - lambda: "return x / 10.0;"  
-
   - platform: modbus_controller
     modbus_controller_id: s5140
+    id: s5140_ch34_temp
     name: "S5140 Channel 34 Temperature - Blower Coolant"
     address: 133
     register_type: holding
     unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
       - lambda: "return x / 10.0;"
+      - lambda: "return (x == 110.0 || x == -40.0) ? NAN : x;"
       - sliding_window_moving_average:
           window_size: 7
           send_every: 1
@@ -2081,10 +1986,13 @@ sensor:
     address: 134
     register_type: holding
     unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
       - lambda: "return x / 10.0;"
+      - lambda: "return (x == 110.0 || x == -40.0) ? NAN : x;"
       - sliding_window_moving_average:
           window_size: 7
           send_every: 1
@@ -2096,10 +2004,13 @@ sensor:
     address: 135
     register_type: holding
     unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
       - lambda: "return x / 10.0;"
+      - lambda: "return (x == 110.0 || x == -40.0) ? NAN : x;"
       - sliding_window_moving_average:
           window_size: 7
           send_every: 1
@@ -2111,10 +2022,13 @@ sensor:
     address: 136
     register_type: holding
     unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
       - lambda: "return x / 10.0;"
+      - lambda: "return (x == 110.0 || x == -40.0) ? NAN : x;"
       - sliding_window_moving_average:
           window_size: 7
           send_every: 1
@@ -2126,10 +2040,13 @@ sensor:
     address: 137
     register_type: holding
     unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
       - lambda: "return x / 10.0;"
+      - lambda: "return (x == 110.0 || x == -40.0) ? NAN : x;"
       - sliding_window_moving_average:
           window_size: 7
           send_every: 1
@@ -2141,10 +2058,13 @@ sensor:
     address: 138
     register_type: holding
     unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
       - lambda: "return x / 10.0;"
+      - lambda: "return (x == 110.0 || x == -40.0) ? NAN : x;"
       - sliding_window_moving_average:
           window_size: 7
           send_every: 1
@@ -2156,10 +2076,13 @@ sensor:
     address: 139
     register_type: holding
     unit_of_measurement: "°C"
+    device_class: temperature
+    state_class: measurement
     value_type: S_WORD
     accuracy_decimals: 1
     filters:
       - lambda: "return x / 10.0;"
+      - lambda: "return (x == 110.0 || x == -40.0) ? NAN : x;"
       - sliding_window_moving_average:
           window_size: 7
           send_every: 1           
@@ -2171,7 +2094,7 @@ sensor:
     id: "BME280_1_Relative_Humidity"
     address: 0
     register_type: holding
-    unit_of_measurement: "RH %"
+    unit_of_measurement: "%"
     device_class: humidity  # Added device class
     state_class: measurement  # Added state class
     value_type: U_WORD
@@ -2192,17 +2115,6 @@ sensor:
     accuracy_decimals: 1
     filters:
       - lambda: "return x / 10.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: BME280_1
-  #   name: "BME280_1 Station Pressure"
-  #   address: 2
-  #   register_type: holding
-  #   unit_of_measurement: "kPa"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 1
-  #   filters:
-  #     - lambda: "return x / 10;"
   
 # BME280 Temperature + Humidity + Pressure sensors
   - platform: modbus_controller
@@ -2211,7 +2123,7 @@ sensor:
     id: "BME280_2_Relative_Humidity"
     address: 0
     register_type: holding
-    unit_of_measurement: "RH %"
+    unit_of_measurement: "%"
     device_class: humidity  # Added device class
     state_class: measurement  # Added state class
     value_type: U_WORD
@@ -2233,17 +2145,6 @@ sensor:
     filters:
       - lambda: "return x / 10.0;"
 
-  # - platform: modbus_controller
-  #   modbus_controller_id: BME280_2
-  #   name: "BME280_2 Station Pressure"
-  #   address: 2
-  #   register_type: holding
-  #   unit_of_measurement: "kPa"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 1
-  #   filters:
-  #     - lambda: "return x / 10;"
-
 # BME280 Temperature + Humidity + Pressure sensors
   - platform: modbus_controller
     modbus_controller_id: BME280_3
@@ -2251,7 +2152,7 @@ sensor:
     id: "BME280_3_Relative_Humidity"
     address: 0
     register_type: holding
-    unit_of_measurement: "RH %"
+    unit_of_measurement: "%"
     device_class: humidity  # Added device class
     state_class: measurement  # Added state class
     value_type: U_WORD
@@ -2273,17 +2174,6 @@ sensor:
     filters:
       - lambda: "return x / 10.0;"
 
-  # - platform: modbus_controller
-  #   modbus_controller_id: BME280_3
-  #   name: "BME280_3 Station Pressure"
-  #   address: 2
-  #   register_type: holding
-  #   unit_of_measurement: "kPa"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 1
-  #   filters:
-  #     - lambda: "return x / 10;"
-
 # BME280 Temperature + Humidity + Pressure sensors
   - platform: modbus_controller
     modbus_controller_id: BME280_4
@@ -2291,7 +2181,7 @@ sensor:
     id: "BME280_4_Relative_Humidity"
     address: 0
     register_type: holding
-    unit_of_measurement: "RH %"
+    unit_of_measurement: "%"
     device_class: humidity  # Added device class
     state_class: measurement  # Added state class
     value_type: U_WORD
@@ -2312,17 +2202,6 @@ sensor:
     accuracy_decimals: 1
     filters:
       - lambda: "return x / 10.0;"
-
-  # - platform: modbus_controller
-  #   modbus_controller_id: BME280_4
-  #   name: "BME280_4 Station Pressure"
-  #   address: 2
-  #   register_type: holding
-  #   unit_of_measurement: "kPa"
-  #   value_type: U_WORD
-  #   accuracy_decimals: 1
-  #   filters:
-  #     - lambda: "return x / 10;"
 
   # MPPT Controller 1 (250W array)
   - platform: victron_ble

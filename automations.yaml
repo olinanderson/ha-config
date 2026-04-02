@@ -3,6 +3,27 @@
 # ===========================
 
 # ───────────────────────────────────────────────
+#  BMS BLE – reload after boot to fix race condition
+# ───────────────────────────────────────────────
+# The bms_ble integration checks for the BLE device at setup.
+# If the ESP32 BLE proxy hasn't reconnected yet, setup fails
+# with ConfigEntryNotReady. This automation reloads the
+# integration 45s after boot when the proxy is reliably online.
+
+- id: bms_ble_reload_after_boot
+  alias: "BMS BLE - reload integration after boot"
+  mode: single
+  trigger:
+    - trigger: homeassistant
+      event: start
+  action:
+    - delay:
+        seconds: 45
+    - action: homeassistant.reload_config_entry
+      data:
+        entry_id: "{{ config_entries('bms_ble') | first }}"
+
+# ───────────────────────────────────────────────
 #  Starlink-filtered tracker – MQTT update logic
 # ───────────────────────────────────────────────
 
@@ -746,4 +767,33 @@
     - action: scene.turn_on
       target:
         entity_id: scene.pre_shower_mode_state
+
+# ───────────────────────────────────────────────
+#  Heater low-fuel lockout – auto-clear when fuel recovers
+# ───────────────────────────────────────────────
+# When the stable fuel level rises above 30% (hysteresis above
+# the 25% lockout threshold), automatically clear the lockout
+# so the heater can be used again without manual intervention.
+
+- id: heater_fuel_lockout_auto_clear
+  alias: "Heater – Clear low fuel lockout when fuel > 30%"
+  mode: single
+  trigger:
+    - trigger: numeric_state
+      entity_id: sensor.stable_fuel_level
+      above: 30
+      for:
+        minutes: 2
+  condition:
+    - condition: state
+      entity_id: input_boolean.heater_low_fuel_lockout
+      state: "on"
+  action:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.heater_low_fuel_lockout
+    - action: system_log.write
+      data:
+        message: "Heater low fuel lockout cleared – fuel above 30%."
+        level: info
 

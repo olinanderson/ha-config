@@ -29,3 +29,13 @@ windows_audio_stream:
 inverter_toggle_pending:
   name: Inverter toggle pending
   icon: mdi:progress-clock
+
+hot_water_mode:
+  name: "Hot Water Mode"
+  icon: mdi:water-boiler
+  initial: off
+
+heater_low_fuel_lockout:
+  name: "Heater Low Fuel Lockout"
+  icon: mdi:fuel-cell
+  initial: off

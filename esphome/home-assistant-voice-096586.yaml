@@ -89,7 +89,7 @@ api:
   on_client_disconnected:
     - script.execute: control_leds
   encryption:
-    key: mVu5XZDTMffsTux5erm/QYsI6blMpUnIrgrGL2GrA8w=
+    key: !secret ha_voice_api_key
 
 wifi:
   id: wifi_id
@@ -108,7 +108,7 @@ wifi:
     subnet: 255.255.255.0
   ap:
     ssid: "HA Voice PE Fallback Hotspot"
-    password: "ZzAzTQgLRHlq"
+    password: !secret ha_voice_ap_password
 
 ota:
   - platform: esphome
