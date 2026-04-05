@@ -8,3 +8,22 @@ previous_fuel_level:
 previous_speed:
   name: "Previous Speed"
   initial: "0"
+
+# --- Vanlife Tracker journal ---
+vanlife_stop_name:
+  name: "Stop Name"
+  icon: mdi:map-marker
+  max: 100
+  initial: ""
+
+vanlife_stop_notes:
+  name: "Stop Notes"
+  icon: mdi:notebook-edit
+  max: 500
+  initial: ""
+
+vanlife_stop_id:
+  name: "Editing Stop ID"
+  icon: mdi:identifier
+  max: 20
+  initial: ""

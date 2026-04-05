@@ -1,0 +1,1192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Vanlife</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #fafafa; color: #212121; }
+
+    /* ─── Tab bar ─────────────────────────────────── */
+    #vl-tabs {
+      display: flex; height: 46px;
+      background: #03a9f4;
+      border-bottom: 2px solid #0288d1;
+    }
+    .vl-tab {
+      padding: 0 24px; cursor: pointer; font-weight: 600;
+      color: rgba(255,255,255,0.7); border-bottom: 3px solid transparent;
+      font-size: 13px; letter-spacing: 0.5px; text-transform: uppercase;
+      display: flex; align-items: center;
+      transition: color 0.15s;
+    }
+    .vl-tab.active { color: #fff; border-bottom-color: #fff; }
+    .vl-tab:hover { color: #fff; }
+
+    /* ─── Main content area ───────────────────────── */
+    #vl-main {
+      position: absolute;
+      top: 46px; left: 0; right: 0; bottom: 0;
+    }
+
+    /* ─── Map pane ────────────────────────────────── */
+    #vl-map-pane { position: absolute; inset: 0; }
+    #vl-map-pane.hidden { display: none; }
+
+    #vl-map {
+      position: absolute;
+      top: 0; left: 0; bottom: 0; right: 340px;
+    }
+    @media (max-width: 768px) {
+      #vl-map { right: 0; bottom: 45%; }
+    }
+
+    #vl-sidebar {
+      position: absolute;
+      top: 0; right: 0; bottom: 0; width: 340px;
+      display: flex; flex-direction: column;
+      border-left: 1px solid #e0e0e0;
+      background: #fff;
+      overflow: hidden;
+    }
+    @media (max-width: 768px) {
+      #vl-sidebar { top: 55%; left: 0; right: 0; width: 100%; border-left: none; border-top: 1px solid #e0e0e0; }
+    }
+
+    #vl-sidebar-header {
+      padding: 14px 16px;
+      background: #f5f5f5;
+      border-bottom: 1px solid #e0e0e0;
+      font-size: 15px; font-weight: 600; flex-shrink: 0;
+    }
+    #vl-stop-list { flex: 1; overflow-y: auto; }
+
+    .vl-stop-item {
+      padding: 11px 16px; border-bottom: 1px solid #f0f0f0;
+      cursor: pointer; transition: background 0.1s;
+    }
+    .vl-stop-item:hover { background: #f5f5f5; }
+    .vl-stop-item.selected { background: #e1f5fe; }
+    .vl-stop-name { font-weight: 600; font-size: 14px; }
+    .vl-stop-meta { font-size: 12px; color: #757575; margin-top: 2px; }
+    .vl-stop-notes { font-size: 12px; color: #757575; margin-top: 3px; font-style: italic;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    /* ─── Edit panel ──────────────────────────────── */
+    #vl-edit-panel {
+      border-top: 2px solid #03a9f4;
+      background: #fff; flex-shrink: 0;
+    }
+    #vl-edit-header {
+      display: flex; align-items: center; gap: 8px;
+      padding: 10px 16px; background: #e1f5fe;
+      border-bottom: 1px solid #e0e0e0;
+    }
+    #vl-edit-title { flex: 1; font-size: 13px; font-weight: 600; }
+    .vl-form { padding: 10px 16px; display: flex; flex-direction: column; gap: 8px; }
+    .vl-form label { font-size: 11px; font-weight: 600; color: #757575; display: block; margin-bottom: 2px; }
+    .vl-form input, .vl-form textarea, .vl-form select {
+      width: 100%; padding: 6px 9px; border: 1px solid #ddd;
+      border-radius: 5px; font-size: 13px; background: #fff;
+    }
+    .vl-form textarea { resize: vertical; min-height: 55px; }
+    .vl-star { font-size: 20px; cursor: pointer; color: #ddd; }
+    .vl-star.on { color: #f59e0b; }
+    .vl-form-actions { display: flex; gap: 8px; justify-content: flex-end; padding: 0 16px 10px; }
+
+    /* ─── Buttons ─────────────────────────────────── */
+    .vl-btn {
+      border: none; border-radius: 6px; padding: 7px 12px; cursor: pointer;
+      font-size: 12px; font-weight: 600; transition: opacity 0.15s;
+    }
+    .vl-btn:hover { opacity: 0.85; }
+    .vl-btn-primary { background: #03a9f4; color: #fff; }
+    .vl-btn-danger { background: #e53935; color: #fff; }
+    .vl-btn-ghost { background: none; border: 1px solid #ccc !important; color: inherit; }
+
+    /* ─── Places pane ─────────────────────────────── */
+    #vl-places-pane {
+      position: absolute; inset: 0;
+      display: none; flex-direction: column; overflow: hidden;
+    }
+    #vl-places-pane.active { display: flex; }
+    #vl-places-toolbar {
+      padding: 12px 20px; display: flex; align-items: center; gap: 12px;
+      border-bottom: 1px solid #e0e0e0; background: #f5f5f5; flex-shrink: 0;
+    }
+    #vl-places-toolbar h2 { flex: 1; font-size: 15px; }
+    #vl-place-cards {
+      flex: 1; overflow-y: auto; padding: 16px;
+      display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 12px; align-content: start;
+    }
+    .vl-place-card {
+      background: #fff; border-radius: 10px; padding: 14px;
+      border: 1px solid #e0e0e0; box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+    }
+    .vl-place-card-header { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+    .vl-place-icon { font-size: 22px; }
+    .vl-place-name { font-weight: 700; font-size: 14px; flex: 1; }
+    .vl-place-meta { font-size: 12px; color: #757575; margin-bottom: 8px; line-height: 1.5; }
+    .vl-place-actions { display: flex; gap: 6px; justify-content: flex-end; }
+    #vl-place-form-wrap {
+      padding: 16px 20px; border-top: 2px solid #03a9f4;
+      background: #f5f5f5; flex-shrink: 0;
+    }
+    #vl-place-form-wrap h3 { font-size: 14px; margin-bottom: 10px; }
+    .vl-pf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .vl-pf-grid .full { grid-column: 1 / -1; }
+    .vl-pf-label { font-size: 11px; font-weight: 600; color: #757575; display: block; margin-bottom: 2px; }
+    .vl-pf-input {
+      width: 100%; padding: 6px 9px; border: 1px solid #ddd;
+      border-radius: 5px; font-size: 13px; background: #fff;
+    }
+    textarea.vl-pf-input { resize: vertical; min-height: 50px; }
+
+    /* ─── Leaflet popup ───────────────────────────── */
+    .leaflet-popup-content { min-width: 200px; }
+    .vl-popup-name { font-weight: 700; font-size: 14px; margin-bottom: 5px; }
+    .vl-popup-row { font-size: 13px; margin-bottom: 3px; color: #555; }
+    .vl-popup-edit {
+      margin-top: 8px; width: 100%;
+      background: #03a9f4; color: #fff;
+      border: none; border-radius: 5px; padding: 6px;
+      cursor: pointer; font-weight: 600; font-size: 13px;
+    }
+    .vl-popup-edit:hover { background: #0288d1; }
+
+    /* ─── Date range bar ──────────────────────────────── */
+    #vl-date-bar {
+      position: absolute;
+      top: 10px; left: 10px; z-index: 1000;
+      background: rgba(255,255,255,0.95);
+      border-radius: 20px; padding: 5px 8px;
+      display: flex; gap: 3px; align-items: center;
+      box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    }
+    .vl-date-btn {
+      padding: 4px 10px; border-radius: 14px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      color: #555; border: none; background: transparent;
+      transition: background 0.15s, color 0.15s;
+    }
+    .vl-date-btn.active { background: #03a9f4; color: #fff; }
+    .vl-date-btn:hover:not(.active) { background: #e3f2fd; color: #0288d1; }
+    #vl-debug-pts-btn, #vl-debug-raw-btn, #vl-debug-shape-btn {
+      margin-left: 4px; padding: 4px 10px; border-radius: 14px;
+      font-size: 12px; font-weight: 600; cursor: pointer;
+      border: 1.5px solid; background: transparent;
+      transition: background 0.15s, color 0.15s;
+    }
+    #vl-debug-pts-btn { color: #ff6600; border-color: #ff6600; }
+    #vl-debug-pts-btn.active { background: #ff6600; color: #fff; }
+    #vl-debug-raw-btn { color: #00c853; border-color: #00c853; }
+    #vl-debug-raw-btn.active { background: #00c853; color: #fff; }
+    #vl-debug-shape-btn { color: #03a9f4; border-color: #03a9f4; }
+    #vl-debug-shape-btn.active { background: #03a9f4; color: #fff; }
+    .vl-bar-divider { width: 1px; height: 18px; background: #ddd; margin: 0 4px; }
+  </style>
+</head>
+<body>
+
+<!-- TAB BAR -->
+<div id="vl-tabs">
+  <div class="vl-tab active" data-tab="map">🗺️ Map &amp; Stops</div>
+  <div class="vl-tab" data-tab="places">📌 Named Places</div>
+</div>
+
+<div id="vl-main">
+
+  <!-- MAP PANE -->
+  <div id="vl-map-pane">
+    <div id="vl-map"></div>
+    <div id="vl-date-bar">
+      <button class="vl-date-btn active" data-mode="today">Today</button>
+      <button class="vl-date-btn" data-mode="yesterday">Yesterday</button>
+      <button class="vl-date-btn" data-mode="3d">3d</button>
+      <button class="vl-date-btn" data-mode="7d">7d</button>
+      <button class="vl-date-btn" data-mode="30d">30d</button>
+      <div class="vl-bar-divider"></div>
+      <button id="vl-debug-shape-btn" class="active" title="Show/hide ORS routed shape">shape</button>
+      <button id="vl-debug-pts-btn" title="Show/hide GPS waypoints sent to ORS">pts</button>
+      <button id="vl-debug-raw-btn" title="Show/hide raw GPS moving points">raw</button>
+    </div>
+    <div id="vl-status" style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:9000;background:rgba(0,0,0,0.55);color:#fff;font-size:12px;padding:6px 14px;border-radius:20px;pointer-events:none;white-space:nowrap;display:block"></div>
+    <div id="vl-sidebar">
+      <div id="vl-sidebar-header">
+        <span id="vl-stop-count">Loading…</span>
+      </div>
+      <div id="vl-stop-list"></div>
+      <div id="vl-edit-panel" style="display:none">
+        <div id="vl-edit-header">
+          <span id="vl-edit-title">Edit Stop</span>
+          <button class="vl-btn vl-btn-ghost" id="vl-edit-close" style="padding:3px 8px">✕</button>
+        </div>
+        <div class="vl-form">
+          <div>
+            <label>Name</label>
+            <input type="text" id="vl-f-name" placeholder="Stop name">
+          </div>
+          <div>
+            <label>Notes / Journal</label>
+            <textarea id="vl-f-notes" placeholder="What was memorable?"></textarea>
+          </div>
+          <div>
+            <label>Category</label>
+            <select id="vl-f-category"></select>
+          </div>
+          <div>
+            <label>Rating</label>
+            <div id="vl-f-stars" style="display:flex;gap:4px">
+              <span class="vl-star" data-n="1">★</span>
+              <span class="vl-star" data-n="2">★</span>
+              <span class="vl-star" data-n="3">★</span>
+              <span class="vl-star" data-n="4">★</span>
+              <span class="vl-star" data-n="5">★</span>
+            </div>
+          </div>
+        </div>
+        <div class="vl-form-actions">
+          <button class="vl-btn vl-btn-ghost" id="vl-edit-cancel">Cancel</button>
+          <button class="vl-btn vl-btn-primary" id="vl-edit-save">Save</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- PLACES PANE -->
+  <div id="vl-places-pane">
+    <div id="vl-places-toolbar">
+      <h2>Named Places</h2>
+      <button class="vl-btn vl-btn-primary" id="vl-add-place">+ Add Place</button>
+    </div>
+    <div id="vl-place-cards"></div>
+    <div id="vl-place-form-wrap" style="display:none">
+      <h3 id="vl-pf-title">Add Named Place</h3>
+      <div class="vl-pf-grid">
+        <div class="full">
+          <label class="vl-pf-label">Name *</label>
+          <input class="vl-pf-input" id="vl-pf-name" type="text" placeholder="Home, Climbing gym, etc.">
+        </div>
+        <div>
+          <label class="vl-pf-label">Category</label>
+          <select class="vl-pf-input" id="vl-pf-category"></select>
+        </div>
+        <div>
+          <label class="vl-pf-label">Radius (meters)</label>
+          <input class="vl-pf-input" id="vl-pf-radius" type="number" value="200">
+        </div>
+        <div>
+          <label class="vl-pf-label">Latitude</label>
+          <input class="vl-pf-input" id="vl-pf-lat" type="number" step="any" placeholder="39.7392">
+        </div>
+        <div>
+          <label class="vl-pf-label">Longitude</label>
+          <input class="vl-pf-input" id="vl-pf-lon" type="number" step="any" placeholder="-104.9903">
+        </div>
+        <div class="full">
+          <label class="vl-pf-label">Notes</label>
+          <textarea class="vl-pf-input" id="vl-pf-notes" rows="2"></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button class="vl-btn vl-btn-ghost" id="vl-pf-cancel">Cancel</button>
+        <button class="vl-btn vl-btn-primary" id="vl-pf-save">Save Place</button>
+      </div>
+    </div>
+  </div>
+
+</div><!-- #vl-main -->
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+"use strict";
+
+// ─── Constants ────────────────────────────────────────────
+
+const CATEGORY_ICONS = {
+  free_camping:"⛺", paid_campground:"🏕️", walmart:"🛒", blm_land:"🌵",
+  national_forest:"🌲", rest_area:"🛑", friend_family:"🏠", urban:"🏙️",
+  trailhead:"🥾", other:"📍",
+};
+const PLACE_CATEGORY_ICONS = {
+  home:"🏠", climbing:"🧗", gym:"💪", grocery:"🛒", laundry:"👕",
+  coffee:"☕", friend:"👥", work:"💼", mechanic:"🔧", hospital:"🏥",
+  fuel:"⛽", other:"📌",
+};
+const STOP_CATEGORIES = [
+  "free_camping","paid_campground","walmart","blm_land",
+  "national_forest","rest_area","friend_family","urban","trailhead","other",
+];
+const PLACE_CATEGORIES = [
+  "home","climbing","gym","grocery","laundry","coffee",
+  "friend","work","mechanic","hospital","fuel","other",
+];
+
+// ─── HA connection ────────────────────────────────────────
+// panel_iframe runs on same origin as HA — access parent's hass object directly
+
+// ─── Auth (localStorage + postMessage) ──────────────────
+// panel.js writes the token to localStorage (same origin).
+// We read it immediately, and also accept postMessage updates.
+
+let _token = localStorage.getItem("vl_ha_token")
+  || new URLSearchParams(window.location.search).get("token");
+let _states = {};
+let _initDone = false;
+let _appStarted = false;
+
+console.error("[VL] index.html script executing, token from localStorage:", _token ? "YES (" + _token.slice(0,8) + "...)" : "NO");
+
+function setStatus(msg, color) {
+  const el = document.getElementById("vl-status");
+  if (el) { el.textContent = msg; el.style.background = color || "rgba(0,0,0,0.55)"; }
+}
+
+window.addEventListener("message", (e) => {
+  console.error("[VL] message received:", e.data?.type, e.origin);
+  if (e.data?.type !== "vanlife-hass") return;
+  _token = e.data.token;
+  _states = e.data.states || {};
+  localStorage.setItem("vl_ha_token", _token);
+  console.error("[VL] token received via postMessage, states:", Object.keys(_states).length);
+  if (_initDone && !_appStarted) startApp();
+});
+
+function getToken() { return _token; }
+function getStates() { return _states; }
+
+async function callService(domain, service, data = {}) {
+  if (!_token) return;
+  await fetch(`/api/services/${domain}/${service}`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${_token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(data),
+  });
+}
+
+async function getNamedPlaces() {
+  if (!_token) return [];
+  try {
+    // Call the service then poll the response sensor
+    await callService("vanlife_tracker", "get_named_places");
+    await new Promise(r => setTimeout(r, 500));
+    const r = await fetch("/api/states/sensor.vanlife_tracker_named_places", {
+      headers: { Authorization: `Bearer ${_token}` },
+    });
+    if (r.ok) {
+      const s = await r.json();
+      return s.attributes?.places || [];
+    }
+  } catch(_) {}
+  return [];
+}
+
+function _dateWindow(mode) {
+  // Returns {start, end} with calendar-aligned midnight boundaries.
+  // Fixed endpoints → stable waypoint lists → permanent cache hits.
+  const now = new Date();
+  const todayMidnight = new Date(now); todayMidnight.setHours(0, 0, 0, 0);
+  if (mode === "today") {
+    return { start: todayMidnight, end: now };
+  } else if (mode === "yesterday") {
+    const s = new Date(todayMidnight); s.setDate(s.getDate() - 1);
+    return { start: s, end: todayMidnight };   // fully fixed — perfect cache
+  } else {
+    const days = parseInt(mode);               // "3d" → 3, "7d" → 7, "30d" → 30
+    const s = new Date(todayMidnight); s.setDate(s.getDate() - (days - 1));
+    return { start: s, end: now };
+  }
+}
+
+async function getHistory(entityId, mode) {
+  mode = mode || _dateMode;
+  const token = getToken();
+  if (!token) { console.error("[VL] getHistory: no token"); return []; }
+  const { start, end } = _dateWindow(mode);
+  const url = `/api/history/period/${start.toISOString()}?filter_entity_id=${entityId}&end_time=${end.toISOString()}&significant_changes_only=false`;
+  console.error("[VL] getHistory fetching:", entityId, "url:", url.slice(0, 80));
+  try {
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    console.error("[VL] getHistory response:", r.status, entityId);
+    if (!r.ok) return [];
+    const d = await r.json();
+    const result = d?.[0] || [];
+    console.error("[VL] getHistory entries:", result.length, "first:", result[0] ? JSON.stringify(result[0]).slice(0, 120) : "none");
+    return result;
+  } catch(e) { console.error("[VL] getHistory error:", e); return []; }
+}
+
+// ─── Helpers ──────────────────────────────────────────────
+
+// Routing CORS proxy (osrm_proxy.py on port 8765)
+const OSRM_PROXY        = `${location.protocol}//${location.hostname}:8765`;
+const ROUTE_STRIDE      = 1;      // keep all GPS points
+const RDP_EPSILON       = 0;      // 0 = skip RDP entirely — send all points to ORS
+const STATIONARY_M      = 30;     // metres — tail points within this radius are trimmed
+                                  // so a parked van doesn't change the waypoint hash
+
+/**
+ * Ramer-Douglas-Peucker simplification on an array of {lat,lon} points.
+ * Keeps points that deviate more than epsilon from the straight line between
+ * their neighbours — naturally removes GPS drift on straight roads while
+ * preserving all turns and curves.
+ */
+function rdpSimplify(pts, epsilon) {
+  if (pts.length <= 2) return pts;
+  // Find the point with the maximum perpendicular distance from the line start→end
+  const [s, e] = [pts[0], pts[pts.length - 1]];
+  const dLat = e.lat - s.lat, dLon = e.lon - s.lon;
+  const len2 = dLat * dLat + dLon * dLon;
+  let maxDist = 0, maxIdx = 0;
+  for (let i = 1; i < pts.length - 1; i++) {
+    let dist;
+    if (len2 === 0) {
+      dist = Math.hypot(pts[i].lat - s.lat, pts[i].lon - s.lon);
+    } else {
+      const t = Math.max(0, Math.min(1, ((pts[i].lat - s.lat) * dLat + (pts[i].lon - s.lon) * dLon) / len2));
+      dist = Math.hypot(pts[i].lat - s.lat - t * dLat, pts[i].lon - s.lon - t * dLon);
+    }
+    if (dist > maxDist) { maxDist = dist; maxIdx = i; }
+  }
+  if (maxDist > epsilon) {
+    const left  = rdpSimplify(pts.slice(0, maxIdx + 1), epsilon);
+    const right = rdpSimplify(pts.slice(maxIdx), epsilon);
+    return [...left.slice(0, -1), ...right];
+  }
+  return [s, e];
+}
+
+/**
+ * Route a single move segment. Cache is content-addressed on the proxy —
+ * same waypoints → instant hit. Changing STRIDE/RDP_EPSILON → new hash → auto re-routes.
+ *
+ * @param {Array} pts  [{lat,lon,ts},...] GPS points for this segment
+ * @returns {Array|null}  [[lat,lon],...] routed geometry or null on failure
+ */
+async function routeSegment(pts) {
+  // Step 1: stride pre-filter
+  let sample = pts.filter((_, i) => i % ROUTE_STRIDE === 0 || i === pts.length - 1);
+  // Step 2: trim stationary tail — if the last N points are all within STATIONARY_M of
+  // the last point, they represent a parked van. Truncate to just that anchor point so
+  // the waypoint list is stable across reloads → same hash → permanent cache hit.
+  if (sample.length > 2) {
+    const last = sample[sample.length - 1];
+    const threshDeg = STATIONARY_M / 111320;
+    let cutIdx = sample.length - 1;
+    for (let i = sample.length - 2; i >= 0; i--) {
+      const d = Math.hypot(sample[i].lat - last.lat, (sample[i].lon - last.lon) * Math.cos(last.lat * Math.PI / 180));
+      if (d <= threshDeg) cutIdx = i;
+      else break;
+    }
+    // Keep sample[cutIdx] (first stationary point) as endpoint — it's stable across
+    // reloads. Using `last` (most recent GPS ping) causes hash churn from GPS drift
+    // while parked (~±10m), defeating the permanent cache.
+    if (cutIdx < sample.length - 1) sample = sample.slice(0, cutIdx + 1);
+  }
+  // Step 3: RDP simplification — skip if epsilon is 0
+  if (RDP_EPSILON > 0) sample = rdpSimplify(sample, RDP_EPSILON);
+  const waypoints = sample.map(p => [p.lon, p.lat]);
+  if (waypoints.length < 2) return null;
+  console.log(`[VL] routeSegment: ${pts.length} raw → ${sample.length} waypoints after stride+trim+RDP`);
+  // Debug: draw the actual waypoints sent to ORS
+  if (_showDebugPts && _debugLayer) {
+    sample.forEach(p => {
+      L.circleMarker([p.lat, p.lon], {
+        radius: 3, color: '#ff6600', fillColor: '#ff6600',
+        fillOpacity: 0.85, weight: 0,
+      }).addTo(_debugLayer);
+    });
+  }
+  try {
+    const r = await fetch(`${OSRM_PROXY}/vanlife/route-segment`, {
+      method: "POST",
+      headers: {"Content-Type": "application/json"},
+      body: JSON.stringify({waypoints}),
+    });
+    if (!r.ok) { console.error("[VL] route-segment error", r.status); return null; }
+    const d = await r.json();
+    const src = d.cached ? "💾 cache" : "🌐 Valhalla";
+    console.log(`[VL] route-segment ${src} — ${(d.geometry||[]).length} coords (${waypoints.length} wpts)`);
+    return (d.geometry && d.geometry.length >= 2) ? d.geometry : null;
+  } catch (e) { console.error("[VL] route-segment fetch error", e); return null; }
+}
+
+/** Draw a routed segment's geometry onto _routeLayer using the time-based colour gradient. */
+function drawMoveSeg(pts, geom, totalStartT, totalDuration) {
+  if (!_showShape) return;
+  const segStartTs = pts[0].ts;
+  const segEndTs   = pts[pts.length - 1].ts;
+  const SUB     = Math.min(geom.length, 12);
+  const subSize = Math.max(1, Math.floor(geom.length / SUB));
+  for (let k = 0; k < SUB; k++) {
+    const s = k * subSize;
+    const e = k === SUB - 1 ? geom.length : (k + 1) * subSize + 1;
+    const chunk = geom.slice(s, e);
+    if (chunk.length < 2) continue;
+    const subFrac = (k + 0.5) / SUB;
+    const midTs = segStartTs + (segEndTs - segStartTs) * subFrac;
+    const t = (midTs - totalStartT) / totalDuration;
+    const opacity = 0.55 + t * 0.40;
+    const weight  = 3.5 + t * 2.0;
+    const cr = Math.round(100 + (3   - 100) * t);
+    const cg = Math.round(149 + (169 - 149) * t);
+    const cb = Math.round(237 + (244 - 237) * t);
+    L.polyline(chunk, {
+      color: `rgb(${cr},${cg},${cb})`,
+      weight, opacity, lineCap: "round", lineJoin: "round",
+    }).addTo(_routeLayer);
+  }
+}
+
+
+function haversineM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const p1 = lat1 * Math.PI / 180, p2 = lat2 * Math.PI / 180;
+  const dp = (lat2 - lat1) * Math.PI / 180, dl = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dp/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+function formatDuration(arrivedAt, departedAt) {
+  if (!arrivedAt) return "";
+  const secs = ((departedAt ? new Date(departedAt) : new Date()) - new Date(arrivedAt)) / 1000;
+  const h = Math.floor(secs / 3600), m = Math.floor((secs % 3600) / 60);
+  if (h > 24) return `${Math.floor(h/24)}d ${h%24}h`;
+  return h > 0 ? `${h}h ${m}m` : `${m}m`;
+}
+
+function formatDate(iso) {
+  if (!iso) return "";
+  return new Date(iso).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" });
+}
+
+function renderStars(n) {
+  n = parseInt(n) || 0;
+  return "★".repeat(n) + "☆".repeat(5 - n);
+}
+
+// ─── App state ────────────────────────────────────────────
+
+let _map = null, _routeLayer = null, _debugLayer = null, _debugRawLayer = null;
+let _showDebugPts = false, _showDebugRaw = false, _showShape = true;
+let _stops = [], _places = [];
+let _stopMarkers = {}, _placeMarkers = {};
+let _vanMarker = null;
+let _dateMode = "today";
+let _editingStop = null, _editingPlace = null, _editRating = 0;
+let _hasFitBounds = false;
+let _currentTab = "map";
+
+// ─── Init ─────────────────────────────────────────────────
+
+function populateSelects() {
+  const catSel = document.getElementById("vl-f-category");
+  catSel.innerHTML = STOP_CATEGORIES.map(c =>
+    `<option value="${c}">${c.replace(/_/g," ").replace(/\b\w/g, l => l.toUpperCase())}</option>`
+  ).join("");
+
+  const plCatSel = document.getElementById("vl-pf-category");
+  plCatSel.innerHTML = PLACE_CATEGORIES.map(c =>
+    `<option value="${c}">${c.replace(/_/g," ").replace(/\b\w/g, l => l.toUpperCase())}</option>`
+  ).join("");
+}
+
+function setupTabs() {
+  document.querySelectorAll(".vl-tab").forEach(tab => {
+    tab.addEventListener("click", () => {
+      _currentTab = tab.dataset.tab;
+      document.querySelectorAll(".vl-tab").forEach(t => t.classList.toggle("active", t === tab));
+      document.getElementById("vl-map-pane").classList.toggle("hidden", _currentTab !== "map");
+      document.getElementById("vl-places-pane").classList.toggle("active", _currentTab === "places");
+      if (_currentTab === "map" && _map) _map.invalidateSize();
+      if (_currentTab === "places") renderPlacesList();
+    });
+  });
+}
+
+// ─── Map ──────────────────────────────────────────────────
+
+function getVanLocation() {
+  const trackers = [
+    "device_tracker.vanlife_tracker_van_location",
+    "device_tracker.filtered_starlink_location",
+  ];
+  for (const id of trackers) {
+    const a = getStates()[id]?.attributes;
+    if (a?.latitude && a?.longitude) return [parseFloat(a.latitude), parseFloat(a.longitude)];
+  }
+  return null;
+}
+
+function initMap() {
+  // In a real iframe page, the #vl-map div will have proper CSS-driven dimensions.
+  // No JS sizing tricks needed — just create the map.
+  // Start centered on the van; getVanLocation() falls back to US center if unavailable
+  const vanPos = getVanLocation();
+  _map = L.map("vl-map", { zoomControl: true }).setView(vanPos || [39.5, -98.35], vanPos ? 13 : 4);
+  L.tileLayer(
+    "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+    { attribution: "&copy; OpenStreetMap &copy; CARTO", maxZoom: 19 }
+  ).addTo(_map);
+  _routeLayer = L.layerGroup().addTo(_map);
+  _debugLayer = L.layerGroup().addTo(_map);
+  _debugRawLayer = L.layerGroup().addTo(_map);
+
+  drawRoute();
+  renderStopMarkers();
+  renderPlaceMarkers();
+  renderVanMarker();
+}
+
+async function drawRoute() {
+  if (!_routeLayer) return;
+  _routeLayer.clearLayers();
+  if (_debugLayer) _debugLayer.clearLayers();
+  if (_debugRawLayer) _debugRawLayer.clearLayers();
+  setStatus("Loading GPS history...");
+
+  // Try vanlife tracker first, fall back to Starlink
+  let raw = await getHistory("device_tracker.vanlife_tracker_van_location", _dateMode);
+  if (raw.filter(s => s.attributes?.latitude).length < 5) {
+    raw = await getHistory("device_tracker.filtered_starlink_location", _dateMode);
+  }
+
+  const allPts = raw
+    .filter(s => s.attributes?.latitude && s.attributes?.longitude)
+    .map(s => ({
+      lat: parseFloat(s.attributes.latitude),
+      lon: parseFloat(s.attributes.longitude),
+      t: s.last_changed,      // keep as string until needed — avoids 291k Date objects
+      ts: Date.parse(s.last_changed),
+    }))
+    .sort((a, b) => a.ts - b.ts);
+
+  if (allPts.length < 2) {
+    setStatus("⚠ No route data found.");
+    return;
+  }
+
+  const totalStartT = allPts[0].ts;
+  const totalDuration = Math.max(1, allPts[allPts.length - 1].ts - totalStartT);
+
+  // ── Step 1: fast flat-earth distance thinning ─────────────────────────
+  // Precompute cosLat once from the mid-point latitude so we only do one
+  // Math.cos call here instead of one per raw point. Error < 0.1% across a state.
+  const midLat = allPts[Math.floor(allPts.length / 2)].lat * Math.PI / 180;
+  const cosLat = Math.cos(midLat);
+  const M_PER_DEG = 111320;         // metres per degree latitude
+  const MIN_MOVE_M = 25;            // drop GPS noise / stationary drift
+  const threshDeg2 = (MIN_MOVE_M / M_PER_DEG) ** 2;
+
+  const thinned = [allPts[0]];
+  for (let k = 1; k < allPts.length; k++) {
+    const prev = thinned[thinned.length - 1];
+    const p = allPts[k];
+    const dLat = p.lat - prev.lat;
+    const dLon = (p.lon - prev.lon) * cosLat;
+    if (dLat * dLat + dLon * dLon >= threshDeg2) thinned.push(p);
+  }
+  if (thinned[thinned.length - 1] !== allPts[allPts.length - 1]) {
+    thinned.push(allPts[allPts.length - 1]);
+  }
+
+  // ── Step 2: time-based stop detection ────────────────────────────────
+  // A "stop" = the van stays within STOP_RADIUS_M for at least MIN_STOP_MS.
+  // This correctly ignores tight turns/corners (seconds) vs real stops (minutes).
+  // Uses the same flat-earth approach: no trig in the loop.
+  const STOP_RADIUS_M  = 80;
+  const MIN_STOP_MS    = 8 * 60 * 1000;   // 8 minutes
+  const stopRadDeg2    = (STOP_RADIUS_M / M_PER_DEG) ** 2;
+
+  const segments = [];
+  let i = 0;
+  while (i < thinned.length) {
+    let cLat = thinned[i].lat, cLon = thinned[i].lon;
+    let sumLat = cLat, sumLon = cLon, count = 1;
+    const clusterStart = thinned[i].ts;
+    let j = i + 1;
+    while (j < thinned.length) {
+      const dLat = thinned[j].lat - cLat;
+      const dLon = (thinned[j].lon - cLon) * cosLat;
+      if (dLat * dLat + dLon * dLon <= stopRadDeg2) {
+        sumLat += thinned[j].lat; sumLon += thinned[j].lon; count++;
+        cLat = sumLat / count; cLon = sumLon / count;   // running centroid
+        j++;
+      } else {
+        break;
+      }
+    }
+    const clusterDurMs = thinned[j - 1].ts - clusterStart;
+    if (clusterDurMs >= MIN_STOP_MS) {
+      const durationH = clusterDurMs / 3600000;
+      const centroid = { lat: cLat, lon: cLon, ts: clusterStart };
+      // Snap the incoming moving segment's last point to the stop centroid
+      if (segments.length && segments[segments.length - 1].type === "move") {
+        segments[segments.length - 1].pts.push(centroid);
+      }
+      segments.push({ type: "stop", centroid, startTs: clusterStart, durationH });
+      i = j;
+    } else {
+      // Not a stop — add the first point to a moving segment and advance by 1
+      if (!segments.length || segments[segments.length - 1].type === "stop") {
+        const newSeg = { type: "move", pts: [] };
+        // Start from the previous stop's centroid so the line connects
+        if (segments.length && segments[segments.length - 1].type === "stop") {
+          newSeg.pts.push(segments[segments.length - 1].centroid);
+        }
+        segments.push(newSeg);
+      }
+      segments[segments.length - 1].pts.push(thinned[i]);
+      i++;
+    }
+  }
+
+  // ── Step 2b: draw raw moving points debug layer ────────────────────────────
+  if (_showDebugRaw && _debugRawLayer) {
+    const movePts = segments
+      .filter(s => s.type === "move")
+      .flatMap(s => s.pts);
+    movePts.forEach(p => {
+      L.circleMarker([p.lat, p.lon], {
+        radius: 2.5, color: '#00c853', fillColor: '#00c853',
+        fillOpacity: 0.9, weight: 0,
+      }).addTo(_debugRawLayer);
+    });
+  }
+
+  // ── Step 3: route segments one at a time, draw each as it arrives ────────────
+  const moveSegs = segments.filter(s => s.type === "move" && s.pts.length >= 2);
+  let movingPtCount = 0, stopCount = 0;
+  for (const seg of segments) {
+    if (seg.type === "stop") stopCount++;
+    else movingPtCount += seg.pts.length;
+  }
+  const label = _dateMode;
+  let routedCount = 0;
+
+  for (let mi = 0; mi < moveSegs.length; mi++) {
+    setStatus(`${movingPtCount.toLocaleString()} pts · ${stopCount} stops · ${label} · routing ${mi + 1}/${moveSegs.length}…`);
+    const geom = await routeSegment(moveSegs[mi].pts);
+    if (geom) {
+      drawMoveSeg(moveSegs[mi].pts, geom, totalStartT, totalDuration);
+      routedCount++;
+    }
+  }
+
+  const roadLabel = routedCount
+    ? ` · 🛣 ${routedCount}/${moveSegs.length}`
+    : (moveSegs.length ? " · ⚠ routing failed" : "");
+  setStatus(`${movingPtCount.toLocaleString()} pts · ${stopCount} stops · ${label}${roadLabel}`);
+}
+
+function renderVanMarker() {
+  if (!_map) return;
+  if (_vanMarker) { _vanMarker.remove(); _vanMarker = null; }
+
+  const pos = getVanLocation();
+  if (!pos) return;
+  const [lat, lon] = pos;
+
+  const icon = L.divIcon({
+    html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.4))">
+      <div style="background:#e53935;color:white;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid #b71c1c">🚐</div>
+      <div style="background:#e53935;color:white;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;white-space:nowrap;margin-top:1px">Van</div>
+    </div>`,
+    className: "", iconAnchor: [18, 52], popupAnchor: [0, -54],
+  });
+  _vanMarker = L.marker([lat, lon], { icon, zIndexOffset: 1000 })
+    .bindPopup("<b>🚐 Van is here</b>")
+    .addTo(_map);
+}
+
+function renderStopMarkers() {
+  if (!_map) return;
+  Object.values(_stopMarkers).forEach(m => m.remove());
+  _stopMarkers = {};
+  const bounds = [];
+
+  _stops.forEach(stop => {
+    if (!stop.lat || !stop.lon) return;
+    const icon = CATEGORY_ICONS[stop.category] || "📍";
+    const isActive = !stop.departed_at;
+    const dur = formatDuration(stop.arrived_at, stop.departed_at);
+
+    const divIcon = L.divIcon({
+      html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3))">
+        <div style="background:${isActive?"#03a9f4":"white"};color:${isActive?"white":"#333"};border:2px solid ${isActive?"#0288d1":"#aaa"};border-radius:8px;padding:3px 7px;font-size:11px;font-weight:600;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis">${icon} ${stop.name||"Stop"}</div>
+        <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid ${isActive?"#0288d1":"#aaa"}"></div>
+      </div>`,
+      className: "", iconAnchor: [60, 36], popupAnchor: [0, -38],
+    });
+
+    const marker = L.marker([stop.lat, stop.lon], { icon: divIcon });
+    marker.bindPopup(`
+      <div class="vl-popup-name">${icon} ${stop.name||"Unnamed Stop"}</div>
+      ${stop.nearest_town ? `<div class="vl-popup-row">📍 ${stop.nearest_town}</div>` : ""}
+      <div class="vl-popup-row">🕐 ${formatDate(stop.arrived_at)}${dur ? ` — ${dur}` : ""}</div>
+      ${stop.rating ? `<div class="vl-popup-row">${renderStars(stop.rating)}</div>` : ""}
+      ${stop.notes ? `<div class="vl-popup-row" style="margin-top:5px;font-style:italic">${stop.notes}</div>` : ""}
+      <button class="vl-popup-edit" data-stopid="${stop.id}">✏️ Edit Notes</button>
+    `, { maxWidth: 260 });
+
+    marker.on("popupopen", () => {
+      setTimeout(() => {
+        const btn = document.querySelector(`.vl-popup-edit[data-stopid="${stop.id}"]`);
+        if (btn) btn.addEventListener("click", () => {
+          marker.closePopup();
+          openEditPanel(stop);
+        });
+      }, 50);
+    });
+
+    marker.addTo(_map);
+    _stopMarkers[stop.id] = marker;
+    bounds.push([stop.lat, stop.lon]);
+  });
+
+  // Don't auto-zoom to stops — map starts on van position
+}
+
+function renderPlaceMarkers() {
+  if (!_map) return;
+  Object.values(_placeMarkers).forEach(m => m.remove());
+  _placeMarkers = {};
+
+  _places.forEach(place => {
+    if (!place.lat || !place.lon) return;
+    const icon = PLACE_CATEGORY_ICONS[place.category] || "📌";
+
+    const divIcon = L.divIcon({
+      html: `<div style="display:flex;flex-direction:column;align-items:center;opacity:0.85;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.25))">
+        <div style="background:#7c3aed;color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #6d28d9">${icon}</div>
+        <div style="background:#7c3aed;color:white;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:-1px">${place.name}</div>
+      </div>`,
+      className: "", iconAnchor: [16, 50], popupAnchor: [0, -52],
+    });
+
+    L.circle([place.lat, place.lon], {
+      radius: place.radius_m, color: "#7c3aed", fillColor: "#7c3aed",
+      fillOpacity: 0.07, weight: 1.5, dashArray: "4 4",
+    }).addTo(_map);
+
+    const m = L.marker([place.lat, place.lon], { icon: divIcon });
+    m.bindPopup(`
+      <div class="vl-popup-name">${icon} ${place.name}</div>
+      <div class="vl-popup-row">Category: ${place.category}</div>
+      <div class="vl-popup-row">Radius: ${place.radius_m}m</div>
+      ${place.notes ? `<div class="vl-popup-row" style="font-style:italic">${place.notes}</div>` : ""}
+    `);
+    m.addTo(_map);
+    _placeMarkers[place.id] = m;
+  });
+}
+
+// ─── Stop list ────────────────────────────────────────────
+
+function renderStopList() {
+  const list = document.getElementById("vl-stop-list");
+  const countEl = document.getElementById("vl-stop-count");
+  if (countEl) countEl.textContent = `${_stops.length} Stop${_stops.length !== 1 ? "s" : ""}`;
+  if (!list) return;
+
+  list.innerHTML = _stops.map(stop => {
+    const icon = CATEGORY_ICONS[stop.category] || "📍";
+    const dur = formatDuration(stop.arrived_at, stop.departed_at);
+    const isActive = !stop.departed_at;
+    return `<div class="vl-stop-item${isActive?" selected":""}" data-stop-id="${stop.id}">
+      <div class="vl-stop-name">${icon} ${stop.name||"Unnamed Stop"}${isActive?` <span style="color:#03a9f4;font-size:11px">● NOW</span>`:""}</div>
+      <div class="vl-stop-meta">${formatDate(stop.arrived_at)}${dur?` · ${dur}`:""}${stop.nearest_town?` · ${stop.nearest_town}`:""}${stop.rating?` · ${renderStars(stop.rating)}`:""}</div>
+      ${stop.notes?`<div class="vl-stop-notes">"${stop.notes}"</div>`:""}
+    </div>`;
+  }).join("");
+
+  list.querySelectorAll(".vl-stop-item").forEach(el => {
+    el.addEventListener("click", () => {
+      const stop = _stops.find(s => s.id === el.dataset.stopId);
+      if (!stop) return;
+      openEditPanel(stop);
+      if (_map && stop.lat && stop.lon) {
+        _map.setView([stop.lat, stop.lon], 13, { animate: true });
+        _stopMarkers[stop.id]?.openPopup();
+      }
+    });
+  });
+}
+
+// ─── Edit panel ───────────────────────────────────────────
+
+function setupEditPanel() {
+  document.getElementById("vl-edit-close").addEventListener("click", closeEditPanel);
+  document.getElementById("vl-edit-cancel").addEventListener("click", closeEditPanel);
+  document.getElementById("vl-edit-save").addEventListener("click", saveStop);
+  document.getElementById("vl-f-stars").addEventListener("click", e => {
+    if (e.target.classList.contains("vl-star")) {
+      _editRating = parseInt(e.target.dataset.n);
+      setStarRating(_editRating);
+    }
+  });
+}
+
+function openEditPanel(stop) {
+  _editingStop = stop;
+  _editRating = stop.rating || 0;
+  document.getElementById("vl-edit-panel").style.display = "block";
+  document.getElementById("vl-edit-title").textContent = `✏️ ${stop.name || "Stop"}`;
+  document.getElementById("vl-f-name").value = stop.name || "";
+  document.getElementById("vl-f-notes").value = stop.notes || "";
+  document.getElementById("vl-f-category").value = stop.category || "other";
+  setStarRating(_editRating);
+  document.querySelectorAll(".vl-stop-item").forEach(el =>
+    el.classList.toggle("selected", el.dataset.stopId === stop.id));
+}
+
+function closeEditPanel() {
+  _editingStop = null;
+  document.getElementById("vl-edit-panel").style.display = "none";
+  document.querySelectorAll(".vl-stop-item").forEach(el => el.classList.remove("selected"));
+}
+
+function setStarRating(n) {
+  document.querySelectorAll(".vl-star").forEach(s =>
+    s.classList.toggle("on", parseInt(s.dataset.n) <= n));
+}
+
+async function saveStop() {
+  if (!_editingStop) return;
+  const stop = _editingStop;
+  const name = document.getElementById("vl-f-name").value.trim() || stop.name;
+  const notes = document.getElementById("vl-f-notes").value.trim();
+  const category = document.getElementById("vl-f-category").value;
+
+  await callService("vanlife_tracker", "update_stop", {
+    stop_id: stop.id, name, notes, rating: _editRating, category,
+  });
+
+  const idx = _stops.findIndex(s => s.id === stop.id);
+  if (idx >= 0) { _stops[idx] = { ..._stops[idx], name, notes, rating: _editRating, category }; }
+  renderStopList();
+  renderStopMarkers();
+  closeEditPanel();
+}
+
+// ─── Named places tab ─────────────────────────────────────
+
+function setupPlacesTab() {
+  document.getElementById("vl-add-place").addEventListener("click", () => showPlaceForm(null));
+  document.getElementById("vl-pf-cancel").addEventListener("click", () => {
+    document.getElementById("vl-place-form-wrap").style.display = "none";
+    _editingPlace = null;
+  });
+  document.getElementById("vl-pf-save").addEventListener("click", savePlace);
+}
+
+function setupDateBar() {
+  // Restore mode from URL param on load
+  const urlMode = new URLSearchParams(window.location.search).get("mode");
+  const validModes = ["today", "yesterday", "3d", "7d", "30d"];
+  if (urlMode && validModes.includes(urlMode)) _dateMode = urlMode;
+
+  // Sync active button to current mode
+  document.querySelectorAll(".vl-date-btn").forEach(b =>
+    b.classList.toggle("active", b.dataset.mode === _dateMode));
+
+  document.querySelectorAll(".vl-date-btn").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const mode = btn.dataset.mode;
+      if (mode === _dateMode) return;
+      _dateMode = mode;
+      // Persist to URL without reloading
+      const u = new URL(window.location);
+      u.searchParams.set("mode", mode);
+      window.history.replaceState({}, "", u);
+      document.querySelectorAll(".vl-date-btn").forEach(b => b.classList.toggle("active", b === btn));
+      if (_routeLayer) await drawRoute();
+    });
+  });
+  document.getElementById("vl-debug-shape-btn").addEventListener("click", async () => {
+    _showShape = !_showShape;
+    document.getElementById("vl-debug-shape-btn").classList.toggle("active", _showShape);
+    if (_routeLayer) _routeLayer.clearLayers();
+    if (_routeLayer) await drawRoute();
+  });
+  document.getElementById("vl-debug-pts-btn").addEventListener("click", async () => {
+    _showDebugPts = !_showDebugPts;
+    document.getElementById("vl-debug-pts-btn").classList.toggle("active", _showDebugPts);
+    if (_debugLayer) _debugLayer.clearLayers();
+    if (_showDebugPts && _routeLayer) await drawRoute();
+  });
+  document.getElementById("vl-debug-raw-btn").addEventListener("click", async () => {
+    _showDebugRaw = !_showDebugRaw;
+    document.getElementById("vl-debug-raw-btn").classList.toggle("active", _showDebugRaw);
+    if (_debugRawLayer) _debugRawLayer.clearLayers();
+    if (_showDebugRaw && _routeLayer) await drawRoute();
+  });
+}
+
+function renderPlacesList() {
+  const cards = document.getElementById("vl-place-cards");
+  if (_places.length === 0) {
+    cards.innerHTML = `<div style="grid-column:1/-1;padding:40px;text-align:center;color:#757575">
+      <div style="font-size:40px;margin-bottom:12px">📌</div>
+      <div style="font-size:16px;font-weight:600;margin-bottom:6px">No named places yet</div>
+      <div style="font-size:13px">Add a place and the van will auto-label stops there.</div>
+    </div>`;
+    return;
+  }
+  cards.innerHTML = _places.map(place => {
+    const icon = PLACE_CATEGORY_ICONS[place.category] || "📌";
+    return `<div class="vl-place-card">
+      <div class="vl-place-card-header">
+        <span class="vl-place-icon">${icon}</span>
+        <span class="vl-place-name">${place.name}</span>
+      </div>
+      <div class="vl-place-meta">
+        ${place.category.replace(/_/g," ")} · ${place.radius_m}m radius<br>
+        📍 ${place.lat?.toFixed(5)}, ${place.lon?.toFixed(5)}
+        ${place.notes ? `<br><em>${place.notes}</em>` : ""}
+      </div>
+      <div class="vl-place-actions">
+        <button class="vl-btn vl-btn-ghost" style="font-size:12px" data-edit="${place.id}">✏️ Edit</button>
+        <button class="vl-btn vl-btn-danger" style="font-size:12px" data-del="${place.id}">🗑️</button>
+      </div>
+    </div>`;
+  }).join("");
+
+  cards.querySelectorAll("[data-edit]").forEach(btn => {
+    const p = _places.find(x => x.id === btn.dataset.edit);
+    if (p) btn.addEventListener("click", () => showPlaceForm(p));
+  });
+  cards.querySelectorAll("[data-del]").forEach(btn => {
+    btn.addEventListener("click", async () => {
+      const p = _places.find(x => x.id === btn.dataset.del);
+      if (!p || !confirm(`Delete "${p.name}"?`)) return;
+      await callService("vanlife_tracker", "delete_named_place", { place_id: p.id });
+      _places = await getNamedPlaces();
+      renderPlacesList();
+      renderPlaceMarkers();
+    });
+  });
+}
+
+function showPlaceForm(place) {
+  _editingPlace = place;
+  const wrap = document.getElementById("vl-place-form-wrap");
+  wrap.style.display = "block";
+  document.getElementById("vl-pf-title").textContent = place ? `Edit: ${place.name}` : "Add Named Place";
+  document.getElementById("vl-pf-name").value = place?.name || "";
+  document.getElementById("vl-pf-category").value = place?.category || "other";
+  document.getElementById("vl-pf-radius").value = place?.radius_m ?? 200;
+  document.getElementById("vl-pf-lat").value = place?.lat ?? "";
+  document.getElementById("vl-pf-lon").value = place?.lon ?? "";
+  document.getElementById("vl-pf-notes").value = place?.notes || "";
+  wrap.scrollIntoView({ behavior: "smooth" });
+}
+
+async function savePlace() {
+  const name = document.getElementById("vl-pf-name").value.trim();
+  if (!name) { alert("Name is required"); return; }
+  const data = {
+    name,
+    category: document.getElementById("vl-pf-category").value,
+    radius_m: parseFloat(document.getElementById("vl-pf-radius").value) || 200,
+    lat: parseFloat(document.getElementById("vl-pf-lat").value),
+    lon: parseFloat(document.getElementById("vl-pf-lon").value),
+    notes: document.getElementById("vl-pf-notes").value.trim(),
+  };
+  if (!data.lat || !data.lon) { alert("Latitude and longitude are required"); return; }
+
+  if (_editingPlace) {
+    await callService("vanlife_tracker", "update_named_place", { place_id: _editingPlace.id, ...data });
+  } else {
+    await callService("vanlife_tracker", "create_named_place", data);
+  }
+  document.getElementById("vl-place-form-wrap").style.display = "none";
+  _editingPlace = null;
+  _places = await getNamedPlaces();
+  renderPlacesList();
+  renderPlaceMarkers();
+}
+
+// ─── Data loading ─────────────────────────────────────────
+
+async function loadData() {
+  const state = getStates()["sensor.vanlife_tracker_recent_stops"];
+  _stops = state?.attributes?.stops || [];
+  _places = []; // named places via REST not yet wired; will add later
+  renderStopList();
+}
+
+// ─── Live updates — poll every 10s using REST states ──────
+
+function startLiveUpdates() {
+  setInterval(async () => {
+    if (!_token) return;
+    try {
+      const r = await fetch("/api/states", { headers: { Authorization: `Bearer ${_token}` } });
+      if (!r.ok) return;
+      const all = await r.json();
+      const newStates = Object.fromEntries(all.map(s => [s.entity_id, s]));
+      _states = newStates;
+
+      // Update stops if changed
+      const newStops = newStates["sensor.vanlife_tracker_recent_stops"]?.attributes?.stops || [];
+      if (JSON.stringify(newStops) !== JSON.stringify(_stops)) {
+        _stops = newStops;
+        renderStopList();
+        renderStopMarkers();
+      }
+      // Always refresh van marker
+      renderVanMarker();
+    } catch(_) {}
+  }, 10000);
+}
+
+// ─── Start ────────────────────────────────────────────────
+
+async function startApp() {
+  console.error("[VL] startApp() called, token:", _token ? "YES" : "NO");
+  _appStarted = true;
+  setStatus("Loading stops...");
+  await loadData();
+  setStatus("Drawing map...");
+  initMap();
+  startLiveUpdates();
+}
+
+document.addEventListener("DOMContentLoaded", () => {
+  console.error("[VL] DOMContentLoaded, token:", _token ? "YES" : "NO");
+  _initDone = true;
+  populateSelects();
+  setupTabs();
+  setupEditPanel();
+  setupPlacesTab();
+  setupDateBar();
+  if (_token) {
+    setStatus("Token from cache, loading...");
+    fetch("/api/states", { headers: { Authorization: `Bearer ${_token}` } })
+      .then(r => { console.error("[VL] /api/states status:", r.status); return r.ok ? r.json() : []; })
+      .then(all => {
+        console.error("[VL] states loaded:", Array.isArray(all) ? all.length : "not array");
+        if (Array.isArray(all)) _states = Object.fromEntries(all.map(s => [s.entity_id, s]));
+        startApp();
+      })
+      .catch(err => { console.error("[VL] states fetch error:", err); startApp(); });
+  } else {
+    setStatus("Waiting for Home Assistant auth...");
+    console.error("[VL] no token, waiting for postMessage...");
+    setTimeout(() => {
+      if (!_appStarted) {
+        console.error("[VL] 5s timeout, still no token");
+        setStatus("⚠ No auth token received. Try reloading.", "rgba(180,0,0,0.7)");
+      }
+    }, 5000);
+  }
+});
+</script>
+</body>
+</html>

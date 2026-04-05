@@ -1,0 +1,170 @@
+title: Vanlife Map
+views:
+  - title: Travel Map
+    path: travel-map
+    icon: mdi:map-marker-path
+    type: sections
+    sections:
+
+      # --- MAP (full width, large) ---------------------------
+      # Shows: van GPS history trail (route lines) + stop markers
+      # Click any stop marker -> more-info shows name, notes, rating, duration
+      - type: grid
+        column_span: 4
+        cards:
+          - type: custom:map-card
+            card_size: 10
+            zoom: 8
+            tile_layer_url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+            tile_layer_attribution: "&copy; OpenStreetMap &copy; CARTO"
+            entities:
+              - entity: device_tracker.vanlife_tracker_van_location
+                label: Van
+                size: 44
+                focus: true
+                fallback_x: 39.5
+                fallback_y: -98.35
+            geo_location_sources:
+              - vanlife_tracker
+            hours_to_show: 168
+
+      # --- STATUS BAR ----------------------------------------
+      - type: grid
+        column_span: 4
+        cards:
+          - type: horizontal-stack
+            cards:
+              - type: custom:mushroom-entity-card
+                entity: sensor.vanlife_tracker_current_stop
+                name: Where I Am
+                layout: horizontal
+                tap_action:
+                  action: more-info
+              - type: custom:mushroom-template-badge
+                entity: sensor.vanlife_tracker_trip_statistics
+                icon: mdi:map-marker-multiple
+                color: blue
+                content: "{{ state_attr('sensor.vanlife_tracker_trip_statistics', 'total_stops') }}"
+                label: Stops
+              - type: custom:mushroom-template-badge
+                entity: sensor.vanlife_tracker_trip_statistics
+                icon: mdi:calendar-range
+                color: green
+                content: "{{ state_attr('sensor.vanlife_tracker_trip_statistics', 'days_on_road') }}d"
+                label: On Road
+
+      # --- CURRENT STOP DETAIL (left) + EDIT FORM (right) ---
+      - type: grid
+        column_span: 2
+        cards:
+          - type: markdown
+            title: "Current Stop"
+            content: >-
+              {% set s = 'sensor.vanlife_tracker_current_stop' %}
+              {% set name = state_attr(s, 'name') %}
+              {% set town = state_attr(s, 'nearest_town') %}
+              {% set arrived = state_attr(s, 'arrived_at') %}
+              {% set departed = state_attr(s, 'departed_at') %}
+              {% set category = (state_attr(s, 'category') or '') | replace('_', ' ') | title %}
+              {% set notes = state_attr(s, 'notes') %}
+              {% set rating = state_attr(s, 'rating') | int(0) %}
+              {% set weather = state_attr(s, 'weather_summary') %}
+              {% set stop_id = state_attr(s, 'stop_id') %}
+              {% if name and name not in ['Traveling', 'No active stop'] %}
+              ## {{ name }}
+              {%- if town %} · {{ town }}{% endif %}
+              {%- if category %} · {{ category }}{% endif %}
+              {% if arrived %}{% set arr = arrived | as_datetime %}{% if arr %}
+              Arrived {{ arr.strftime('%b %d, %I:%M %p') }}
+              {%- set dur_h = ((now() - arr).total_seconds() / 3600) | int %}
+              {%- set dur_m = (((now() - arr).total_seconds() % 3600) / 60) | int %}
+               — **{{ dur_h }}h {{ dur_m }}m** here
+              {% endif %}{% endif %}
+              {%- if rating > 0 %}Rating: {{ rating }}/5{% endif %}
+              {%- if weather %} · {{ weather }}{% endif %}
+              {% if notes %}---
+              {{ notes }}{% endif %}
+              {% if stop_id %}---
+              *ID: `{{ stop_id }}`*{% endif %}
+              {% else %}
+              *{{ states(s) }}*
+              {% endif %}
+
+      - type: grid
+        column_span: 2
+        cards:
+          - type: markdown
+            content: "### Edit Stop Notes"
+
+          - type: custom:mushroom-template-card
+            primary: Load Current Stop
+            secondary: "Fill form from: {{ states('sensor.vanlife_tracker_current_stop') }}"
+            icon: mdi:download
+            icon_color: blue
+            tap_action:
+              action: call-service
+              service: script.vanlife_load_current_stop
+              data: {}
+
+          - type: entities
+            show_header_toggle: false
+            entities:
+              - entity: input_text.vanlife_stop_name
+                name: Name
+              - entity: input_text.vanlife_stop_notes
+                name: Notes
+              - entity: input_select.vanlife_stop_category
+                name: Category
+              - entity: input_number.vanlife_stop_rating
+                name: Rating
+
+          - type: custom:mushroom-template-card
+            primary: Save Changes
+            secondary: "Saving to stop ID: {{ states('input_text.vanlife_stop_id') or '(none loaded)' }}"
+            icon: mdi:content-save
+            icon_color: green
+            tap_action:
+              action: call-service
+              service: script.vanlife_save_stop_edits
+              data: {}
+              confirmation:
+                text: "Save notes & rating to {{ states('input_text.vanlife_stop_name') }}?"
+
+          - type: custom:mushroom-template-card
+            primary: Depart Current Stop
+            secondary: Mark as departed now
+            icon: mdi:car-arrow-right
+            icon_color: orange
+            tap_action:
+              action: call-service
+              service: vanlife_tracker.depart_current_stop
+              data: {}
+              confirmation:
+                text: "Mark current stop as departed?"
+
+      # --- STOP JOURNAL (full width) -------------------------
+      - type: grid
+        column_span: 4
+        cards:
+          - type: markdown
+            title: "Travel Log"
+            content: >-
+              {% set stops = state_attr('sensor.vanlife_tracker_recent_stops', 'stops') or [] %}
+              {% if stops | length == 0 %}*No stops yet -- park for 30 min and one will be auto-created!*
+              {% endif %}
+              {% for stop in stops %}
+              ---
+              **{{ loop.index }}.** {% if stop.rating | int(0) > 0 %}({{ stop.rating }}/5) {% endif %}**{{ stop.name or 'Unnamed Stop' }}**
+              {%- if stop.nearest_town %} · {{ stop.nearest_town }}{% endif %}
+              {%- if stop.category %} · {{ stop.category | replace('_', ' ') | title }}{% endif %}
+              {% set arr = stop.arrived_at | as_datetime if stop.arrived_at else none %}
+              {%- if arr %}{{ arr.strftime('%b %d, %Y') }}
+              {%- if stop.departed_at %}{% set dep = stop.departed_at | as_datetime %}{% if dep %}
+              {%- set h = ((dep - arr).total_seconds() / 3600) | int %}
+              {%- set m = (((dep - arr).total_seconds() % 3600) / 60) | int %}
+               -- stayed {{ h }}h {{ m }}m{% endif %}
+              {%- else %} -- **still here**{% endif %}{% endif %}
+              {%- if stop.notes %}
+              > {{ stop.notes }}{% endif %}
+              `{{ stop.id }}`
+              {% endfor %}

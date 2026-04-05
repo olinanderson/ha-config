@@ -21,7 +21,7 @@
         seconds: 45
     - action: homeassistant.reload_config_entry
       data:
-        entry_id: "{{ config_entries('bms_ble') | first }}"
+        entry_id: "{{ config_entry_id('sensor.olins_van_bms_battery') }}"
 
 # ───────────────────────────────────────────────
 #  Starlink-filtered tracker – MQTT update logic
@@ -809,4 +809,14 @@
   action:
     - delay: "00:00:30"  # let networking come online
     - action: shell_command.start_syncthing
+
+- id: osrm_proxy_start_on_boot
+  alias: "OSRM Proxy • Start on HA boot"
+  mode: single
+  trigger:
+    - trigger: homeassistant
+      event: start
+  action:
+    - delay: "00:00:35"
+    - action: shell_command.start_osrm_proxy
 

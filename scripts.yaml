@@ -464,3 +464,79 @@ shower_mode_off:
     - action: input_boolean.turn_off
       target:
         entity_id: input_boolean.shower_mode
+
+# ============================================================
+# Vanlife Tracker — Journal scripts
+# ============================================================
+
+vanlife_save_stop_edits:
+  alias: "Vanlife: Save Stop Edits"
+  description: "Reads the journal form inputs and calls vanlife_tracker.update_stop"
+  mode: single
+  sequence:
+    - action: vanlife_tracker.update_stop
+      data:
+        stop_id: "{{ states('input_text.vanlife_stop_id') }}"
+        name: "{{ states('input_text.vanlife_stop_name') }}"
+        notes: "{{ states('input_text.vanlife_stop_notes') }}"
+        rating: "{{ states('input_number.vanlife_stop_rating') | int(0) }}"
+        category: "{{ states('input_select.vanlife_stop_category') }}"
+
+vanlife_load_current_stop:
+  alias: "Vanlife: Load Current Stop into Form"
+  description: "Populates the journal form inputs from the current stop sensor"
+  mode: single
+  sequence:
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.vanlife_stop_id
+      data:
+        value: "{{ state_attr('sensor.vanlife_tracker_current_stop', 'stop_id') or '' }}"
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.vanlife_stop_name
+      data:
+        value: "{{ state_attr('sensor.vanlife_tracker_current_stop', 'name') or '' }}"
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.vanlife_stop_notes
+      data:
+        value: "{{ state_attr('sensor.vanlife_tracker_current_stop', 'notes') or '' }}"
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.vanlife_stop_rating
+      data:
+        value: "{{ state_attr('sensor.vanlife_tracker_current_stop', 'rating') | int(0) }}"
+    - action: input_select.select_option
+      target:
+        entity_id: input_select.vanlife_stop_category
+      data:
+        option: "{{ state_attr('sensor.vanlife_tracker_current_stop', 'category') or 'other' }}"
+
+vanlife_quick_save_stop:
+  alias: "Vanlife: Quick Save Stop"
+  description: "Creates a stop at current location with the form name/notes/rating/category"
+  mode: single
+  sequence:
+    - action: vanlife_tracker.create_stop
+      data:
+        name: "{{ states('input_text.vanlife_stop_name') if states('input_text.vanlife_stop_name') != '' else none }}"
+        notes: "{{ states('input_text.vanlife_stop_notes') }}"
+        rating: "{{ states('input_number.vanlife_stop_rating') | int(0) }}"
+        category: "{{ states('input_select.vanlife_stop_category') }}"
+    # Clear the form after saving
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.vanlife_stop_name
+      data:
+        value: ""
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.vanlife_stop_notes
+      data:
+        value: ""
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.vanlife_stop_rating
+      data:
+        value: 0

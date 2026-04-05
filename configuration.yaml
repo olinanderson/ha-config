@@ -66,6 +66,20 @@ lovelace:
       icon: mdi:map-marker-path
       show_in_sidebar: true
       filename: dashboards/map.yaml
+    yaml-vanlife-map:
+      mode: yaml
+      title: Vanlife Map
+      icon: mdi:van-utility
+      show_in_sidebar: true
+      filename: dashboards/vanlife_map.yaml
+
+# --- Custom Panels ---
+panel_custom:
+  - name: vanlife-panel
+    url_path: vanlife
+    sidebar_title: Vanlife
+    sidebar_icon: mdi:map-marker-path
+    module_url: /local/vanlife-panel/panel.js?v=11
 
 # --- Includes ---
 automation: !include automations.yaml
@@ -81,6 +95,7 @@ intent_script: !include intent_scripts.yaml
 input_boolean: !include input_boolean.yaml
 input_number: !include input_number.yaml
 input_text: !include input_text.yaml
+input_select: !include input_select.yaml
 
 # --- Device tracker (LuCI router) ---
 device_tracker:

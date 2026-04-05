@@ -34,3 +34,12 @@ vehicle_stopped_threshold:
   step: 0.5
   unit_of_measurement: "km/h"
   icon: mdi:car-brake-parking
+
+# --- Vanlife Tracker journal ---
+vanlife_stop_rating:
+  name: "Stop Rating"
+  icon: mdi:star
+  min: 0
+  max: 5
+  step: 1
+  initial: 0

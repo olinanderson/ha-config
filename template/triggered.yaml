@@ -103,7 +103,7 @@
       unique_id: hill_aggression
       state: >
         {% set g = states('sensor.road_grade_deg') | float(0) %}
-        {% set a = abs(g) %}
+        {% set a = g | abs %}
         {% if a < 1.0 %} Flat
         {% elif a < 3.0 %} Gentle {{ 'up' if g>0 else 'down' }}
         {% elif a < 6.0 %} Moderate {{ 'up' if g>0 else 'down' }}

@@ -22,6 +22,17 @@ start_scream_receiver: >
   docker exec hassio_audio pkill -f scream || true ;
   docker exec -d hassio_audio scream -u -v -o pulse -s alsa_output.usb-Generic_USB_SPDIF_Adapter_202110200032-00.iec958-stereo -n WinPC'
 
+# Start routing CORS proxy so the vanlife panel can call GraphHopper without CORS errors
+start_osrm_proxy: >
+  /bin/sh -c 'PROXY_PID=$(ps aux | awk '\''/osrm_proxy/{print $1}'\''); if [ -z "$PROXY_PID" ]; then
+    python3 -c "import subprocess; subprocess.Popen([\"python3\",\"/config/www/vanlife-panel/osrm_proxy.py\"],
+      stdout=open(\"/config/www/vanlife-panel/osrm_proxy.log\",\"w\"),
+      stderr=__import__(\"subprocess\").STDOUT, close_fds=True)";
+    echo "Routing proxy started";
+  else
+    echo "Routing proxy already running (PID $PROXY_PID)";
+  fi'
+
 # Start Syncthing for bidirectional config sync with PC over Tailscale
 start_syncthing: >
   /bin/sh -c 'if ! pgrep -f "syncthing serve" > /dev/null 2>&1; then
