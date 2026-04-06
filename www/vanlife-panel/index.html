@@ -544,14 +544,6 @@ function drawMoveSeg(pts, geom, totalStartT, totalDuration) {
 }
 
 
-function haversineM(lat1, lon1, lat2, lon2) {
-  const R = 6371000;
-  const p1 = lat1 * Math.PI / 180, p2 = lat2 * Math.PI / 180;
-  const dp = (lat2 - lat1) * Math.PI / 180, dl = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dp/2)**2 + Math.cos(p1)*Math.cos(p2)*Math.sin(dl/2)**2;
-  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-}
-
 function formatDuration(arrivedAt, departedAt) {
   if (!arrivedAt) return "";
   const secs = ((departedAt ? new Date(departedAt) : new Date()) - new Date(arrivedAt)) / 1000;
@@ -568,6 +560,41 @@ function formatDate(iso) {
 function renderStars(n) {
   n = parseInt(n) || 0;
   return "★".repeat(n) + "☆".repeat(5 - n);
+}
+
+// Human-readable label for a stop: user name, or nearest_town, or "lat, lon (city)"
+function stopDisplayName(stop, opts = {}) {
+  if (stop.name && stop.name !== stop.nearest_town) return stop.name;
+  if (stop.nearest_town) return stop.nearest_town;
+  if (stop.lat && stop.lon) return `${stop.lat.toFixed(4)}, ${stop.lon.toFixed(4)}`;
+  return "Unnamed Stop";
+}
+
+function haversineM(lat1, lon1, lat2, lon2) {
+  const R = 6371000;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLon = (lon2 - lon1) * Math.PI / 180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Greedy cluster: group stops within radiusM of each other → array of arrays
+function clusterStops(stops, radiusM = 100) {
+  const clusters = [];
+  for (const stop of stops) {
+    if (!stop.lat || !stop.lon) continue;
+    let placed = false;
+    for (const cluster of clusters) {
+      const rep = cluster[0];
+      if (haversineM(rep.lat, rep.lon, stop.lat, stop.lon) <= radiusM) {
+        cluster.push(stop);
+        placed = true;
+        break;
+      }
+    }
+    if (!placed) clusters.push([stop]);
+  }
+  return clusters;
 }
 
 // ─── App state ────────────────────────────────────────────
@@ -792,6 +819,11 @@ function renderVanMarker() {
   if (!pos) return;
   const [lat, lon] = pos;
 
+  // If the van is within 80m of the active stop, renderStopMarkers already
+  // folded the van badge into that stop marker — don't double-render.
+  const activeStop = _stops.find(s => !s.departed_at && s.lat && s.lon);
+  if (activeStop && haversineM(lat, lon, activeStop.lat, activeStop.lon) <= 80) return;
+
   const icon = L.divIcon({
     html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.4))">
       <div style="background:#e53935;color:white;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid #b71c1c">🚐</div>
@@ -808,48 +840,117 @@ function renderStopMarkers() {
   if (!_map) return;
   Object.values(_stopMarkers).forEach(m => m.remove());
   _stopMarkers = {};
-  const bounds = [];
 
-  _stops.forEach(stop => {
-    if (!stop.lat || !stop.lon) return;
-    const icon = CATEGORY_ICONS[stop.category] || "📍";
-    const isActive = !stop.departed_at;
-    const dur = formatDuration(stop.arrived_at, stop.departed_at);
+  const vanPos = getVanLocation();
+  const clusters = clusterStops(stopsInWindow());
+
+  clusters.forEach(cluster => {
+    // Pick representative: active stop first, then most recent (first in array)
+    const rep = cluster.find(s => !s.departed_at) || cluster[0];
+    const isActive = !rep.departed_at;
+    const icon = CATEGORY_ICONS[rep.category] || "📍";
+    const dur = formatDuration(rep.arrived_at, rep.departed_at);
+    const count = cluster.length;
+
+    // Is the van parked here?
+    const vanHere = isActive && vanPos
+      && haversineM(vanPos[0], vanPos[1], rep.lat, rep.lon) <= 80;
+
+    const labelBg    = isActive ? "#03a9f4" : "white";
+    const labelColor = isActive ? "white"   : "#333";
+    const borderCol  = isActive ? "#0288d1" : "#aaa";
+
+    const countBadge = count > 1
+      ? `<div style="position:absolute;top:-6px;right:-8px;background:#ff6f00;color:white;border-radius:50%;width:16px;height:16px;font-size:10px;font-weight:700;display:flex;align-items:center;justify-content:center">${count}</div>`
+      : "";
+    const vanBadge = vanHere
+      ? `<div style="position:absolute;top:-8px;left:-8px;font-size:16px;line-height:1" title="Van is here">🚐</div>`
+      : "";
 
     const divIcon = L.divIcon({
       html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3))">
-        <div style="background:${isActive?"#03a9f4":"white"};color:${isActive?"white":"#333"};border:2px solid ${isActive?"#0288d1":"#aaa"};border-radius:8px;padding:3px 7px;font-size:11px;font-weight:600;white-space:nowrap;max-width:120px;overflow:hidden;text-overflow:ellipsis">${icon} ${stop.name||"Stop"}</div>
-        <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid ${isActive?"#0288d1":"#aaa"}"></div>
+        <div style="position:relative;display:inline-flex">
+          ${vanBadge}
+          <div style="background:${labelBg};color:${labelColor};border:2px solid ${borderCol};border-radius:8px;padding:3px 7px;font-size:11px;font-weight:600;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis">${icon} ${stopDisplayName(rep, {short:true})}</div>
+          ${countBadge}
+        </div>
+        <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid ${borderCol}"></div>
       </div>`,
-      className: "", iconAnchor: [60, 36], popupAnchor: [0, -38],
+      className: "", iconAnchor: [65, 38], popupAnchor: [0, -40],
     });
 
-    const marker = L.marker([stop.lat, stop.lon], { icon: divIcon });
+    // Popup lists all stops in the cluster
+    // Check if one stop has a real user-set name while others are generic geocoded names
+    const namedStop = cluster.find(s => s.name && s.name !== s.nearest_town);
+    const unnamedInCluster = namedStop
+      ? cluster.filter(s => s.id !== namedStop.id && (!s.name || s.name === s.nearest_town))
+      : [];
+    const showRenameAll = namedStop && unnamedInCluster.length > 0;
+
+    const clusterRows = cluster.map(s => {
+      const sIcon = CATEGORY_ICONS[s.category] || "📍";
+      const sDur  = formatDuration(s.arrived_at, s.departed_at);
+      const sActive = !s.departed_at;
+      return `
+        <div style="border-top:1px solid #eee;padding-top:6px;margin-top:6px">
+          <div class="vl-popup-name" style="font-size:13px">${sIcon} ${stopDisplayName(s)}${sActive?" 🚐":""}</div>
+          ${s.nearest_town ? `<div class="vl-popup-row">📍 ${s.nearest_town}</div>` : ""}
+          <div class="vl-popup-row">🕐 ${formatDate(s.arrived_at)}${sDur ? ` — ${sDur}` : ""}</div>
+          ${s.rating ? `<div class="vl-popup-row">${renderStars(s.rating)}</div>` : ""}
+          ${s.notes ? `<div class="vl-popup-row" style="font-style:italic">${s.notes}</div>` : ""}
+          <button class="vl-popup-edit" data-stopid="${s.id}">✏️ Edit</button>
+        </div>`;
+    }).join("");
+
+    const renameAllBtn = showRenameAll ? `
+      <div style="background:#fff8e1;border:1px solid #ffe082;border-radius:6px;padding:6px 8px;margin-top:8px;font-size:12px">
+        <div style="margin-bottom:4px">📛 ${unnamedInCluster.length} stop${unnamedInCluster.length>1?"s are":" is"} unnamed here</div>
+        <button class="vl-popup-rename-all" style="background:#ff6f00;color:white;border:none;border-radius:4px;padding:4px 10px;font-size:12px;font-weight:600;cursor:pointer">
+          Rename all to "${namedStop.name}"
+        </button>
+      </div>` : "";
+
+    const marker = L.marker([rep.lat, rep.lon], { icon: divIcon, zIndexOffset: isActive ? 500 : 0 });
     marker.bindPopup(`
-      <div class="vl-popup-name">${icon} ${stop.name||"Unnamed Stop"}</div>
-      ${stop.nearest_town ? `<div class="vl-popup-row">📍 ${stop.nearest_town}</div>` : ""}
-      <div class="vl-popup-row">🕐 ${formatDate(stop.arrived_at)}${dur ? ` — ${dur}` : ""}</div>
-      ${stop.rating ? `<div class="vl-popup-row">${renderStars(stop.rating)}</div>` : ""}
-      ${stop.notes ? `<div class="vl-popup-row" style="margin-top:5px;font-style:italic">${stop.notes}</div>` : ""}
-      <button class="vl-popup-edit" data-stopid="${stop.id}">✏️ Edit Notes</button>
-    `, { maxWidth: 260 });
+      ${vanHere ? `<div style="background:#e3f2fd;border-radius:6px;padding:4px 8px;margin-bottom:6px;font-size:12px;font-weight:600">🚐 Van is currently parked here</div>` : ""}
+      ${clusterRows}
+      ${renameAllBtn}
+    `, { maxWidth: 280 });
 
     marker.on("popupopen", () => {
       setTimeout(() => {
-        const btn = document.querySelector(`.vl-popup-edit[data-stopid="${stop.id}"]`);
-        if (btn) btn.addEventListener("click", () => {
-          marker.closePopup();
-          openEditPanel(stop);
+        cluster.forEach(s => {
+          const btn = document.querySelector(`.vl-popup-edit[data-stopid="${s.id}"]`);
+          if (btn) btn.addEventListener("click", () => {
+            marker.closePopup();
+            openEditPanel(s);
+          });
         });
+        if (showRenameAll) {
+          const btn = document.querySelector(".vl-popup-rename-all");
+          if (btn) btn.addEventListener("click", async () => {
+            btn.disabled = true;
+            btn.textContent = "Renaming…";
+            for (const s of unnamedInCluster) {
+              await callService("vanlife_tracker", "update_stop", {
+                stop_id: s.id, name: namedStop.name,
+                notes: s.notes || "", rating: s.rating || 0, category: s.category || namedStop.category,
+              });
+              const idx = _stops.findIndex(st => st.id === s.id);
+              if (idx >= 0) _stops[idx] = { ..._stops[idx], name: namedStop.name, category: s.category || namedStop.category };
+            }
+            marker.closePopup();
+            renderStopMarkers();
+            renderStopList();
+          });
+        }
       }, 50);
     });
 
     marker.addTo(_map);
-    _stopMarkers[stop.id] = marker;
-    bounds.push([stop.lat, stop.lon]);
+    // Register under all stop IDs in the cluster so edits can find the marker
+    cluster.forEach(s => { _stopMarkers[s.id] = marker; });
   });
-
-  // Don't auto-zoom to stops — map starts on van position
 }
 
 function renderPlaceMarkers() {
@@ -891,15 +992,17 @@ function renderPlaceMarkers() {
 function renderStopList() {
   const list = document.getElementById("vl-stop-list");
   const countEl = document.getElementById("vl-stop-count");
-  if (countEl) countEl.textContent = `${_stops.length} Stop${_stops.length !== 1 ? "s" : ""}`;
+  const visible = stopsInWindow();
+  if (countEl) countEl.textContent = `${visible.length} Stop${visible.length !== 1 ? "s" : ""}`;
   if (!list) return;
 
-  list.innerHTML = _stops.map(stop => {
+  list.innerHTML = visible.map(stop => {
     const icon = CATEGORY_ICONS[stop.category] || "📍";
     const dur = formatDuration(stop.arrived_at, stop.departed_at);
     const isActive = !stop.departed_at;
+    const displayName = stopDisplayName(stop);
     return `<div class="vl-stop-item${isActive?" selected":""}" data-stop-id="${stop.id}">
-      <div class="vl-stop-name">${icon} ${stop.name||"Unnamed Stop"}${isActive?` <span style="color:#03a9f4;font-size:11px">● NOW</span>`:""}</div>
+      <div class="vl-stop-name">${icon} ${displayName}${isActive?` <span style="color:#03a9f4;font-size:11px">● NOW</span>`:""}</div>
       <div class="vl-stop-meta">${formatDate(stop.arrived_at)}${dur?` · ${dur}`:""}${stop.nearest_town?` · ${stop.nearest_town}`:""}${stop.rating?` · ${renderStars(stop.rating)}`:""}</div>
       ${stop.notes?`<div class="vl-stop-notes">"${stop.notes}"</div>`:""}
     </div>`;
@@ -1121,6 +1224,19 @@ async function loadData() {
   renderStopList();
 }
 
+// Returns only stops that overlap the current date window.
+// A stop overlaps if it arrived before the window end AND (departed after window start OR is active).
+function stopsInWindow() {
+  const { start, end } = _dateWindow(_dateMode);
+  const startMs = start.getTime();
+  const endMs   = end.getTime();
+  return _stops.filter(s => {
+    const arrivedMs  = s.arrived_at  ? new Date(s.arrived_at).getTime()  : 0;
+    const departedMs = s.departed_at ? new Date(s.departed_at).getTime() : Infinity;
+    return arrivedMs <= endMs && departedMs >= startMs;
+  });
+}
+
 // ─── Live updates — poll every 10s using REST states ──────
 
 function startLiveUpdates() {
@@ -1149,6 +1265,7 @@ function startLiveUpdates() {
 // ─── Start ────────────────────────────────────────────────
 
 async function startApp() {
+  if (_appStarted) return;
   console.error("[VL] startApp() called, token:", _token ? "YES" : "NO");
   _appStarted = true;
   setStatus("Loading stops...");

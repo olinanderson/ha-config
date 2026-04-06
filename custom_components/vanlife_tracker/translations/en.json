@@ -1,0 +1,63 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Vanlife Tracker Setup",
+        "description": "Configure GPS tracking and auto-stop detection for your van.",
+        "data": {
+          "gps_entity": "GPS entity",
+          "vehicle_moving_entity": "Vehicle moving sensor",
+          "weather_entity": "Weather entity",
+          "stop_delay_minutes": "Auto-stop delay (minutes)",
+          "geocoding_enabled": "Enable reverse geocoding"
+        },
+        "data_description": {
+          "gps_entity": "A device_tracker or sensor with latitude/longitude attributes (e.g. Starlink GPS).",
+          "vehicle_moving_entity": "Binary sensor that indicates when the vehicle is in motion (optional).",
+          "weather_entity": "Weather entity to capture conditions at each stop (optional).",
+          "stop_delay_minutes": "How long the van must be stopped before an auto-stop is created.",
+          "geocoding_enabled": "Use OpenStreetMap Nominatim to auto-name stops by nearest town."
+        }
+      },
+      "traccar": {
+        "title": "Traccar Route Tracking (Optional)",
+        "description": "Enable route tracking via a Traccar server. Install the Traccar add-on first if you want this.",
+        "data": {
+          "traccar_enabled": "Enable Traccar",
+          "traccar_url": "Traccar server URL",
+          "traccar_device_id": "Traccar device ID",
+          "gps_publish_interval": "GPS publish interval (seconds)"
+        },
+        "data_description": {
+          "traccar_enabled": "Push GPS positions to Traccar while the van is moving.",
+          "traccar_url": "URL of your Traccar server (e.g. http://localhost:8082).",
+          "traccar_device_id": "Unique device identifier in Traccar.",
+          "gps_publish_interval": "How often to send GPS updates to Traccar while moving."
+        }
+      }
+    },
+    "error": {
+      "entity_not_found": "Entity not found. Please select a valid entity.",
+      "no_gps_attributes": "Selected entity does not have latitude/longitude attributes.",
+      "invalid_url": "Invalid URL. Must start with http:// or https://."
+    },
+    "abort": {
+      "already_configured": "Vanlife Tracker is already configured."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Vanlife Tracker Options",
+        "description": "Adjust Vanlife Tracker settings.",
+        "data": {
+          "stop_delay_minutes": "Auto-stop delay (minutes)",
+          "geocoding_enabled": "Enable reverse geocoding",
+          "traccar_enabled": "Enable Traccar",
+          "traccar_url": "Traccar server URL",
+          "gps_publish_interval": "GPS publish interval (seconds)"
+        }
+      }
+    }
+  }
+}

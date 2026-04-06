@@ -1,0 +1,348 @@
+create_stop:
+  name: Create Stop
+  description: "Create a new campsite/stop at the current location (or specified coordinates)."
+  fields:
+    name:
+      name: Name
+      description: "Name for this stop (auto-generated if blank)"
+      example: "Joshua Tree BLM"
+      selector:
+        text:
+    lat:
+      name: Latitude
+      description: "Latitude (uses current GPS if blank)"
+      example: 34.0689
+      selector:
+        number:
+          min: -90
+          max: 90
+          step: 0.0001
+          mode: box
+    lon:
+      name: Longitude
+      description: "Longitude (uses current GPS if blank)"
+      example: -116.0541
+      selector:
+        number:
+          min: -180
+          max: 180
+          step: 0.0001
+          mode: box
+    elevation:
+      name: Elevation
+      description: "Elevation in meters"
+      selector:
+        number:
+          min: -500
+          max: 9000
+          step: 1
+          mode: box
+    notes:
+      name: Notes
+      description: "Notes about this stop"
+      example: "Great sunset views, quiet, no cell service"
+      selector:
+        text:
+          multiline: true
+    rating:
+      name: Rating
+      description: "Rating from 0 (unrated) to 5 stars"
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 1
+          mode: slider
+    category:
+      name: Category
+      description: "Type of stop"
+      selector:
+        select:
+          options:
+            - label: "Free Camping / Boondocking"
+              value: "free_camping"
+            - label: "Paid Campground"
+              value: "paid_campground"
+            - label: "Walmart / Parking Lot"
+              value: "walmart"
+            - label: "BLM Land"
+              value: "blm_land"
+            - label: "National Forest"
+              value: "national_forest"
+            - label: "Rest Area"
+              value: "rest_area"
+            - label: "Friend / Family"
+              value: "friend_family"
+            - label: "Urban"
+              value: "urban"
+            - label: "Trailhead"
+              value: "trailhead"
+            - label: "Other"
+              value: "other"
+
+update_stop:
+  name: Update Stop
+  description: "Update an existing stop's name, notes, rating, or category."
+  fields:
+    stop_id:
+      name: Stop ID
+      description: "The ID of the stop to update"
+      required: true
+      selector:
+        text:
+    name:
+      name: Name
+      description: "New name"
+      selector:
+        text:
+    notes:
+      name: Notes
+      description: "Updated notes"
+      selector:
+        text:
+          multiline: true
+    rating:
+      name: Rating
+      description: "Updated rating (0-5)"
+      selector:
+        number:
+          min: 0
+          max: 5
+          step: 1
+          mode: slider
+    category:
+      name: Category
+      description: "Updated category"
+      selector:
+        select:
+          options:
+            - label: "Free Camping / Boondocking"
+              value: "free_camping"
+            - label: "Paid Campground"
+              value: "paid_campground"
+            - label: "Walmart / Parking Lot"
+              value: "walmart"
+            - label: "BLM Land"
+              value: "blm_land"
+            - label: "National Forest"
+              value: "national_forest"
+            - label: "Rest Area"
+              value: "rest_area"
+            - label: "Friend / Family"
+              value: "friend_family"
+            - label: "Urban"
+              value: "urban"
+            - label: "Trailhead"
+              value: "trailhead"
+            - label: "Other"
+              value: "other"
+
+delete_stop:
+  name: Delete Stop
+  description: "Delete a stop by its ID."
+  fields:
+    stop_id:
+      name: Stop ID
+      description: "The ID of the stop to delete"
+      required: true
+      selector:
+        text:
+
+depart_current_stop:
+  name: Depart Current Stop
+  description: "Mark the current stop as departed (sets departure time to now)."
+
+get_stops:
+  name: Get Stops
+  description: "Retrieve recent stops. Results are fired as a vanlife_tracker_stops_response event."
+  fields:
+    limit:
+      name: Limit
+      description: "Max number of stops to return"
+      default: 20
+      selector:
+        number:
+          min: 1
+          max: 500
+          step: 1
+          mode: box
+    category:
+      name: Category Filter
+      description: "Only return stops of this category"
+      selector:
+        select:
+          options:
+            - "free_camping"
+            - "paid_campground"
+            - "walmart"
+            - "blm_land"
+            - "national_forest"
+            - "rest_area"
+            - "friend_family"
+            - "urban"
+            - "trailhead"
+            - "other"
+    min_rating:
+      name: Minimum Rating
+      description: "Only return stops rated this or higher"
+      selector:
+        number:
+          min: 1
+          max: 5
+          step: 1
+          mode: slider
+
+export_gpx:
+  name: Export GPX
+  description: "Export all stops as a GPX file to /config/www/vanlife_stops.gpx (accessible at /local/vanlife_stops.gpx)."
+
+create_named_place:
+  name: Create Named Place
+  description: "Create a named place so future stops at this location are automatically labeled."
+  fields:
+    name:
+      name: Name
+      description: "Name for this place (e.g. Home, Mom's house)"
+      required: true
+      example: "Home"
+      selector:
+        text:
+    lat:
+      name: Latitude
+      description: "Latitude of the named place"
+      required: true
+      selector:
+        number:
+          min: -90
+          max: 90
+          step: 0.00001
+          mode: box
+    lon:
+      name: Longitude
+      description: "Longitude of the named place"
+      required: true
+      selector:
+        number:
+          min: -180
+          max: 180
+          step: 0.00001
+          mode: box
+    radius_m:
+      name: Radius (meters)
+      description: "How close the van must be to match this place (default 200m)"
+      default: 200
+      selector:
+        number:
+          min: 50
+          max: 5000
+          step: 10
+          mode: box
+    category:
+      name: Category
+      description: "Type of place"
+      selector:
+        select:
+          options:
+            - label: "Home"
+              value: "home"
+            - label: "Friend / Family"
+              value: "friend_family"
+            - label: "Free Camping / Boondocking"
+              value: "free_camping"
+            - label: "Paid Campground"
+              value: "paid_campground"
+            - label: "Other"
+              value: "other"
+    notes:
+      name: Notes
+      description: "Optional notes about this place"
+      selector:
+        text:
+          multiline: true
+
+update_named_place:
+  name: Update Named Place
+  description: "Update an existing named place."
+  fields:
+    place_id:
+      name: Place ID
+      description: "The ID of the named place to update"
+      required: true
+      selector:
+        text:
+    name:
+      name: Name
+      selector:
+        text:
+    radius_m:
+      name: Radius (meters)
+      selector:
+        number:
+          min: 50
+          max: 5000
+          step: 10
+          mode: box
+    category:
+      name: Category
+      selector:
+        select:
+          options:
+            - "home"
+            - "friend_family"
+            - "free_camping"
+            - "paid_campground"
+            - "other"
+    notes:
+      name: Notes
+      selector:
+        text:
+          multiline: true
+
+delete_named_place:
+  name: Delete Named Place
+  description: "Delete a named place by its ID."
+  fields:
+    place_id:
+      name: Place ID
+      description: "The ID of the named place to delete"
+      required: true
+      selector:
+        text:
+
+get_named_places:
+  name: Get Named Places
+  description: "Retrieve all named places. Results are fired as a vanlife_tracker_named_places_response event."
+
+backfill_stops:
+  name: Backfill Stops from History
+  description: "Analyze historical GPS data and automatically create stop records for stationary periods. Run this once to populate past stops."
+  fields:
+    days:
+      name: Days to analyze
+      description: "How many days of GPS history to scan (default 30, max 365)"
+      default: 30
+      selector:
+        number:
+          min: 1
+          max: 365
+          step: 1
+          mode: box
+    min_stop_minutes:
+      name: Minimum stop duration (minutes)
+      description: "How long the van must be stationary to count as a stop. Defaults to your configured stop delay."
+      selector:
+        number:
+          min: 5
+          max: 480
+          step: 5
+          mode: box
+    stationary_radius_m:
+      name: Stationary radius (meters)
+      description: "How far the van can drift (GPS noise) while still counting as stationary (default 100m)"
+      default: 100
+      selector:
+        number:
+          min: 20
+          max: 500
+          step: 10
+          mode: box
