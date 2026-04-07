@@ -97,17 +97,6 @@ input_number: !include input_number.yaml
 input_text: !include input_text.yaml
 input_select: !include input_select.yaml
 
-# --- Device tracker (LuCI router) ---
-device_tracker:
-  - platform: luci
-    host: 192.168.10.1
-    username: root
-    password: !secret mofi_password
-    interval_seconds: 1
-    consider_home: 1
-    new_device_defaults:
-      track_new_devices: true
-
 # --- Template sensors & binary sensors ---
 template: !include_dir_merge_list template/
 

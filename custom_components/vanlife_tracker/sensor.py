@@ -178,7 +178,7 @@ class VanlifeCurrentStopSensor(SensorEntity):
 
 
 class VanlifeRecentStopsSensor(SensorEntity):
-    """Sensor listing recent stops (last 10) as attributes — for dashboard use."""
+    """Sensor listing recent stops (last 200) as attributes — for dashboard use."""
 
     _attr_has_entity_name = True
     _attr_name = "Recent Stops"
@@ -214,7 +214,7 @@ class VanlifeRecentStopsSensor(SensorEntity):
 
     async def _async_refresh(self, _now: datetime | None = None) -> None:
         """Refresh recent stops list."""
-        self._stops = await self._coordinator.async_get_stops(limit=10)
+        self._stops = await self._coordinator.async_get_stops(limit=200)
         self._attr_native_value = len(self._stops)
         self.async_write_ha_state()
 

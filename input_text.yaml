@@ -19,7 +19,7 @@ vanlife_stop_name:
 vanlife_stop_notes:
   name: "Stop Notes"
   icon: mdi:notebook-edit
-  max: 500
+  max: 255
   initial: ""
 
 vanlife_stop_id:

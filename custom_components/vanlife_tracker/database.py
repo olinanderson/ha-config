@@ -67,7 +67,34 @@ CREATE TABLE IF NOT EXISTS named_places (
 );
 """
 
-SCHEMA_VERSION = 2
+CREATE_GPS_TRACK_TABLE = """
+CREATE TABLE IF NOT EXISTS gps_track (
+    ts      REAL NOT NULL,
+    lat     REAL NOT NULL,
+    lon     REAL NOT NULL,
+    source  TEXT NOT NULL DEFAULT 'live'
+);
+CREATE UNIQUE INDEX IF NOT EXISTS gps_track_ts_source ON gps_track (ts, source);
+CREATE INDEX IF NOT EXISTS gps_track_ts ON gps_track (ts);
+"""
+
+CREATE_COMPUTED_TRIPS_TABLE = """
+CREATE TABLE IF NOT EXISTS computed_trips (
+    id          TEXT PRIMARY KEY,
+    start_ts    REAL NOT NULL,
+    end_ts      REAL,
+    from_stop_id TEXT,
+    to_stop_id  TEXT,
+    distance_m  REAL DEFAULT 0,
+    duration_s  REAL DEFAULT 0,
+    created_at  TEXT NOT NULL,
+    updated_at  TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS computed_trips_start ON computed_trips (start_ts);
+CREATE INDEX IF NOT EXISTS computed_trips_end ON computed_trips (end_ts);
+"""
+
+SCHEMA_VERSION = 5
 
 
 class VanlifeDatabase:
@@ -89,6 +116,16 @@ class VanlifeDatabase:
         await self._db.execute(CREATE_TRIPS_TABLE)
         await self._db.execute(CREATE_META_TABLE)
         await self._db.execute(CREATE_NAMED_PLACES_TABLE)
+        # gps_track: CREATE TABLE + two indexes need separate execute calls
+        for stmt in CREATE_GPS_TRACK_TABLE.strip().split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                await self._db.execute(stmt)
+        # computed_trips: CREATE TABLE + two indexes
+        for stmt in CREATE_COMPUTED_TRIPS_TABLE.strip().split(";"):
+            stmt = stmt.strip()
+            if stmt:
+                await self._db.execute(stmt)
         await self._db.commit()
 
         # Check/migrate schema version
@@ -105,6 +142,37 @@ class VanlifeDatabase:
             )
             await self._db.commit()
             _LOGGER.info("Vanlife Tracker DB migrated to schema v2")
+
+        if existing_version < 3:
+            # v3: gps_track table (already created above if not exists)
+            await self._db.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '3')"
+            )
+            await self._db.commit()
+            _LOGGER.info("Vanlife Tracker DB migrated to schema v3 (gps_track)")
+
+        if existing_version < 4:
+            # v4: fuel columns on stops table
+            for col in ("fuel_pct_arrive", "fuel_pct_depart"):
+                try:
+                    await self._db.execute(
+                        f"ALTER TABLE stops ADD COLUMN {col} REAL DEFAULT NULL"
+                    )
+                except Exception:  # noqa: BLE001
+                    pass  # column already exists
+            await self._db.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '4')"
+            )
+            await self._db.commit()
+            _LOGGER.info("Vanlife Tracker DB migrated to schema v4 (fuel columns)")
+
+        if existing_version < 5:
+            # v5: computed_trips table (already created above if not exists)
+            await self._db.execute(
+                "INSERT OR REPLACE INTO meta (key, value) VALUES ('schema_version', '5')"
+            )
+            await self._db.commit()
+            _LOGGER.info("Vanlife Tracker DB migrated to schema v5 (computed_trips)")
 
         _LOGGER.info("Vanlife Tracker database ready at %s", self._db_path)
 
@@ -138,6 +206,8 @@ class VanlifeDatabase:
             "temp_low": str(stop_data.get("temp_low", "")),
             "nearest_town": stop_data.get("nearest_town", ""),
             "auto_detected": 1 if stop_data.get("auto_detected") else 0,
+            "fuel_pct_arrive": stop_data.get("fuel_pct_arrive"),
+            "fuel_pct_depart": stop_data.get("fuel_pct_depart"),
             "created_at": now,
             "updated_at": now,
         }
@@ -146,11 +216,13 @@ class VanlifeDatabase:
             """INSERT INTO stops
                (id, lat, lon, elevation, arrived_at, departed_at, name, notes,
                 rating, category, weather, temp_high, temp_low, nearest_town,
-                auto_detected, created_at, updated_at)
+                auto_detected, fuel_pct_arrive, fuel_pct_depart,
+                created_at, updated_at)
                VALUES (:id, :lat, :lon, :elevation, :arrived_at, :departed_at,
                        :name, :notes, :rating, :category, :weather, :temp_high,
-                       :temp_low, :nearest_town, :auto_detected, :created_at,
-                       :updated_at)""",
+                       :temp_low, :nearest_town, :auto_detected,
+                       :fuel_pct_arrive, :fuel_pct_depart,
+                       :created_at, :updated_at)""",
             stop,
         )
         await self._db.commit()
@@ -171,6 +243,7 @@ class VanlifeDatabase:
             "name", "notes", "rating", "category", "departed_at",
             "weather", "temp_high", "temp_low", "nearest_town",
             "lat", "lon", "elevation",
+            "fuel_pct_arrive", "fuel_pct_depart",
         }
         filtered = {k: v for k, v in updates.items() if k in allowed_fields and v is not None}
         if not filtered:
@@ -390,6 +463,161 @@ class VanlifeDatabase:
                 best_dist = dist
                 best = place
         return best
+
+    # ─── Computed Trips ───────────────────────────────────────
+
+    async def async_create_trip(self, trip_data: dict[str, Any]) -> dict[str, Any]:
+        """Create a new computed trip record."""
+        now = datetime.now().isoformat()
+        trip = {
+            "id": trip_data.get("id", _generate_id()),
+            "start_ts": float(trip_data["start_ts"]),
+            "end_ts": float(trip_data["end_ts"]) if trip_data.get("end_ts") else None,
+            "from_stop_id": trip_data.get("from_stop_id"),
+            "to_stop_id": trip_data.get("to_stop_id"),
+            "distance_m": float(trip_data.get("distance_m", 0)),
+            "duration_s": float(trip_data.get("duration_s", 0)),
+            "created_at": now,
+            "updated_at": now,
+        }
+        await self._db.execute(
+            """INSERT INTO computed_trips
+               (id, start_ts, end_ts, from_stop_id, to_stop_id,
+                distance_m, duration_s, created_at, updated_at)
+               VALUES (:id, :start_ts, :end_ts, :from_stop_id, :to_stop_id,
+                       :distance_m, :duration_s, :created_at, :updated_at)""",
+            trip,
+        )
+        await self._db.commit()
+        return trip
+
+    async def async_update_trip(
+        self, trip_id: str, updates: dict[str, Any]
+    ) -> dict[str, Any] | None:
+        """Update fields on an existing trip."""
+        allowed = {"end_ts", "from_stop_id", "to_stop_id", "distance_m", "duration_s"}
+        filtered = {k: v for k, v in updates.items() if k in allowed}
+        if not filtered:
+            return await self.async_get_trip(trip_id)
+        filtered["updated_at"] = datetime.now().isoformat()
+        filtered["id"] = trip_id
+        set_clause = ", ".join(f"{k} = :{k}" for k in filtered if k != "id")
+        await self._db.execute(
+            f"UPDATE computed_trips SET {set_clause} WHERE id = :id", filtered
+        )
+        await self._db.commit()
+        return await self.async_get_trip(trip_id)
+
+    async def async_get_trip(self, trip_id: str) -> dict[str, Any] | None:
+        """Get a single trip by ID."""
+        async with self._db.execute(
+            "SELECT * FROM computed_trips WHERE id = ?", (trip_id,)
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def async_get_trips(
+        self, start_ts: float, end_ts: float
+    ) -> list[dict[str, Any]]:
+        """Get trips that overlap with [start_ts, end_ts]."""
+        async with self._db.execute(
+            """SELECT * FROM computed_trips
+               WHERE start_ts <= ? AND (end_ts IS NULL OR end_ts >= ?)
+               ORDER BY start_ts ASC""",
+            (end_ts, start_ts),
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [dict(row) for row in rows]
+
+    async def async_get_current_trip(self) -> dict[str, Any] | None:
+        """Get the most recent trip that hasn't ended (currently driving)."""
+        async with self._db.execute(
+            "SELECT * FROM computed_trips WHERE end_ts IS NULL ORDER BY start_ts DESC LIMIT 1"
+        ) as cursor:
+            row = await cursor.fetchone()
+            return dict(row) if row else None
+
+    async def async_delete_trip(self, trip_id: str) -> bool:
+        """Delete a trip by ID."""
+        cursor = await self._db.execute(
+            "DELETE FROM computed_trips WHERE id = ?", (trip_id,)
+        )
+        await self._db.commit()
+        return cursor.rowcount > 0
+
+    async def async_delete_trips_in_range(
+        self, start_ts: float, end_ts: float
+    ) -> int:
+        """Delete all trips starting within [start_ts, end_ts]. Returns count."""
+        cursor = await self._db.execute(
+            "DELETE FROM computed_trips WHERE start_ts >= ? AND start_ts <= ?",
+            (start_ts, end_ts),
+        )
+        await self._db.commit()
+        return cursor.rowcount
+
+    async def async_link_latest_trip_to_stop(self, stop_id: str) -> bool:
+        """Link the most recent ended trip (with no to_stop) to a destination stop."""
+        cursor = await self._db.execute(
+            """UPDATE computed_trips SET to_stop_id = ?, updated_at = ?
+               WHERE id = (
+                   SELECT id FROM computed_trips
+                   WHERE end_ts IS NOT NULL AND to_stop_id IS NULL
+                   ORDER BY end_ts DESC LIMIT 1
+               )""",
+            (stop_id, datetime.now().isoformat()),
+        )
+        await self._db.commit()
+        return cursor.rowcount > 0
+
+    # ─── GPS track ────────────────────────────────────────────
+
+    async def async_insert_gps_points(
+        self, points: list[dict[str, Any]], source: str = "live"
+    ) -> int:
+        """Bulk-insert GPS track points. Each point needs ts (unix float), lat, lon.
+        Silently ignores duplicates (same ts+source). Returns count inserted."""
+        if not points:
+            return 0
+        rows = [(p["ts"], p["lat"], p["lon"], source) for p in points]
+        await self._db.executemany(
+            "INSERT OR IGNORE INTO gps_track (ts, lat, lon, source) VALUES (?, ?, ?, ?)",
+            rows,
+        )
+        await self._db.commit()
+        return len(rows)
+
+    async def async_get_gps_track(
+        self, start_ts: float, end_ts: float, max_points: int = 0
+    ) -> list[dict[str, Any]]:
+        """Return GPS points in [start_ts, end_ts] ordered by ts.
+
+        If max_points > 0, downsample by grouping into time buckets and
+        returning one representative point per bucket.  This keeps the SQL
+        index on ``ts`` effective while capping the result set size.
+        """
+        if max_points > 0:
+            span = end_ts - start_ts
+            bucket = max(1.0, span / max_points)
+            async with self._db.execute(
+                "SELECT MIN(ts) AS ts, "
+                "       AVG(lat) AS lat, "
+                "       AVG(lon) AS lon "
+                "FROM gps_track "
+                "WHERE ts >= ? AND ts <= ? "
+                "GROUP BY CAST(ts / ? AS INTEGER) "
+                "ORDER BY ts ASC",
+                (start_ts, end_ts, bucket),
+            ) as cursor:
+                rows = await cursor.fetchall()
+                return [{"ts": row[0], "lat": row[1], "lon": row[2]} for row in rows]
+
+        async with self._db.execute(
+            "SELECT ts, lat, lon FROM gps_track WHERE ts >= ? AND ts <= ? ORDER BY ts ASC",
+            (start_ts, end_ts),
+        ) as cursor:
+            rows = await cursor.fetchall()
+            return [{"ts": row[0], "lat": row[1], "lon": row[2]} for row in rows]
 
 
 def _generate_id() -> str:

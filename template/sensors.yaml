@@ -242,3 +242,78 @@
         latitude: "{{ states('sensor.wican_latitude') }}"
         longitude: "{{ states('sensor.wican_longitude') }}"
       icon: mdi:map-marker
+
+    # ─── Ford-specific computed sensors (WiCAN Pro Mode 22 PIDs) ───
+
+    - name: "Fuel Consumption (L/100km)"
+      unique_id: wican_fuel_consumption_l100km
+      unit_of_measurement: "L/100km"
+      state_class: measurement
+      icon: mdi:gas-station
+      state: >
+        {% set rate_gs = states('sensor.wican_fuel_rate') | float(0) %}
+        {% set speed = states('sensor.wican_speed') | float(0) %}
+        {% if rate_gs > 0 and speed > 5 %}
+          {% set l_per_h = rate_gs * 3600 / 755 %}
+          {{ (l_per_h / speed * 100) | round(1) }}
+        {% else %}
+          {{ this.state if this.state not in ['unknown','unavailable'] else '0' }}
+        {% endif %}
+
+    - name: "Fuel Consumption (L/h)"
+      unique_id: wican_fuel_consumption_lh
+      unit_of_measurement: "L/h"
+      state_class: measurement
+      icon: mdi:gas-station-outline
+      state: >
+        {% set rate_gs = states('sensor.wican_fuel_rate') | float(0) %}
+        {% if rate_gs > 0 %}
+          {{ (rate_gs * 3600 / 755) | round(2) }}
+        {% else %}
+          0
+        {% endif %}
+
+    - name: "Transmission Temp (last good)"
+      unique_id: trans_temp_last
+      unit_of_measurement: "°C"
+      icon: mdi:car-cog
+      state: >
+        {% if states('sensor.wican_transmission_temperature') not in ['unknown','unavailable'] %}
+          {{ states('sensor.wican_transmission_temperature') }}
+        {% else %}
+          {{ this.state if this.state not in ['unknown','unavailable'] else '0' }}
+        {% endif %}
+
+    - name: "Gear Display"
+      unique_id: wican_gear_display
+      icon: mdi:car-shift-pattern
+      state: >
+        {% set g = states('sensor.wican_current_gear') | int(-1) %}
+        {% if g == 0 %}Park
+        {% elif g == 255 %}Reverse
+        {% elif g >= 1 and g <= 6 %}{{ g }}
+        {% elif g == 15 %}Neutral
+        {% else %}--
+        {% endif %}
+
+    - name: "Tire Pressure Min"
+      unique_id: wican_tyre_pressure_min
+      unit_of_measurement: "psi"
+      device_class: pressure
+      icon: mdi:car-tire-alert
+      state: >
+        {% set fl = states('sensor.wican_tire_pressure_fl') | float(0) %}
+        {% set fr = states('sensor.wican_tire_pressure_fr') | float(0) %}
+        {% set rl = states('sensor.wican_tire_pressure_rl') | float(0) %}
+        {% set rr = states('sensor.wican_tire_pressure_rr') | float(0) %}
+        {% set pressures = [fl, fr, rl, rr] | select('gt', 0) | list %}
+        {{ pressures | min | round(1) if pressures | length > 0 else 0 }}
+
+    # ─── Check Engine Light / MIL (from PID 0x01 Monitor Status) ───
+
+    - name: "DTC Count"
+      unique_id: wican_dtc_count
+      icon: mdi:car-wrench
+      state_class: measurement
+      state: >
+        {{ states('sensor.wican_monitor_status_raw') | int(0) % 128 }}

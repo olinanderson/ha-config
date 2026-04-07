@@ -57,3 +57,34 @@
     - name: "Inverter On"
       device_class: power
       state: "{{ is_state('binary_sensor.shelly_em_reachable','on') }}"
+
+# ─── TPMS low pressure alert ───
+- binary_sensor:
+    - name: "Low Tire Pressure"
+      unique_id: low_tire_pressure
+      device_class: problem
+      icon: mdi:car-tire-alert
+      state: >
+        {% set fl = states('sensor.wican_tire_pressure_fl') | float(0) %}
+        {% set fr = states('sensor.wican_tire_pressure_fr') | float(0) %}
+        {% set rl = states('sensor.wican_tire_pressure_rl') | float(0) %}
+        {% set rr = states('sensor.wican_tire_pressure_rr') | float(0) %}
+        {% set threshold = 35 %}
+        {% set pressures = [fl, fr, rl, rr] | select('gt', 0) | list %}
+        {{ pressures | select('lt', threshold) | list | length > 0 if pressures | length > 0 else false }}
+      attributes:
+        fl_psi: "{{ states('sensor.wican_tire_pressure_fl') }}"
+        fr_psi: "{{ states('sensor.wican_tire_pressure_fr') }}"
+        rl_psi: "{{ states('sensor.wican_tire_pressure_rl') }}"
+        rr_psi: "{{ states('sensor.wican_tire_pressure_rr') }}"
+
+# ─── Check Engine Light (MIL from PID 0x01) ───
+- binary_sensor:
+    - name: "Check Engine Light"
+      unique_id: check_engine_light
+      device_class: problem
+      icon: mdi:engine
+      state: >
+        {{ states('sensor.wican_monitor_status_raw') | int(0) >= 128 }}
+      attributes:
+        dtc_count: "{{ states('sensor.dtc_count') }}"

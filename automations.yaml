@@ -455,8 +455,9 @@
       value_template: "{{ states('sensor.wican_speed') not in ['unavailable', 'unknown'] }}"
   action:
     - action: input_text.set_value
-      data:
+      target:
         entity_id: input_text.previous_speed
+      data:
         value: "{{ trigger.from_state.state | default('0') }}"
 
 # Update stable fuel level when acceleration is low
@@ -484,8 +485,9 @@
   action:
     # Update the stored fuel level
     - action: input_text.set_value
-      data:
+      target:
         entity_id: input_text.previous_fuel_level
+      data:
         value: "{{ states('sensor.wican_fuel') }}"
 
 # Handle WICAN disconnection (engine off)
@@ -500,8 +502,9 @@
   action:
     # Store the last known fuel level before disconnect
     - action: input_text.set_value
-      data:
+      target:
         entity_id: input_text.previous_fuel_level
+      data:
         value: "{{ trigger.from_state.state | default('0') }}"
 
 # Initialize on startup or reconnect
@@ -520,12 +523,14 @@
       value_template: "{{ states('sensor.wican_fuel') not in ['unavailable', 'unknown'] }}"
   action:
     - action: input_text.set_value
-      data:
+      target:
         entity_id: input_text.previous_fuel_level
+      data:
         value: "{{ states('sensor.wican_fuel') }}"
     - action: input_text.set_value
-      data:
+      target:
         entity_id: input_text.previous_speed
+      data:
         value: "{{ states('sensor.wican_speed') | default('0') }}"
 
 # ────────────────────────────────────────────────────────────────

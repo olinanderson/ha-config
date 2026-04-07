@@ -14,6 +14,18 @@ This is a **Home Assistant** instance (version **2025.7.1**) running on a **camp
 (referred to as "Olin's van"). The system manages all electrical, climate, water, vehicle,
 entertainment, and safety subsystems for full-time van life.
 
+### Vehicle
+
+| Spec | Value |
+|---|---|
+| **Chassis** | 2016 Ford Transit T-350 HD |
+| **Engine** | 3.5L EcoBoost V6 (twin-turbo, gasoline) |
+| **Body** | High Roof, Extended Length |
+| **Fuel tank** | 94.6 L (25 US gal) |
+| **Drivetrain** | RWD, 6-speed automatic |
+| **Electrical** | 24V LiFePO4 house battery system (separate from 12V chassis) |
+| **OBD** | Standard OBD-II; supports PIDs 01–20 + select 41–60; no TPMS/odometer via OBD |
+
 ---
 
 ## System Architecture
@@ -367,7 +379,7 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 | `button.a32_pro_inverter_on_off_toggle` | Inverter toggle (momentary) |
 | `binary_sensor.192_168_10_174` | Shelly EM ping → inverter AC is live |
 
-### Vehicle / OBD (WiCAN MQTT)
+### Vehicle / OBD (WiCAN MQTT — Standard PIDs)
 | Entity | Description |
 |---|---|
 | `sensor.wican_speed` | Speed (km/h) |
@@ -381,7 +393,36 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 | `sensor.wican_control_module_voltage` | ECU voltage (V) |
 | `sensor.wican_ambient_air_temperature` | OBD ambient air temp (°C) |
 | `sensor.wican_distance_mil_on` | Distance since check engine (km) |
+| `sensor.wican_monitor_status_raw` | PID 0x01 raw byte (MIL bit 7 + DTC count bits 0-6) |
 | `binary_sensor.wican_connected` | WiCAN online/offline |
+
+### Vehicle / OBD (WiCAN Pro — Ford Mode 22 Custom PIDs)
+| Entity | Description |
+|---|---|
+| `sensor.wican_tire_pressure_fl` | Front-left tire pressure (psi) |
+| `sensor.wican_tire_pressure_fr` | Front-right tire pressure (psi) |
+| `sensor.wican_tire_pressure_rl` | Rear-left tire pressure (psi) |
+| `sensor.wican_tire_pressure_rr` | Rear-right tire pressure (psi) |
+| `sensor.wican_transmission_temperature` | Transmission fluid temp (°C) |
+| `sensor.wican_current_gear` | Current gear (raw int: 0=P, 15=N, 255=R, 1-6=gear) |
+| `sensor.wican_oil_life` | Engine oil life remaining (%) |
+| `sensor.wican_fuel_rate` | Fuel consumption rate (g/s) |
+| `sensor.wican_wastegate` | Turbo wastegate position (%) |
+| `sensor.wican_intake_air_temperature` | Intake air temp (°C) |
+| `sensor.wican_fuel_pressure` | Fuel rail pressure (kPa) |
+| `sensor.wican_alternator_duty` | Alternator duty cycle (%) |
+
+### Vehicle Computed Sensors (templates)
+| Entity | Description |
+|---|---|
+| `sensor.fuel_consumption_l100km` | Fuel economy (L/100km, only when speed > 5 km/h) |
+| `sensor.fuel_consumption_lh` | Fuel consumption rate (L/h) |
+| `sensor.trans_temp_last` | Sticky last-known-good transmission temp |
+| `sensor.wican_gear_display` | Gear as text: Park/Reverse/Neutral/1-6 |
+| `sensor.wican_tyre_pressure_min` | Min tire pressure across all 4 (ignoring 0s) |
+| `sensor.dtc_count` | Number of active DTCs (from PID 0x01) |
+| `binary_sensor.check_engine_light` | MIL/CEL on/off (from PID 0x01 bit 7) |
+| `binary_sensor.low_tire_pressure` | Any tire < 35 psi (has fl/fr/rl/rr_psi attributes) |
 
 ### Vehicle Movement (template binary_sensors)
 | Entity | Description |
@@ -420,6 +461,7 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 | `sensor.ambient_air_temp_last` | Sticky last-good OBD ambient temp |
 | `sensor.coolant_temp_last` | Sticky last-good coolant temp |
 | `sensor.road_grade_percent_last` | Sticky last-good road grade % |
+| `sensor.trans_temp_last` | Sticky last-good transmission temp |
 
 ### Presence / Occupancy
 | Entity | Description |

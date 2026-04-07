@@ -11,23 +11,15 @@ create_stop:
     lat:
       name: Latitude
       description: "Latitude (uses current GPS if blank)"
-      example: 34.0689
+      example: "34.0689"
       selector:
-        number:
-          min: -90
-          max: 90
-          step: 0.0001
-          mode: box
+        text:
     lon:
       name: Longitude
       description: "Longitude (uses current GPS if blank)"
-      example: -116.0541
+      example: "-116.0541"
       selector:
-        number:
-          min: -180
-          max: 180
-          step: 0.0001
-          mode: box
+        text:
     elevation:
       name: Elevation
       description: "Elevation in meters"
@@ -211,22 +203,16 @@ create_named_place:
       name: Latitude
       description: "Latitude of the named place"
       required: true
+      example: "50.97306"
       selector:
-        number:
-          min: -90
-          max: 90
-          step: 0.00001
-          mode: box
+        text:
     lon:
       name: Longitude
       description: "Longitude of the named place"
       required: true
+      example: "-114.13881"
       selector:
-        number:
-          min: -180
-          max: 180
-          step: 0.00001
-          mode: box
+        text:
     radius_m:
       name: Radius (meters)
       description: "How close the van must be to match this place (default 200m)"
@@ -346,3 +332,24 @@ backfill_stops:
           max: 500
           step: 10
           mode: box
+
+backfill_trips:
+  name: Backfill Trips from GPS Track
+  description: "Process GPS track data into computed trips and auto-detected stops. Uses chain-based detection (50m/10min). Run after backfilling GPS data."
+  fields:
+    days:
+      name: Days to analyze
+      description: "How many days of GPS track to process (default 365, max 730)"
+      default: 365
+      selector:
+        number:
+          min: 1
+          max: 730
+          step: 1
+          mode: box
+    clear_existing:
+      name: Clear existing trips
+      description: "Delete existing computed trips in the range before rebuilding (default true)"
+      default: true
+      selector:
+        boolean:

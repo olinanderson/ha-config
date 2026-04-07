@@ -129,6 +129,7 @@
     - name: Stable Fuel Level
       unique_id: stable_fuel_level
       unit_of_measurement: "%"
+      state_class: measurement
       state: >
         {% set mean = states('sensor.wican_fuel_5_min_mean') %}
         {% if mean not in ['unavailable', 'unknown', 'none'] %}

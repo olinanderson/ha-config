@@ -23,6 +23,7 @@ from .const import (
     SERVICE_DELETE_NAMED_PLACE,
     SERVICE_GET_NAMED_PLACES,
     SERVICE_BACKFILL_STOPS,
+    SERVICE_BACKFILL_TRIPS,
     STOP_CATEGORIES,
 )
 from .coordinator import VanlifeCoordinator
@@ -38,6 +39,8 @@ CREATE_STOP_SCHEMA = vol.Schema(
         vol.Optional("notes"): cv.string,
         vol.Optional("rating"): vol.All(vol.Coerce(int), vol.Range(min=0, max=5)),
         vol.Optional("category"): vol.In(STOP_CATEGORIES),
+        vol.Optional("arrived_at"): cv.string,
+        vol.Optional("departed_at"): cv.string,
     }
 )
 
@@ -111,6 +114,15 @@ BACKFILL_STOPS_SCHEMA = vol.Schema(
         vol.Optional("stationary_radius_m", default=100): vol.All(
             vol.Coerce(float), vol.Range(min=20, max=500)
         ),
+    }
+)
+
+BACKFILL_TRIPS_SCHEMA = vol.Schema(
+    {
+        vol.Optional("days", default=365): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=730)
+        ),
+        vol.Optional("clear_existing", default=True): vol.Coerce(bool),
     }
 )
 
@@ -222,6 +234,29 @@ async def async_register_services(hass: HomeAssistant) -> None:
         )
         _LOGGER.info("Backfill: %s", result.get("message"))
 
+    async def handle_backfill_trips(call: ServiceCall) -> None:
+        """Handle backfill_trips — fire-and-forget background task."""
+        import time
+        coordinator = _get_coordinator(hass)
+        days = call.data.get("days", 365)
+        clear = call.data.get("clear_existing", True)
+        end_ts = time.time()
+        start_ts = end_ts - (days * 86400)
+
+        async def _run_backfill():
+            try:
+                result = await coordinator.async_backfill_trips(
+                    start_ts=start_ts,
+                    end_ts=end_ts,
+                    clear_existing=clear,
+                )
+                _LOGGER.info("Backfill trips complete: %s", result.get("message"))
+            except Exception:
+                _LOGGER.exception("Backfill trips failed")
+
+        hass.async_create_task(_run_backfill())
+        _LOGGER.info("Backfill trips started (days=%d, clear=%s)", days, clear)
+
     # Register all services
     hass.services.async_register(
         DOMAIN, SERVICE_CREATE_STOP, handle_create_stop, schema=CREATE_STOP_SCHEMA
@@ -260,6 +295,10 @@ async def async_register_services(hass: HomeAssistant) -> None:
         DOMAIN, SERVICE_BACKFILL_STOPS, handle_backfill_stops,
         schema=BACKFILL_STOPS_SCHEMA,
     )
+    hass.services.async_register(
+        DOMAIN, SERVICE_BACKFILL_TRIPS, handle_backfill_trips,
+        schema=BACKFILL_TRIPS_SCHEMA,
+    )
 
 
 async def async_unregister_services(hass: HomeAssistant) -> None:
@@ -276,5 +315,6 @@ async def async_unregister_services(hass: HomeAssistant) -> None:
         SERVICE_DELETE_NAMED_PLACE,
         SERVICE_GET_NAMED_PLACES,
         SERVICE_BACKFILL_STOPS,
+        SERVICE_BACKFILL_TRIPS,
     ):
         hass.services.async_remove(DOMAIN, service)

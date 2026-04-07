@@ -7,6 +7,11 @@ home-assistant.log*
 home-assistant_v2.db
 home-assistant_v2.db-shm
 home-assistant_v2.db-wal
+vanlife_tracker.db
+vanlife_tracker.db-shm
+vanlife_tracker.db-wal
+starlink_gps_backup.db*
+db_backups/
 *.db-journal
 *.pid
 
@@ -39,12 +44,12 @@ www/community/
 www/sounds/
 www/images/
 
-# --- Zigbee2MQTT runtime data ---
-zigbee2mqtt/database.db
-zigbee2mqtt/log/
-zigbee2mqtt/state.json
-zigbee2mqtt/coordinator_backup.json
-zigbee2mqtt/configuration.yaml
+# --- Frontend runtime caches ---
+www/vanlife-panel/route_cache.db
+www/vanlife-panel/osrm_proxy.log
+
+# --- Zigbee2MQTT (managed by Z2M, not hand-edited) ---
+zigbee2mqtt/
 
 # --- ESPHome build artifacts ---
 esphome/.esphome/
@@ -58,9 +63,11 @@ __pycache__/
 *.pyc
 .DS_Store
 Thumbs.db
+nul
 *.swp
 *.swo
 *~
+ha_config.code-workspace
 
 # --- Backups (large, keep locally but not in repo) ---
 yaml_backups/
@@ -72,3 +79,5 @@ themes/
 .stfolder/
 .stversions/
 .ha-sync/
+*.sync-conflict-*
+~syncthing~*

@@ -8,6 +8,9 @@ home-assistant.log*
 home-assistant_v2.db
 home-assistant_v2.db-shm
 home-assistant_v2.db-wal
+vanlife_tracker.db
+vanlife_tracker.db-shm
+vanlife_tracker.db-wal
 *.db-journal
 *.pid
 
@@ -34,7 +37,12 @@ custom_components/*
 !custom_components/vanlife_tracker
 
 // --- Frontend assets ---
-www
+// www/vanlife-panel synced (active dev). www/community and www/sounds are HACS-managed, excluded.
+www/community
+www/sounds
+// SQLite cache and logs — change every few minutes, no need to sync
+www/vanlife-panel/route_cache.db
+www/vanlife-panel/osrm_proxy.log
 
 // --- Blueprints (stock HA) ---
 blueprints
@@ -65,6 +73,7 @@ Thumbs.db
 *.swp
 *.swo
 *~
+*.sync-conflict-*
 
 // --- Sync tooling ---
 .ha-sync

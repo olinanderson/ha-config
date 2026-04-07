@@ -184,3 +184,182 @@
     manufacturer: "MeatPi"
     model: "WiCAN OBD"
     name: "WiCAN"
+
+# ─── WiCAN Ford-Specific PIDs (Mode 22, WiCAN Pro) ───
+# TPMS — Tire Pressure Monitoring (IPC module via ATSH000726)
+- state_topic: "wican/tyre_p_fl"
+  name: "WiCAN Tire Pressure FL"
+  unique_id: wican_tyre_p_fl_mqtt
+  icon: mdi:car-tire-alert
+  device_class: pressure
+  state_class: measurement
+  unit_of_measurement: "psi"
+  value_template: "{{ value_json.get('TYRE_P_FL') | float | round(1) }}"
+  device:
+    identifiers: ["WiCAN"]
+    manufacturer: "MeatPi"
+    model: "WiCAN OBD"
+    name: "WiCAN"
+
+- state_topic: "wican/tyre_p_fr"
+  name: "WiCAN Tire Pressure FR"
+  unique_id: wican_tyre_p_fr_mqtt
+  icon: mdi:car-tire-alert
+  device_class: pressure
+  state_class: measurement
+  unit_of_measurement: "psi"
+  value_template: "{{ value_json.get('TYRE_P_FR') | float | round(1) }}"
+  device:
+    identifiers: ["WiCAN"]
+    manufacturer: "MeatPi"
+    model: "WiCAN OBD"
+    name: "WiCAN"
+
+- state_topic: "wican/tyre_p_rl"
+  name: "WiCAN Tire Pressure RL"
+  unique_id: wican_tyre_p_rl_mqtt
+  icon: mdi:car-tire-alert
+  device_class: pressure
+  state_class: measurement
+  unit_of_measurement: "psi"
+  value_template: "{{ value_json.get('TYRE_P_RL') | float | round(1) }}"
+  device:
+    identifiers: ["WiCAN"]
+    manufacturer: "MeatPi"
+    model: "WiCAN OBD"
+    name: "WiCAN"
+
+- state_topic: "wican/tyre_p_rr"
+  name: "WiCAN Tire Pressure RR"
+  unique_id: wican_tyre_p_rr_mqtt
+  icon: mdi:car-tire-alert
+  device_class: pressure
+  state_class: measurement
+  unit_of_measurement: "psi"
+  value_template: "{{ value_json.get('TYRE_P_RR') | float | round(1) }}"
+  device:
+    identifiers: ["WiCAN"]
+    manufacturer: "MeatPi"
+    model: "WiCAN OBD"
+    name: "WiCAN"
+
+# PCM Module — Transmission & Drivetrain (via ATSH7E0)
+- state_topic: "wican/trans_temp"
+  name: "WiCAN Transmission Temperature"
+  unique_id: wican_trans_temp_mqtt
+  icon: mdi:car-cog
+  device_class: temperature
+  state_class: measurement
+  unit_of_measurement: "°C"
+  value_template: "{{ value_json.get('TRAN_F_TEMP') | float | round(1) }}"
+  device:
+    identifiers: ["WiCAN"]
+    manufacturer: "MeatPi"
+    model: "WiCAN OBD"
+    name: "WiCAN"
+
+- state_topic: "wican/gear"
+  name: "WiCAN Current Gear"
+  unique_id: wican_gear_mqtt
+  icon: mdi:car-shift-pattern
+  state_class: measurement
+  value_template: "{{ value_json.get('GEAR') | int }}"
+  device:
+    identifiers: ["WiCAN"]
+    manufacturer: "MeatPi"
+    model: "WiCAN OBD"
+    name: "WiCAN"
+
+- state_topic: "wican/oil_life"
+  name: "WiCAN Oil Life"
+  unique_id: wican_oil_life_mqtt
+  icon: mdi:oil
+  state_class: measurement
+  unit_of_measurement: "%"
+  value_template: "{{ value_json.get('OIL_LIFE') | float | round(0) }}"
+  device:
+    identifiers: ["WiCAN"]
+    manufacturer: "MeatPi"
+    model: "WiCAN OBD"
+    name: "WiCAN"
+
+# PCM Module — Fuel & Turbo
+- state_topic: "wican/fuel_rate"
+  name: "WiCAN Fuel Rate"
+  unique_id: wican_fuel_rate_mqtt
+  icon: mdi:gas-station
+  state_class: measurement
+  unit_of_measurement: "g/s"
+  value_template: "{{ value_json.get('FUEL_RATE') | float | round(2) }}"
+  device:
+    identifiers: ["WiCAN"]
+    manufacturer: "MeatPi"
+    model: "WiCAN OBD"
+    name: "WiCAN"
+
+- state_topic: "wican/wastegate"
+  name: "WiCAN Wastegate Duty"
+  unique_id: wican_wastegate_mqtt
+  icon: mdi:turbine
+  state_class: measurement
+  unit_of_measurement: "%"
+  value_template: "{{ value_json.get('WASTEGATE') | float | round(1) }}"
+  device:
+    identifiers: ["WiCAN"]
+    manufacturer: "MeatPi"
+    model: "WiCAN OBD"
+    name: "WiCAN"
+
+- state_topic: "wican/intake_air_temp"
+  name: "WiCAN Intake Air Temperature"
+  unique_id: wican_intake_air_temp_mqtt
+  icon: mdi:thermometer
+  device_class: temperature
+  state_class: measurement
+  unit_of_measurement: "°C"
+  value_template: "{{ value_json.get('INTAKE_AIR_TMP') | float | round(1) }}"
+  device:
+    identifiers: ["WiCAN"]
+    manufacturer: "MeatPi"
+    model: "WiCAN OBD"
+    name: "WiCAN"
+
+- state_topic: "wican/fuel_pressure"
+  name: "WiCAN Fuel Pressure"
+  unique_id: wican_fuel_pressure_mqtt
+  icon: mdi:gauge
+  device_class: pressure
+  state_class: measurement
+  unit_of_measurement: "kPa"
+  value_template: "{{ value_json.get('FUEL_PRESSURE') | float | round(0) }}"
+  device:
+    identifiers: ["WiCAN"]
+    manufacturer: "MeatPi"
+    model: "WiCAN OBD"
+    name: "WiCAN"
+
+- state_topic: "wican/alt_duty"
+  name: "WiCAN Alternator Duty"
+  unique_id: wican_alt_duty_mqtt
+  icon: mdi:current-ac
+  state_class: measurement
+  unit_of_measurement: "%"
+  value_template: "{{ value_json.get('ALT_DUTY') | float | round(0) }}"
+  device:
+    identifiers: ["WiCAN"]
+    manufacturer: "MeatPi"
+    model: "WiCAN OBD"
+    name: "WiCAN"
+
+# DTC — Monitor Status (PID 0x01: MIL + DTC count)
+- state_topic: "wican/monitor_status"
+  name: "WiCAN Monitor Status Raw"
+  unique_id: wican_monitor_status_raw_mqtt
+  icon: mdi:car-wrench
+  state_class: measurement
+  value_template: "{{ value_json.get('MONITOR_STATUS') | int(0) }}"
+  device:
+    identifiers: ["WiCAN"]
+    manufacturer: "MeatPi"
+    model: "WiCAN OBD"
+    name: "WiCAN"

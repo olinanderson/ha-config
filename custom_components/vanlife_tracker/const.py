@@ -35,11 +35,14 @@ SERVICE_UPDATE_NAMED_PLACE = "update_named_place"
 SERVICE_DELETE_NAMED_PLACE = "delete_named_place"
 SERVICE_GET_NAMED_PLACES = "get_named_places"
 SERVICE_BACKFILL_STOPS = "backfill_stops"
+SERVICE_BACKFILL_TRIPS = "backfill_trips"
 
 # --- Events ---
 EVENT_STOP_CREATED = f"{DOMAIN}_stop_created"
 EVENT_STOP_DEPARTED = f"{DOMAIN}_stop_departed"
 EVENT_STOP_UPDATED = f"{DOMAIN}_stop_updated"
+EVENT_TRIP_CREATED = f"{DOMAIN}_trip_created"
+EVENT_TRIP_UPDATED = f"{DOMAIN}_trip_updated"
 
 # --- Stop categories ---
 STOP_CATEGORIES = [

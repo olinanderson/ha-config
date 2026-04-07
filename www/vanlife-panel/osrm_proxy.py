@@ -124,15 +124,15 @@ def _match_chunk(lonlat_pts):
         VALHALLA, data=payload,
         headers={"Content-Type": "application/json", "User-Agent": "vanlife-panel/1.0"},
     )
-    for attempt in range(3):
+    for attempt in range(4):
         try:
             with urllib.request.urlopen(req, timeout=TIMEOUT) as resp:
                 d = json.loads(resp.read())
             break
         except urllib.error.HTTPError as e:
-            if e.code == 429 and attempt < 2:
-                wait = 5 * (attempt + 1)
-                print(f"[Valhalla 429] rate limited, retrying in {wait}s...", flush=True)
+            if e.code in (429, 504) and attempt < 3:
+                wait = 10 * (attempt + 1)
+                print(f"[Valhalla {e.code}] retrying in {wait}s (attempt {attempt+1})...", flush=True)
                 time.sleep(wait)
             else:
                 raise
@@ -209,6 +209,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
         if len(waypoints) < 2:
             self._json(400, {"error": "need at least 2 waypoints"})
+            return
+
+        # Valhalla map_snap needs ≥3 points — return straight line for tiny segments
+        if len(waypoints) < 3:
+            # waypoints are [lon, lat] — return [[lat, lon], ...]
+            geom = [[pt[1], pt[0]] for pt in waypoints]
+            self._json(200, {"geometry": geom, "cached": False, "straight": True})
             return
 
         seg_hash = waypoint_hash(waypoints)

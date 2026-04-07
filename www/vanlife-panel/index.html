@@ -67,14 +67,29 @@
 
     .vl-stop-item {
       padding: 11px 16px; border-bottom: 1px solid #f0f0f0;
-      cursor: pointer; transition: background 0.1s;
+      cursor: pointer; transition: background 0.15s;
     }
     .vl-stop-item:hover { background: #f5f5f5; }
-    .vl-stop-item.selected { background: #e1f5fe; }
-    .vl-stop-name { font-weight: 600; font-size: 14px; }
+    .vl-stop-item.selected { background: #e0f7fa; border-left: 3px solid #00acc1; }
+    .vl-stop-item.selected .vl-stop-meta { color: #546e7a; }
+    .vl-stop-name { font-weight: 600; font-size: 14px; display: flex; align-items: center; justify-content: space-between; }
+    .vl-stop-name .vl-chevron { font-size: 11px; color: #bbb; transition: transform 0.2s; }
+    .vl-stop-item.selected .vl-stop-name .vl-chevron { transform: rotate(90deg); color: #00838f; }
     .vl-stop-meta { font-size: 12px; color: #757575; margin-top: 2px; }
     .vl-stop-notes { font-size: 12px; color: #757575; margin-top: 3px; font-style: italic;
       white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .vl-trip-details {
+      display: none; margin-top: 8px; padding: 8px 10px;
+      background: #f8f9fa; border-radius: 6px; font-size: 12px; color: #424242;
+    }
+    .vl-stop-item.selected .vl-trip-details { display: block; }
+    .vl-detail-section { margin-bottom: 6px; }
+    .vl-detail-section:last-child { margin-bottom: 0; }
+    .vl-detail-label { font-weight: 600; font-size: 11px; color: #00838f; text-transform: uppercase;
+      letter-spacing: 0.5px; margin-bottom: 3px; }
+    .vl-detail-row { display: flex; justify-content: space-between; padding: 1px 0; }
+    .vl-detail-row span:first-child { color: #757575; }
+    .vl-detail-row span:last-child { font-weight: 500; }
 
     /* ─── Edit panel ──────────────────────────────── */
     #vl-edit-panel {
@@ -176,6 +191,12 @@
     }
     .vl-date-btn.active { background: #03a9f4; color: #fff; }
     .vl-date-btn:hover:not(.active) { background: #e3f2fd; color: #0288d1; }
+    .vl-date-input {
+      padding: 3px 6px; border-radius: 10px; border: 1px solid #ccc;
+      font-size: 11px; font-family: inherit; color: #333;
+      background: #fafafa; outline: none; width: 110px;
+    }
+    .vl-date-input:focus { border-color: #03a9f4; background: #fff; }
     #vl-debug-pts-btn, #vl-debug-raw-btn, #vl-debug-shape-btn {
       margin-left: 4px; padding: 4px 10px; border-radius: 14px;
       font-size: 12px; font-weight: 600; cursor: pointer;
@@ -195,7 +216,7 @@
 
 <!-- TAB BAR -->
 <div id="vl-tabs">
-  <div class="vl-tab active" data-tab="map">🗺️ Map &amp; Stops</div>
+  <div class="vl-tab active" data-tab="map">🗺️ Map &amp; Trips</div>
   <div class="vl-tab" data-tab="places">📌 Named Places</div>
 </div>
 
@@ -207,9 +228,11 @@
     <div id="vl-date-bar">
       <button class="vl-date-btn active" data-mode="today">Today</button>
       <button class="vl-date-btn" data-mode="yesterday">Yesterday</button>
-      <button class="vl-date-btn" data-mode="3d">3d</button>
-      <button class="vl-date-btn" data-mode="7d">7d</button>
-      <button class="vl-date-btn" data-mode="30d">30d</button>
+      <div class="vl-bar-divider"></div>
+      <input type="date" id="vl-date-start" class="vl-date-input" title="Start date">
+      <span style="color:#888;font-size:11px;padding:0 2px">→</span>
+      <input type="date" id="vl-date-end" class="vl-date-input" title="End date">
+      <span id="vl-date-range-label" style="font-size:11px;color:#888;padding-left:4px"></span>
       <div class="vl-bar-divider"></div>
       <button id="vl-debug-shape-btn" class="active" title="Show/hide ORS routed shape">shape</button>
       <button id="vl-debug-pts-btn" title="Show/hide GPS waypoints sent to ORS">pts</button>
@@ -362,7 +385,7 @@ function getStates() { return _states; }
 
 async function callService(domain, service, data = {}) {
   if (!_token) return;
-  await fetch(`/api/services/${domain}/${service}`, {
+  return await fetch(`/api/services/${domain}/${service}`, {
     method: "POST",
     headers: { Authorization: `Bearer ${_token}`, "Content-Type": "application/json" },
     body: JSON.stringify(data),
@@ -396,8 +419,10 @@ function _dateWindow(mode) {
   } else if (mode === "yesterday") {
     const s = new Date(todayMidnight); s.setDate(s.getDate() - 1);
     return { start: s, end: todayMidnight };   // fully fixed — perfect cache
+  } else if (mode === "custom" && _customStart) {
+    return { start: _customStart, end: _customEnd || now };
   } else {
-    const days = parseInt(mode);               // "3d" → 3, "7d" → 7, "30d" → 30
+    const days = parseInt(mode);               // legacy: "3d" → 3, "7d" → 7
     const s = new Date(todayMidnight); s.setDate(s.getDate() - (days - 1));
     return { start: s, end: now };
   }
@@ -408,16 +433,72 @@ async function getHistory(entityId, mode) {
   const token = getToken();
   if (!token) { console.error("[VL] getHistory: no token"); return []; }
   const { start, end } = _dateWindow(mode);
+  const startTs = start.getTime() / 1000;
+  const endTs   = end.getTime() / 1000;
+
+  // ── Fast path: local gps_track DB (bypasses slow HA history API) ──────────
+  // Only the primary GPS entity is stored in gps_track. For Starlink fallback
+  // we still use HA history (it's deduped later so overlap is harmless).
+  if (entityId === "device_tracker.vanlife_tracker_van_location") {
+    try {
+      // For ranges > 3 days, ask the server to downsample to ~50k points
+      // via time-bucketed GROUP BY. Prevents 170 MB+ JSON payloads.
+      const spanDays = (endTs - startTs) / 86400;
+      const maxPts = spanDays > 3 ? 50000 : 0;
+      const qp = `start=${startTs}&end=${endTs}` + (maxPts ? `&max_points=${maxPts}` : "");
+      const r = await fetch(
+        `/api/vanlife_tracker/gps_track?${qp}`,
+        { headers: { Authorization: `Bearer ${token}` } }
+      );
+      if (r.ok) {
+        const pts = await r.json();
+        if (pts.length > 0) {
+          const earliestPt = pts[0].ts;
+          const coverageGapS = earliestPt - startTs;
+          console.log(`[VL] gps_track fast-path: ${pts.length} pts for ${mode} (coverage gap: ${(coverageGapS/3600).toFixed(1)}h)`);
+          const fastResults = pts.map((p, i) => ({
+            last_changed: new Date(p.ts * 1000).toISOString(),
+            attributes: { latitude: p.lat, longitude: p.lon },
+            _fastPath: i === 0 ? true : undefined,
+          }));
+          // If the fast-path data starts more than 1 hour after the requested window,
+          // also fetch HA history (Starlink raw GPS) for the gap period.
+          if (coverageGapS > 3600) {
+            const gapEnd = new Date(earliestPt * 1000).toISOString();
+            const gapUrl = `/api/history/period/${start.toISOString()}?filter_entity_id=device_tracker.starlink_device_location&end_time=${gapEnd}&significant_changes_only=false`;
+            console.log(`[VL] gps_track gap-fill: fetching Starlink history for ${(coverageGapS/86400).toFixed(1)}d gap`);
+            try {
+              const gr = await fetch(gapUrl, { headers: { Authorization: `Bearer ${token}` } });
+              if (gr.ok) {
+                const gd = await gr.json();
+                const gapStates = gd?.[0] || [];
+                console.log(`[VL] gps_track gap-fill: ${gapStates.length} Starlink states (display only, not seeded)`);
+                // Merge gap states before fast-path results for display only;
+                // do NOT seed raw 1Hz Starlink data back into gps_track (it's been deduped).
+                if (gapStates.length > 0) return [...gapStates, ...fastResults];
+                return fastResults;
+              }
+            } catch(e) { console.warn("[VL] gap-fill fetch failed:", e); }
+          }
+          return fastResults;
+        }
+      }
+    } catch(e) { console.warn("[VL] gps_track fetch failed, falling back to HA history:", e); }
+  }
+
+  // ── Slow fallback: HA history API ─────────────────────────────────────────
   const url = `/api/history/period/${start.toISOString()}?filter_entity_id=${entityId}&end_time=${end.toISOString()}&significant_changes_only=false`;
-  console.error("[VL] getHistory fetching:", entityId, "url:", url.slice(0, 80));
+  console.log(`[VL] getHistory HA fallback: ${entityId} (${mode})`);
   try {
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    console.error("[VL] getHistory response:", r.status, entityId);
     if (!r.ok) return [];
     const d = await r.json();
-    const result = d?.[0] || [];
-    console.error("[VL] getHistory entries:", result.length, "first:", result[0] ? JSON.stringify(result[0]).slice(0, 120) : "none");
-    return result;
+    const states = d?.[0] || [];
+
+    // gps_track is fully backfilled — no auto-seeding needed.
+    // The coordinator writes live GPS and historical data was bulk-imported.
+
+    return states;
   } catch(e) { console.error("[VL] getHistory error:", e); return []; }
 }
 
@@ -516,13 +597,29 @@ async function routeSegment(pts) {
   } catch (e) { console.error("[VL] route-segment fetch error", e); return null; }
 }
 
-/** Draw a routed segment's geometry onto _routeLayer using the time-based colour gradient. */
-function drawMoveSeg(pts, geom, totalStartT, totalDuration) {
+/** Draw a routed segment's geometry onto _routeLayer using the time-based colour gradient.
+ *  If `travel` is provided, sub-polylines get a click popup showing "From → To". */
+function drawMoveSeg(pts, geom, totalStartT, totalDuration, travel = null) {
   if (!_showShape) return;
   const segStartTs = pts[0].ts;
   const segEndTs   = pts[pts.length - 1].ts;
   const SUB     = Math.min(geom.length, 12);
   const subSize = Math.max(1, Math.floor(geom.length / SUB));
+
+  // Build popup content once (reused for all sub-polylines of this segment)
+  let popupHtml = null;
+  if (travel) {
+    const fromName = travel.from ? stopDisplayName(travel.from) : (travel.fromGps ? `${travel.fromGps.centroid.lat.toFixed(4)}, ${travel.fromGps.centroid.lon.toFixed(4)}` : "Journey Start");
+    const toName   = travel.to   ? stopDisplayName(travel.to)   : (travel.toGps   ? `${travel.toGps.centroid.lat.toFixed(4)}, ${travel.toGps.centroid.lon.toFixed(4)}` : "Journey End");
+    const depIso   = new Date(travel.depTs).toISOString();
+    const arrIso   = new Date(travel.arrTs).toISOString();
+    const driveDur = formatDuration(depIso, arrIso);
+    const dateStr  = formatDate(depIso);
+    const stayDur  = travel.to ? formatDuration(travel.to.arrived_at, travel.to.departed_at) : null;
+    const stayStr  = stayDur ? ` · ${stayDur} stay` : "";
+    popupHtml = `<b>🚐 ${fromName} → ${toName}</b><br><span style="color:#777;font-size:12px">${dateStr}${driveDur ? ` · ${driveDur} drive` : ""}${stayStr}</span>`;
+  }
+
   for (let k = 0; k < SUB; k++) {
     const s = k * subSize;
     const e = k === SUB - 1 ? geom.length : (k + 1) * subSize + 1;
@@ -536,10 +633,14 @@ function drawMoveSeg(pts, geom, totalStartT, totalDuration) {
     const cr = Math.round(100 + (3   - 100) * t);
     const cg = Math.round(149 + (169 - 149) * t);
     const cb = Math.round(237 + (244 - 237) * t);
-    L.polyline(chunk, {
+    const pl = L.polyline(chunk, {
       color: `rgb(${cr},${cg},${cb})`,
       weight, opacity, lineCap: "round", lineJoin: "round",
     }).addTo(_routeLayer);
+    if (travel) {
+      pl.on("click", () => selectTravel(travel.idx));
+      pl.setStyle({ interactive: true });
+    }
   }
 }
 
@@ -554,7 +655,9 @@ function formatDuration(arrivedAt, departedAt) {
 
 function formatDate(iso) {
   if (!iso) return "";
-  return new Date(iso).toLocaleDateString("en-US", { month:"short", day:"numeric", year:"numeric" });
+  const opts = { month:"short", day:"numeric", year:"numeric" };
+  if (_haTz) opts.timeZone = _haTz;
+  return new Date(iso).toLocaleDateString("en-US", opts);
 }
 
 function renderStars(n) {
@@ -576,6 +679,26 @@ function haversineM(lat1, lon1, lat2, lon2) {
   const dLon = (lon2 - lon1) * Math.PI / 180;
   const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+/** Sum haversine distance along a polyline geometry (array of [lat,lon]). Returns metres. */
+function polylineDistanceM(geom) {
+  let d = 0;
+  for (let i = 1; i < geom.length; i++) {
+    d += haversineM(geom[i-1][0], geom[i-1][1], geom[i][0], geom[i][1]);
+  }
+  return d;
+}
+
+/** Find the nearest DB stop to a GPS centroid within maxM metres. Returns null if none found. */
+function findNearestDBStop(centroid, maxM = 500) {
+  let best = null, bestDist = Infinity;
+  for (const s of _stops) {
+    if (!s.lat || !s.lon) continue;
+    const d = haversineM(centroid.lat, centroid.lon, s.lat, s.lon);
+    if (d < maxM && d < bestDist) { best = s; bestDist = d; }
+  }
+  return best;
 }
 
 // Greedy cluster: group stops within radiusM of each other → array of arrays
@@ -605,9 +728,32 @@ let _stops = [], _places = [];
 let _stopMarkers = {}, _placeMarkers = {};
 let _vanMarker = null;
 let _dateMode = "today";
+let _customStart = null, _customEnd = null;
+let _haTz = null;
 let _editingStop = null, _editingPlace = null, _editRating = 0;
 let _hasFitBounds = false;
 let _currentTab = "map";
+let _travels = [], _travelHighlight = null, _selectedTravelIdx = null;
+
+/** Check if a DB stop (by id) is the from/to of the currently selected travel. */
+function _isStopFocused(stopId) {
+  if (_selectedTravelIdx == null) return false;
+  const t = _travels[_selectedTravelIdx];
+  if (!t) return false;
+  return (t.from?.id === stopId) || (t.to?.id === stopId);
+}
+/** Check if a DB stop is referenced by ANY travel (used to filter map markers). */
+function _isStopInAnyTravel(stopId) {
+  return _travels.some(t => t.from?.id === stopId || t.to?.id === stopId);
+}
+/** Check if a GPS centroid is the fromGps/toGps of the currently selected travel. */
+function _isGpsCentroidFocused(lat, lon) {
+  if (_selectedTravelIdx == null) return false;
+  const t = _travels[_selectedTravelIdx];
+  if (!t) return false;
+  const match = (g) => g && Math.abs(g.centroid.lat - lat) < 0.0001 && Math.abs(g.centroid.lon - lon) < 0.0001;
+  return match(t.fromGps) || match(t.toGps);
+}
 
 // ─── Init ─────────────────────────────────────────────────
 
@@ -665,7 +811,6 @@ function initMap() {
   _debugRawLayer = L.layerGroup().addTo(_map);
 
   drawRoute();
-  renderStopMarkers();
   renderPlaceMarkers();
   renderVanMarker();
 }
@@ -675,140 +820,166 @@ async function drawRoute() {
   _routeLayer.clearLayers();
   if (_debugLayer) _debugLayer.clearLayers();
   if (_debugRawLayer) _debugRawLayer.clearLayers();
-  setStatus("Loading GPS history...");
+  _hasFitBounds = false;
+  setStatus("Loading trips...");
 
-  // Try vanlife tracker first, fall back to Starlink
-  let raw = await getHistory("device_tracker.vanlife_tracker_van_location", _dateMode);
-  if (raw.filter(s => s.attributes?.latitude).length < 5) {
-    raw = await getHistory("device_tracker.filtered_starlink_location", _dateMode);
-  }
+  const token = getToken();
+  if (!token) { setStatus("⚠ No auth token"); return; }
+  const { start, end } = _dateWindow(_dateMode);
+  const startTs = start.getTime() / 1000;
+  const endTs   = end.getTime() / 1000;
 
-  const allPts = raw
-    .filter(s => s.attributes?.latitude && s.attributes?.longitude)
-    .map(s => ({
-      lat: parseFloat(s.attributes.latitude),
-      lon: parseFloat(s.attributes.longitude),
-      t: s.last_changed,      // keep as string until needed — avoids 291k Date objects
-      ts: Date.parse(s.last_changed),
-    }))
-    .sort((a, b) => a.ts - b.ts);
-
-  if (allPts.length < 2) {
-    setStatus("⚠ No route data found.");
+  // ── Fetch pre-built trips from server ───────────────────────────────
+  let trips;
+  try {
+    const r = await fetch(
+      `/api/vanlife_tracker/trips?start=${startTs}&end=${endTs}`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!r.ok) throw new Error(`HTTP ${r.status}`);
+    trips = await r.json();
+  } catch (e) {
+    console.error("[VL] Failed to fetch trips:", e);
+    // Fallback: try loading raw GPS and show polyline without trips
+    setStatus("⚠ No trips found (run backfill_trips service)");
+    await _drawRawGpsFallback();
     return;
   }
 
-  const totalStartT = allPts[0].ts;
-  const totalDuration = Math.max(1, allPts[allPts.length - 1].ts - totalStartT);
-
-  // ── Step 1: fast flat-earth distance thinning ─────────────────────────
-  // Precompute cosLat once from the mid-point latitude so we only do one
-  // Math.cos call here instead of one per raw point. Error < 0.1% across a state.
-  const midLat = allPts[Math.floor(allPts.length / 2)].lat * Math.PI / 180;
-  const cosLat = Math.cos(midLat);
-  const M_PER_DEG = 111320;         // metres per degree latitude
-  const MIN_MOVE_M = 25;            // drop GPS noise / stationary drift
-  const threshDeg2 = (MIN_MOVE_M / M_PER_DEG) ** 2;
-
-  const thinned = [allPts[0]];
-  for (let k = 1; k < allPts.length; k++) {
-    const prev = thinned[thinned.length - 1];
-    const p = allPts[k];
-    const dLat = p.lat - prev.lat;
-    const dLon = (p.lon - prev.lon) * cosLat;
-    if (dLat * dLat + dLon * dLon >= threshDeg2) thinned.push(p);
-  }
-  if (thinned[thinned.length - 1] !== allPts[allPts.length - 1]) {
-    thinned.push(allPts[allPts.length - 1]);
+  if (trips.length === 0) {
+    setStatus("⚠ No trips in range — try a different date or run backfill_trips");
+    await _drawRawGpsFallback();
+    return;
   }
 
-  // ── Step 2: time-based stop detection ────────────────────────────────
-  // A "stop" = the van stays within STOP_RADIUS_M for at least MIN_STOP_MS.
-  // This correctly ignores tight turns/corners (seconds) vs real stops (minutes).
-  // Uses the same flat-earth approach: no trig in the loop.
-  const STOP_RADIUS_M  = 80;
-  const MIN_STOP_MS    = 8 * 60 * 1000;   // 8 minutes
-  const stopRadDeg2    = (STOP_RADIUS_M / M_PER_DEG) ** 2;
+  // ── Build _travels from server trips ────────────────────────────────
+  _travels = [];
+  _selectedTravelIdx = null;
+  if (_travelHighlight) { _travelHighlight.remove(); _travelHighlight = null; }
 
-  const segments = [];
-  let i = 0;
-  while (i < thinned.length) {
-    let cLat = thinned[i].lat, cLon = thinned[i].lon;
-    let sumLat = cLat, sumLon = cLon, count = 1;
-    const clusterStart = thinned[i].ts;
-    let j = i + 1;
-    while (j < thinned.length) {
-      const dLat = thinned[j].lat - cLat;
-      const dLon = (thinned[j].lon - cLon) * cosLat;
-      if (dLat * dLat + dLon * dLon <= stopRadDeg2) {
-        sumLat += thinned[j].lat; sumLon += thinned[j].lon; count++;
-        cLat = sumLat / count; cLon = sumLon / count;   // running centroid
-        j++;
-      } else {
-        break;
-      }
-    }
-    const clusterDurMs = thinned[j - 1].ts - clusterStart;
-    if (clusterDurMs >= MIN_STOP_MS) {
-      const durationH = clusterDurMs / 3600000;
-      const centroid = { lat: cLat, lon: cLon, ts: clusterStart };
-      // Snap the incoming moving segment's last point to the stop centroid
-      if (segments.length && segments[segments.length - 1].type === "move") {
-        segments[segments.length - 1].pts.push(centroid);
-      }
-      segments.push({ type: "stop", centroid, startTs: clusterStart, durationH });
-      i = j;
-    } else {
-      // Not a stop — add the first point to a moving segment and advance by 1
-      if (!segments.length || segments[segments.length - 1].type === "stop") {
-        const newSeg = { type: "move", pts: [] };
-        // Start from the previous stop's centroid so the line connects
-        if (segments.length && segments[segments.length - 1].type === "stop") {
-          newSeg.pts.push(segments[segments.length - 1].centroid);
-        }
-        segments.push(newSeg);
-      }
-      segments[segments.length - 1].pts.push(thinned[i]);
-      i++;
-    }
-  }
+  // Compute colour gradient origin across all trips
+  const allPtsFlat = trips.flatMap(t => t.gps_points || []);
+  const totalStartT = allPtsFlat.length > 0 ? allPtsFlat[0].ts * 1000 : 0;
+  const totalDuration = allPtsFlat.length > 1
+    ? Math.max(1, (allPtsFlat[allPtsFlat.length - 1].ts - allPtsFlat[0].ts) * 1000)
+    : 1;
 
-  // ── Step 2b: draw raw moving points debug layer ────────────────────────────
-  if (_showDebugRaw && _debugRawLayer) {
-    const movePts = segments
-      .filter(s => s.type === "move")
-      .flatMap(s => s.pts);
-    movePts.forEach(p => {
-      L.circleMarker([p.lat, p.lon], {
-        radius: 2.5, color: '#00c853', fillColor: '#00c853',
-        fillOpacity: 0.9, weight: 0,
-      }).addTo(_debugRawLayer);
+  for (let i = 0; i < trips.length; i++) {
+    const t = trips[i];
+    const pts = (t.gps_points || []).map(p => ({ lat: p.lat, lon: p.lon, ts: p.ts * 1000 }));
+    const fromStop = t.from_stop || null;
+    const toStop   = t.to_stop || null;
+    // For unmatched endpoints, derive centroid from first/last GPS point
+    const firstPt = pts.length > 0 ? pts[0] : null;
+    const lastPt  = pts.length > 0 ? pts[pts.length - 1] : null;
+    const fromGps = fromStop
+      ? { centroid: { lat: fromStop.lat, lon: fromStop.lon }, startTs: t.start_ts * 1000, durationH: 0 }
+      : (firstPt ? { centroid: { lat: firstPt.lat, lon: firstPt.lon }, startTs: t.start_ts * 1000, durationH: 0 } : null);
+    const toGps = toStop
+      ? { centroid: { lat: toStop.lat, lon: toStop.lon }, startTs: (t.end_ts || t.start_ts) * 1000, durationH: 0 }
+      : (lastPt ? { centroid: { lat: lastPt.lat, lon: lastPt.lon }, startTs: (t.end_ts || t.start_ts) * 1000, durationH: 0 } : null);
+    _travels.push({
+      idx: i,
+      seg: { pts },
+      from: fromStop,
+      to: toStop,
+      fromGps,
+      toGps,
+      depTs: t.start_ts * 1000,
+      arrTs: (t.end_ts || Date.now() / 1000) * 1000,
+      geom: null,
+      distanceM: t.distance_m || 0,
     });
   }
 
-  // ── Step 3: route segments one at a time, draw each as it arrives ────────────
-  const moveSegs = segments.filter(s => s.type === "move" && s.pts.length >= 2);
-  let movingPtCount = 0, stopCount = 0;
-  for (const seg of segments) {
-    if (seg.type === "stop") stopCount++;
-    else movingPtCount += seg.pts.length;
-  }
-  const label = _dateMode;
+  // ── Route-fit each trip via Valhalla and draw ───────────────────────
+  const label = _dateMode === "custom" && _customStart && _customEnd
+    ? `${_customStart.toLocaleDateString("en-US", {month:"short",day:"numeric"})}-${new Date(_customEnd.getTime()-1).toLocaleDateString("en-US", {month:"short",day:"numeric"})}`
+    : _dateMode;
   let routedCount = 0;
+  let totalPts = 0;
 
-  for (let mi = 0; mi < moveSegs.length; mi++) {
-    setStatus(`${movingPtCount.toLocaleString()} pts · ${stopCount} stops · ${label} · routing ${mi + 1}/${moveSegs.length}…`);
-    const geom = await routeSegment(moveSegs[mi].pts);
+  for (let mi = 0; mi < _travels.length; mi++) {
+    const travel = _travels[mi];
+    const pts = travel.seg.pts;
+    totalPts += pts.length;
+    // Debug: draw raw GPS points as green circles
+    if (_showDebugRaw && _debugRawLayer) {
+      pts.forEach(p => {
+        L.circleMarker([p.lat, p.lon], {
+          radius: 3, color: '#00c853', fillColor: '#00c853',
+          fillOpacity: 0.85, weight: 0,
+        }).addTo(_debugRawLayer);
+      });
+    }
+    if (pts.length < 2) continue;
+    // Extend GPS points to stop locations so the road-snapped route
+    // reaches all the way to the origin/destination markers.
+    let routePts = pts;
+    const fromC = travel.from;
+    const toC   = travel.to;
+    if (fromC || toC) {
+      routePts = [...pts];
+      if (fromC) routePts.unshift({ lat: fromC.lat, lon: fromC.lon, ts: pts[0].ts - 1 });
+      if (toC)   routePts.push({ lat: toC.lat, lon: toC.lon, ts: pts[pts.length - 1].ts + 1 });
+    }
+    setStatus(`${_travels.length} trip${_travels.length!==1?"s":""} · ${label} · routing ${mi + 1}/${_travels.length}…`);
+    const geom = await routeSegment(routePts);
     if (geom) {
-      drawMoveSeg(moveSegs[mi].pts, geom, totalStartT, totalDuration);
+      travel.geom = geom;
+      travel.distanceM = polylineDistanceM(geom);
+      drawMoveSeg(pts, geom, totalStartT, totalDuration, travel);
       routedCount++;
     }
   }
 
+  renderStopList();
+  renderStopMarkers();
+  renderUnmatchedStopMarkers();
+  backfillFuelIfNeeded();
+
+  // Fit map to all routes on first load
+  if (_map && !_hasFitBounds && routedCount > 0) {
+    const allCoords = _travels.flatMap(t => t.geom || []);
+    if (allCoords.length > 1) {
+      _map.fitBounds(L.latLngBounds(allCoords), { padding: [30, 30] });
+      _hasFitBounds = true;
+    }
+  }
+
   const roadLabel = routedCount
-    ? ` · 🛣 ${routedCount}/${moveSegs.length}`
-    : (moveSegs.length ? " · ⚠ routing failed" : "");
-  setStatus(`${movingPtCount.toLocaleString()} pts · ${stopCount} stops · ${label}${roadLabel}`);
+    ? ` · 🛣 ${routedCount}/${_travels.length}`
+    : (_travels.length ? " · ⚠ routing failed" : "");
+  setStatus(`${totalPts.toLocaleString()} pts · ${_travels.length} trip${_travels.length!==1?"s":""} · ${label}${roadLabel}`);
+}
+
+/** Fallback: draw raw GPS track as a simple polyline when no trips exist. */
+async function _drawRawGpsFallback() {
+  const token = getToken();
+  if (!token) return;
+  const { start, end } = _dateWindow(_dateMode);
+  const startTs = start.getTime() / 1000;
+  const endTs   = end.getTime() / 1000;
+  try {
+    const r = await fetch(
+      `/api/vanlife_tracker/gps_track?start=${startTs}&end=${endTs}&max_points=5000`,
+      { headers: { Authorization: `Bearer ${token}` } }
+    );
+    if (!r.ok) return;
+    const pts = await r.json();
+    if (pts.length < 2) return;
+    const coords = pts.map(p => [p.lat, p.lon]);
+    L.polyline(coords, { color: "#6495ed", weight: 3, opacity: 0.6 }).addTo(_routeLayer);
+    if (_map && !_hasFitBounds) {
+      _map.fitBounds(L.latLngBounds(coords), { padding: [30, 30] });
+      _hasFitBounds = true;
+    }
+    setStatus(`${pts.length} raw GPS pts (no trips — run backfill_trips)`);
+  } catch (e) {
+    console.warn("[VL] raw GPS fallback failed:", e);
+  }
+  // Still render stops/markers even without trips
+  renderStopMarkers();
 }
 
 function renderVanMarker() {
@@ -836,13 +1007,112 @@ function renderVanMarker() {
     .addTo(_map);
 }
 
+// ── Unmatched GPS-detected stops: grey markers with "Create Stop" action ──
+let _unmatchedMarkers = [];
+function renderUnmatchedStopMarkers() {
+  if (!_map) return;
+  _unmatchedMarkers.forEach(m => m.remove());
+  _unmatchedMarkers = [];
+
+  // Collect unique GPS-detected stops not matched to any DB stop
+  const seen = new Set();
+  const unmatched = [];
+  for (const t of _travels) {
+    if (!t.from && t.fromGps) {
+      const key = `${t.fromGps.centroid.lat.toFixed(5)},${t.fromGps.centroid.lon.toFixed(5)}`;
+      if (!seen.has(key)) { seen.add(key); unmatched.push(t.fromGps); }
+    }
+    if (!t.to && t.toGps) {
+      const key = `${t.toGps.centroid.lat.toFixed(5)},${t.toGps.centroid.lon.toFixed(5)}`;
+      if (!seen.has(key)) { seen.add(key); unmatched.push(t.toGps); }
+    }
+  }
+
+  for (const gps of unmatched) {
+    const { lat, lon } = gps.centroid;
+    const dur = gps.durationH != null ? `${gps.durationH.toFixed(1)}h` : "";
+    const dateStr = formatDate(new Date(gps.startTs).toISOString());
+    const coordStr = `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+    const isFocused = _selectedTravelIdx == null || _isGpsCentroidFocused(lat, lon);
+
+    const divIcon = L.divIcon({
+      html: isFocused
+        ? `<div style="position:absolute;bottom:0;left:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.25))">
+        <div style="background:#f5f5f5;color:#888;border:2px dashed #bbb;border-radius:8px;padding:3px 7px;font-size:11px;font-weight:600;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis">📍 ${coordStr}</div>
+        <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid #bbb"></div>
+      </div>`
+        : `<div style="position:absolute;bottom:0;left:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.25))">
+        <div style="background:#f5f5f5;border:2px dashed #bbb;border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px">📍</div>
+        <div style="width:0;height:0;border-left:3px solid transparent;border-right:3px solid transparent;border-top:4px solid #bbb"></div>
+      </div>`,
+      className: "", iconSize: [0, 0], iconAnchor: [0, 0], popupAnchor: [0, isFocused ? -40 : -22],
+    });
+
+    const popupHtml = `
+      <div style="font-weight:600;font-size:13px;margin-bottom:4px">📍 Unmatched Stop</div>
+      <div class="vl-popup-row">📐 ${coordStr}</div>
+      ${dateStr ? `<div class="vl-popup-row">🕐 ${dateStr}${dur ? ` — ${dur}` : ""}</div>` : ""}
+      <button class="vl-unmatched-create" data-lat="${lat}" data-lon="${lon}" style="margin-top:8px;background:#1976d2;color:white;border:none;border-radius:6px;padding:6px 14px;font-size:12px;font-weight:600;cursor:pointer;width:100%">
+        ➕ Create Stop Here
+      </button>`;
+
+    const marker = L.marker([lat, lon], { icon: divIcon, zIndexOffset: -100 });
+    marker.bindPopup(popupHtml, { maxWidth: 250 });
+
+    marker.on("popupopen", () => {
+      setTimeout(() => {
+        const btn = document.querySelector(`.vl-unmatched-create[data-lat="${lat}"][data-lon="${lon}"]`);
+        if (btn) btn.addEventListener("click", async () => {
+          btn.disabled = true;
+          btn.textContent = "Creating…";
+          try {
+            const svcData = { lat, lon, category: "other" };
+            if (gps.startTs) svcData.arrived_at = new Date(gps.startTs).toISOString();
+            if (gps.durationH != null && gps.startTs) {
+              svcData.departed_at = new Date(gps.startTs + gps.durationH * 3600000).toISOString();
+            }
+            let resp = await callService("vanlife_tracker", "create_stop", svcData);
+            // Retry without timestamps if schema rejects them (HA not yet restarted)
+            if (resp && !resp.ok) {
+              resp = await callService("vanlife_tracker", "create_stop", { lat, lon, category: "other" });
+            }
+            if (resp && !resp.ok) throw new Error(`create_stop: ${resp.status}`);
+            // Refresh stops from sensor, then re-render everything
+            const r = await fetch("/api/states", { headers: { Authorization: `Bearer ${_token}` } });
+            if (r.ok) {
+              const states = await r.json();
+              const stopSensor = states.find(s => s.entity_id === "sensor.vanlife_tracker_recent_stops");
+              if (stopSensor?.attributes?.stops) {
+                _stops = stopSensor.attributes.stops;
+              }
+            }
+            marker.closePopup();
+            await drawRoute();
+          } catch (e) {
+            btn.textContent = "❌ Failed";
+            console.error("[VL] create stop failed:", e);
+          }
+        });
+      }, 50);
+    });
+
+    marker.addTo(_map);
+    _unmatchedMarkers.push(marker);
+  }
+}
+
 function renderStopMarkers() {
   if (!_map) return;
   Object.values(_stopMarkers).forEach(m => m.remove());
   _stopMarkers = {};
 
   const vanPos = getVanLocation();
-  const clusters = clusterStops(stopsInWindow());
+  // Only show stops that are referenced by detected trips (from/to in _travels),
+  // plus the active stop (van's current location, no departed_at)
+  const relevantStops = _travels.length > 0
+    ? stopsInWindow().filter(s => !s.departed_at || _isStopInAnyTravel(s.id))
+    : stopsInWindow();
+  const clusters = clusterStops(relevantStops);
 
   clusters.forEach(cluster => {
     // Pick representative: active stop first, then most recent (first in array)
@@ -856,6 +1126,9 @@ function renderStopMarkers() {
     const vanHere = isActive && vanPos
       && haversineM(vanPos[0], vanPos[1], rep.lat, rep.lon) <= 80;
 
+    // Focus: show full label only when no trip is selected, or stop belongs to selected trip
+    const isFocused = _selectedTravelIdx == null || cluster.some(s => _isStopFocused(s.id));
+
     const labelBg    = isActive ? "#03a9f4" : "white";
     const labelColor = isActive ? "white"   : "#333";
     const borderCol  = isActive ? "#0288d1" : "#aaa";
@@ -868,15 +1141,20 @@ function renderStopMarkers() {
       : "";
 
     const divIcon = L.divIcon({
-      html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3))">
+      html: isFocused
+        ? `<div style="position:absolute;bottom:0;left:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 2px 4px rgba(0,0,0,0.3))">
         <div style="position:relative;display:inline-flex">
           ${vanBadge}
           <div style="background:${labelBg};color:${labelColor};border:2px solid ${borderCol};border-radius:8px;padding:3px 7px;font-size:11px;font-weight:600;white-space:nowrap;max-width:130px;overflow:hidden;text-overflow:ellipsis">${icon} ${stopDisplayName(rep, {short:true})}</div>
           ${countBadge}
         </div>
         <div style="width:0;height:0;border-left:5px solid transparent;border-right:5px solid transparent;border-top:6px solid ${borderCol}"></div>
+      </div>`
+        : `<div style="position:absolute;bottom:0;left:0;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 1px 2px rgba(0,0,0,0.3))">
+        <div style="background:${labelBg};border:2px solid ${borderCol};border-radius:50%;width:16px;height:16px;display:flex;align-items:center;justify-content:center;font-size:9px">${icon}</div>
+        <div style="width:0;height:0;border-left:3px solid transparent;border-right:3px solid transparent;border-top:4px solid ${borderCol}"></div>
       </div>`,
-      className: "", iconAnchor: [65, 38], popupAnchor: [0, -40],
+      className: "", iconSize: [0, 0], iconAnchor: [0, 0], popupAnchor: [0, isFocused ? -40 : -22],
     });
 
     // Popup lists all stops in the cluster
@@ -987,38 +1265,189 @@ function renderPlaceMarkers() {
   });
 }
 
-// ─── Stop list ────────────────────────────────────────────
+// ─── Travel list (sidebar) ────────────────────────────────
 
 function renderStopList() {
   const list = document.getElementById("vl-stop-list");
   const countEl = document.getElementById("vl-stop-count");
-  const visible = stopsInWindow();
-  if (countEl) countEl.textContent = `${visible.length} Stop${visible.length !== 1 ? "s" : ""}`;
+  const count = _travels.length;
+  if (countEl) countEl.textContent = `${count} Trip${count !== 1 ? "s" : ""}`;
   if (!list) return;
 
-  list.innerHTML = visible.map(stop => {
-    const icon = CATEGORY_ICONS[stop.category] || "📍";
-    const dur = formatDuration(stop.arrived_at, stop.departed_at);
-    const isActive = !stop.departed_at;
-    const displayName = stopDisplayName(stop);
-    return `<div class="vl-stop-item${isActive?" selected":""}" data-stop-id="${stop.id}">
-      <div class="vl-stop-name">${icon} ${displayName}${isActive?` <span style="color:#03a9f4;font-size:11px">● NOW</span>`:""}</div>
-      <div class="vl-stop-meta">${formatDate(stop.arrived_at)}${dur?` · ${dur}`:""}${stop.nearest_town?` · ${stop.nearest_town}`:""}${stop.rating?` · ${renderStars(stop.rating)}`:""}</div>
-      ${stop.notes?`<div class="vl-stop-notes">"${stop.notes}"</div>`:""}
+  if (count === 0) {
+    list.innerHTML = `<div style="padding:16px;color:#888;font-size:13px;text-align:center">No trips yet — route is loading…</div>`;
+    return;
+  }
+
+  const travelsDesc = [..._travels];
+
+  list.innerHTML = travelsDesc.map(travel => {
+    const fromName = travel.from ? stopDisplayName(travel.from) : (travel.fromGps ? `${travel.fromGps.centroid.lat.toFixed(4)}, ${travel.fromGps.centroid.lon.toFixed(4)}` : "Journey Start");
+    const toName   = travel.to   ? stopDisplayName(travel.to)   : (travel.toGps   ? `${travel.toGps.centroid.lat.toFixed(4)}, ${travel.toGps.centroid.lon.toFixed(4)}` : "Journey End");
+    const depIso   = new Date(travel.depTs).toISOString();
+    const arrIso   = new Date(travel.arrTs).toISOString();
+    const driveDur = formatDuration(depIso, arrIso);
+    const dateStr  = formatDate(depIso);
+    const isSelected = _selectedTravelIdx === travel.idx;
+
+    // Fuel (94 L tank)
+    const TANK_L = 94.6;
+    const fuelFrom = travel.from?.fuel_pct_depart;
+    const fuelTo   = travel.to?.fuel_pct_arrive;
+    const fuelUsed = (fuelFrom != null && fuelTo != null && fuelFrom > fuelTo) ? fuelFrom - fuelTo : null;
+    const fuelUsedL = fuelUsed != null ? (fuelUsed / 100) * TANK_L : null;
+
+    // Distance
+    const distKm = travel.distanceM ? (travel.distanceM / 1000) : null;
+    const distStr = distKm != null ? `${distKm.toFixed(1)} km` : null;
+    const lPer100 = (fuelUsedL != null && distKm > 0) ? (fuelUsedL / distKm) * 100 : null;
+    const fuelBrief = lPer100 != null ? `⛽ ${lPer100.toFixed(1)} L/100km` : (fuelUsedL != null ? `⛽ ${fuelUsedL.toFixed(1)} L` : "");
+
+    // Summary line
+    const metaParts = [dateStr];
+    if (driveDur) metaParts.push(`🚗 ${driveDur}`);
+    if (distStr) metaParts.push(`📏 ${distStr}`);
+    if (fuelBrief) metaParts.push(fuelBrief);
+
+    // ── Expanded detail rows ────────────────────────────────────────
+    let detailHtml = "";
+    if (isSelected) {
+      // Drive section
+      const driveRows = [];
+      if (distStr) driveRows.push(detailRow("Distance", distStr));
+      if (driveDur) driveRows.push(detailRow("Drive time", driveDur));
+      if (distKm != null && travel.arrTs - travel.depTs > 0) {
+        const hrs = (travel.arrTs - travel.depTs) / 3600000;
+        driveRows.push(detailRow("Avg speed", `${(distKm / hrs).toFixed(0)} km/h`));
+      }
+      driveRows.push(detailRow("Departed", fmtTime(travel.depTs)));
+      driveRows.push(detailRow("Arrived", fmtTime(travel.arrTs)));
+      const driveSection = driveRows.length
+        ? `<div class="vl-detail-section"><div class="vl-detail-label">🚗 Drive</div>${driveRows.join("")}</div>` : "";
+
+      // Fuel section
+      let fuelSection = "";
+      if (fuelFrom != null || fuelTo != null) {
+        const fuelRows = [];
+        if (fuelFrom != null) fuelRows.push(detailRow("Start fuel", `${fuelFrom.toFixed(1)}% (${(fuelFrom/100*TANK_L).toFixed(1)} L)`));
+        if (fuelTo != null)   fuelRows.push(detailRow("End fuel", `${fuelTo.toFixed(1)}% (${(fuelTo/100*TANK_L).toFixed(1)} L)`));
+        if (fuelUsedL != null) {
+          fuelRows.push(detailRow("Used", `${fuelUsedL.toFixed(1)} L (${fuelUsed.toFixed(1)}%)`));
+          if (lPer100 != null) {
+            fuelRows.push(detailRow("Economy", `${lPer100.toFixed(1)} L/100km`));
+          }
+        }
+        fuelSection = `<div class="vl-detail-section"><div class="vl-detail-label">⛽ Fuel (${TANK_L} L tank)</div>${fuelRows.join("")}</div>`;
+      }
+
+      // Destination/stay section
+      let staySection = "";
+      if (travel.to) {
+        const stayRows = [];
+        const stayDur = formatDuration(travel.to.arrived_at, travel.to.departed_at);
+        if (stayDur) stayRows.push(detailRow("Duration", stayDur));
+        if (travel.to.arrived_at) stayRows.push(detailRow("Arrived", fmtTime(new Date(travel.to.arrived_at).getTime())));
+        if (travel.to.departed_at) stayRows.push(detailRow("Left", fmtTime(new Date(travel.to.departed_at).getTime())));
+        if (travel.to.notes) stayRows.push(detailRow("Notes", `<i>${escHtml(travel.to.notes)}</i>`));
+        if (travel.to.rating && travel.to.rating > 0) stayRows.push(detailRow("Rating", renderStars(travel.to.rating)));
+        if (stayRows.length) {
+          const destName = stopDisplayName(travel.to);
+          staySection = `<div class="vl-detail-section"><div class="vl-detail-label">📍 ${escHtml(destName)}</div>${stayRows.join("")}</div>`;
+        }
+      }
+
+      detailHtml = `<div class="vl-trip-details">${driveSection}${fuelSection}${staySection}</div>`;
+    }
+
+    return `<div class="vl-stop-item${isSelected ? " selected" : ""}" data-travel-idx="${travel.idx}">
+      <div class="vl-stop-name"><span>🚐 ${escHtml(fromName)} → ${escHtml(toName)}</span><span class="vl-chevron">▶</span></div>
+      <div class="vl-stop-meta">${metaParts.join(" · ")}</div>
+      ${detailHtml}
     </div>`;
   }).join("");
 
-  list.querySelectorAll(".vl-stop-item").forEach(el => {
-    el.addEventListener("click", () => {
-      const stop = _stops.find(s => s.id === el.dataset.stopId);
-      if (!stop) return;
-      openEditPanel(stop);
-      if (_map && stop.lat && stop.lon) {
-        _map.setView([stop.lat, stop.lon], 13, { animate: true });
-        _stopMarkers[stop.id]?.openPopup();
-      }
-    });
+  list.querySelectorAll("[data-travel-idx]").forEach(el => {
+    el.addEventListener("click", () => selectTravel(parseInt(el.dataset.travelIdx)));
   });
+}
+
+function detailRow(label, value) {
+  return `<div class="vl-detail-row"><span>${label}</span><span>${value}</span></div>`;
+}
+function fmtTime(tsMs) {
+  const opts = { hour: "numeric", minute: "2-digit" };
+  if (_haTz) opts.timeZone = _haTz;
+  return new Date(tsMs).toLocaleTimeString("en-US", opts);
+}
+function escHtml(s) {
+  if (!s) return "";
+  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
+}
+
+let _fuelBackfillDone = false;
+/** Ask the backend to backfill fuel_pct from HA recorder history. Re-render if data changed. */
+async function backfillFuelIfNeeded() {
+  if (_fuelBackfillDone) return;
+  // Check if any travel's stops are missing fuel
+  const anyMissing = _travels.some(t =>
+    (t.from && t.from.fuel_pct_depart == null) || (t.to && t.to.fuel_pct_arrive == null)
+  );
+  if (!anyMissing) { _fuelBackfillDone = true; return; }
+
+  try {
+    const token = getToken();
+    if (!token) return;
+    const r = await fetch("/api/vanlife_tracker/backfill_fuel", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok) { console.warn("[VL] fuel backfill:", r.status); return; }
+    const j = await r.json();
+    console.log("[VL] fuel backfill result:", j);
+    _fuelBackfillDone = true;
+    if (j.updated > 0) {
+      // Reload stops from sensor state (coordinator will have refreshed)
+      // Give HA a moment to update the sensor attribute
+      await new Promise(ok => setTimeout(ok, 2000));
+      const state = getStates()["sensor.vanlife_tracker_recent_stops"];
+      _stops = state?.attributes?.stops || [];
+      // Re-match fuel data into existing travels
+      for (const travel of _travels) {
+        if (travel.fromGps) travel.from = findNearestDBStop(travel.fromGps.centroid, 500);
+        if (travel.toGps) travel.to = findNearestDBStop(travel.toGps.centroid, 500);
+      }
+      renderStopList();
+    }
+  } catch(e) { console.warn("[VL] fuel backfill error:", e); }
+}
+
+/** Highlight a travel's route on the map (toggle off if clicked again). */
+function selectTravel(idx) {
+  // Toggle off
+  if (_selectedTravelIdx === idx) {
+    _selectedTravelIdx = null;
+    if (_travelHighlight) { _travelHighlight.remove(); _travelHighlight = null; }
+    renderStopList();
+    renderStopMarkers();
+    renderUnmatchedStopMarkers();
+    return;
+  }
+  _selectedTravelIdx = idx;
+  if (_travelHighlight) { _travelHighlight.remove(); _travelHighlight = null; }
+
+  const travel = _travels[idx];
+  if (travel?.geom && _routeLayer) {
+    // Bright cyan highlight with dark outline for contrast
+    _travelHighlight = L.layerGroup([
+      L.polyline(travel.geom, { color: "#000", weight: 10, opacity: 0.5, lineCap: "round", lineJoin: "round" }),
+      L.polyline(travel.geom, { color: "#00e5ff", weight: 6, opacity: 0.95, lineCap: "round", lineJoin: "round" }),
+    ]).addTo(_routeLayer);
+    // Fit the map to this travel's extent
+    if (_map) _map.fitBounds(L.latLngBounds(travel.geom), { padding: [50, 50] });
+  }
+  renderStopList();
+  renderStopMarkers();
+  renderUnmatchedStopMarkers();
 }
 
 // ─── Edit panel ───────────────────────────────────────────
@@ -1089,28 +1518,108 @@ function setupPlacesTab() {
 }
 
 function setupDateBar() {
-  // Restore mode from URL param on load
-  const urlMode = new URLSearchParams(window.location.search).get("mode");
-  const validModes = ["today", "yesterday", "3d", "7d", "30d"];
-  if (urlMode && validModes.includes(urlMode)) _dateMode = urlMode;
+  const params = new URLSearchParams(window.location.search);
+  const urlMode = params.get("mode");
+  const urlStart = params.get("start");
+  const urlEnd = params.get("end");
+  const startInput = document.getElementById("vl-date-start");
+  const endInput = document.getElementById("vl-date-end");
+  const rangeLabel = document.getElementById("vl-date-range-label");
 
-  // Sync active button to current mode
+  // Set max date to today
+  const todayStr = new Date().toISOString().slice(0, 10);
+  startInput.max = todayStr;
+  endInput.max = todayStr;
+
+  // Restore from URL
+  if (urlStart && urlEnd) {
+    _dateMode = "custom";
+    _customStart = new Date(urlStart + "T00:00:00");
+    const endNext = new Date(urlEnd + "T00:00:00");
+    endNext.setDate(endNext.getDate() + 1);
+    _customEnd = endNext > new Date() ? new Date() : endNext;
+    startInput.value = urlStart;
+    endInput.value = urlEnd;
+  } else if (urlMode === "yesterday") {
+    _dateMode = "yesterday";
+  } else if (urlMode && urlMode !== "today") {
+    // Legacy numeric modes (3d, 7d, etc.) → convert to custom range
+    const days = parseInt(urlMode);
+    if (days > 0 && days <= 7) {
+      _dateMode = "custom";
+      const s = new Date(); s.setDate(s.getDate() - (days - 1)); s.setHours(0,0,0,0);
+      _customStart = s;
+      _customEnd = new Date();
+      startInput.value = s.toISOString().slice(0, 10);
+      endInput.value = todayStr;
+    }
+  }
+  // else: default "today"
+
+  function updateRangeLabel() {
+    if (_dateMode !== "custom" || !startInput.value || !endInput.value) {
+      rangeLabel.textContent = "";
+      return;
+    }
+    const days = Math.round((new Date(endInput.value) - new Date(startInput.value)) / 86400000) + 1;
+    rangeLabel.textContent = `${days}d`;
+    rangeLabel.style.color = days > 7 ? "#d32f2f" : "#888";
+  }
+
+  // Sync active buttons
   document.querySelectorAll(".vl-date-btn").forEach(b =>
     b.classList.toggle("active", b.dataset.mode === _dateMode));
+  updateRangeLabel();
 
+  // Preset buttons (Today / Yesterday)
   document.querySelectorAll(".vl-date-btn").forEach(btn => {
     btn.addEventListener("click", async () => {
       const mode = btn.dataset.mode;
       if (mode === _dateMode) return;
       _dateMode = mode;
-      // Persist to URL without reloading
+      _customStart = null; _customEnd = null;
+      _fuelBackfillDone = false;
+      startInput.value = ""; endInput.value = "";
       const u = new URL(window.location);
       u.searchParams.set("mode", mode);
+      u.searchParams.delete("start"); u.searchParams.delete("end");
       window.history.replaceState({}, "", u);
       document.querySelectorAll(".vl-date-btn").forEach(b => b.classList.toggle("active", b === btn));
+      updateRangeLabel();
       if (_routeLayer) await drawRoute();
+      _maybeBackfill(mode);
     });
   });
+
+  // Date range inputs
+  async function onDateChange() {
+    if (!startInput.value || !endInput.value) return;
+    const s = new Date(startInput.value);
+    const e = new Date(endInput.value);
+    if (isNaN(s) || isNaN(e)) return;
+    const days = Math.round((e - s) / 86400000) + 1;
+    if (days < 1) { rangeLabel.textContent = "⚠ end < start"; rangeLabel.style.color = "#d32f2f"; return; }
+    if (days > 7) { rangeLabel.textContent = `${days}d (max 7)`; rangeLabel.style.color = "#d32f2f"; return; }
+    _dateMode = "custom";
+    _customStart = new Date(startInput.value + "T00:00:00");
+    const endNext = new Date(endInput.value + "T00:00:00");
+    endNext.setDate(endNext.getDate() + 1);
+    _customEnd = endNext > new Date() ? new Date() : endNext;
+    _fuelBackfillDone = false;
+    const u = new URL(window.location);
+    u.searchParams.delete("mode");
+    u.searchParams.set("start", startInput.value);
+    u.searchParams.set("end", endInput.value);
+    window.history.replaceState({}, "", u);
+    document.querySelectorAll(".vl-date-btn").forEach(b => b.classList.remove("active"));
+    updateRangeLabel();
+    if (_routeLayer) await drawRoute();
+    _maybeBackfill("custom");
+  }
+  startInput.addEventListener("change", onDateChange);
+  endInput.addEventListener("change", onDateChange);
+
+  // Debug toggle buttons
   document.getElementById("vl-debug-shape-btn").addEventListener("click", async () => {
     _showShape = !_showShape;
     document.getElementById("vl-debug-shape-btn").classList.toggle("active", _showShape);
@@ -1221,7 +1730,56 @@ async function loadData() {
   const state = getStates()["sensor.vanlife_tracker_recent_stops"];
   _stops = state?.attributes?.stops || [];
   _places = []; // named places via REST not yet wired; will add later
-  renderStopList();
+  // Don't call renderStopList() here — _travels is built by drawRoute() which runs next.
+  // Set loading placeholder so the sidebar isn't blank.
+  const countEl = document.getElementById("vl-stop-count");
+  const list = document.getElementById("vl-stop-list");
+  if (countEl) countEl.textContent = "Trips";
+  if (list) list.innerHTML = `<div style="padding:16px;color:#888;font-size:13px;text-align:center">Loading…</div>`;
+  // Auto-backfill if no stops for the current window
+  _maybeBackfill(_dateMode);
+}
+
+// Trigger a backfill if the current date window has no stops and we haven't
+// already requested one for this mode in this session.
+const _backfillRequested = new Set();
+async function _maybeBackfill(mode) {
+  if (!_token) return;
+  if (_backfillRequested.has(mode)) return;
+  if (stopsInWindow().length > 0) return;
+  _backfillRequested.add(mode);
+  const modeDays = { today: 1, yesterday: 2 };
+  const days = mode === "custom" && _customStart && _customEnd
+    ? Math.ceil((_customEnd - _customStart) / 86400000)
+    : (modeDays[mode] || 7);
+  _LOGGER.info?.(`[VL] No stops in ${mode} window — triggering backfill for ${days} days`);
+  setStatus(`⏳ No stops found — scanning ${days}d of GPS history...`);
+  try {
+    await callService("vanlife_tracker", "backfill_stops", {
+      days,
+      stationary_radius_m: 100,
+    });
+    // Poll for updated stops after backfill (it takes a few seconds to geocode)
+    let attempts = 0;
+    const poll = setInterval(async () => {
+      attempts++;
+      const r = await fetch("/api/states", { headers: { Authorization: `Bearer ${_token}` } });
+      if (!r.ok) return;
+      const all = await r.json();
+      const newStates = Object.fromEntries(all.map(s => [s.entity_id, s]));
+      const newStops = newStates["sensor.vanlife_tracker_recent_stops"]?.attributes?.stops || [];
+      if (newStops.length !== _stops.length || attempts >= 12) {
+        clearInterval(poll);
+        _states = newStates;
+        _stops = newStops;
+        renderStopList();
+        renderStopMarkers();
+        setStatus("");
+      }
+    }, 5000);
+  } catch(e) {
+    setStatus("");
+  }
 }
 
 // Returns only stops that overlap the current date window.
@@ -1285,14 +1843,17 @@ document.addEventListener("DOMContentLoaded", () => {
   setupDateBar();
   if (_token) {
     setStatus("Token from cache, loading...");
-    fetch("/api/states", { headers: { Authorization: `Bearer ${_token}` } })
-      .then(r => { console.error("[VL] /api/states status:", r.status); return r.ok ? r.json() : []; })
-      .then(all => {
-        console.error("[VL] states loaded:", Array.isArray(all) ? all.length : "not array");
-        if (Array.isArray(all)) _states = Object.fromEntries(all.map(s => [s.entity_id, s]));
-        startApp();
-      })
-      .catch(err => { console.error("[VL] states fetch error:", err); startApp(); });
+    Promise.all([
+      fetch("/api/states", { headers: { Authorization: `Bearer ${_token}` } })
+        .then(r => { console.error("[VL] /api/states status:", r.status); return r.ok ? r.json() : []; }),
+      fetch("/api/config", { headers: { Authorization: `Bearer ${_token}` } })
+        .then(r => r.ok ? r.json() : null).catch(() => null),
+    ]).then(([all, config]) => {
+      console.error("[VL] states loaded:", Array.isArray(all) ? all.length : "not array");
+      if (Array.isArray(all)) _states = Object.fromEntries(all.map(s => [s.entity_id, s]));
+      if (config?.time_zone) { _haTz = config.time_zone; console.log("[VL] HA timezone:", _haTz); }
+      startApp();
+    }).catch(err => { console.error("[VL] init fetch error:", err); startApp(); });
   } else {
     setStatus("Waiting for Home Assistant auth...");
     console.error("[VL] no token, waiting for postMessage...");
