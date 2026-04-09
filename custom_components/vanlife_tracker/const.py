@@ -1,7 +1,7 @@
 """Constants for Vanlife Tracker."""
 
 DOMAIN = "vanlife_tracker"
-PLATFORMS = ["sensor", "device_tracker", "geo_location"]
+PLATFORMS = ["sensor", "binary_sensor", "device_tracker", "geo_location"]
 
 # --- Config keys ---
 CONF_GPS_ENTITY = "gps_entity"

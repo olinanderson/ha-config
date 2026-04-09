@@ -40,6 +40,14 @@ from .traccar_client import TraccarClient
 
 _LOGGER = logging.getLogger(__name__)
 
+# GPS-based movement detection thresholds
+GPS_POLL_INTERVAL_S = 5          # How often to check GPS position (seconds)
+GPS_MOVING_THRESHOLD_M = 15      # Must drift this far from parked centroid to be "moving"
+GPS_MOVING_CONFIRM = 3           # Consecutive readings above threshold to confirm moving
+GPS_STOPPED_THRESHOLD_M = 15     # Must stay within this radius to be "stopped"
+GPS_STOPPED_CONFIRM = 6          # Consecutive readings within threshold to confirm stopped (~30s)
+GPS_RECORD_INTERVAL_S = 1        # Record GPS to gps_track at this interval while moving
+
 
 class VanlifeCoordinator:
     """Central coordinator that ties together GPS tracking, stop detection, and Traccar."""
@@ -68,11 +76,22 @@ class VanlifeCoordinator:
         self._stop_timer_handle: asyncio.TimerHandle | None = None
         self._gps_publish_unsub: Any = None
         self._gps_bg_unsub: Any = None  # always-on background GPS recorder
+        self._gps_movement_unsub: Any = None  # GPS-based movement detection timer
         self._moving_unsub: Any = None
         self._is_moving: bool = False
         self._last_gps_push: float = 0
         self._current_stop: dict[str, Any] | None = None
         self._current_trip_id: str | None = None
+
+        # GPS-based movement detection state
+        self._gps_parked_lat: float | None = None
+        self._gps_parked_lon: float | None = None
+        self._gps_moving_count: int = 0     # consecutive readings far from parked ref
+        self._gps_stopped_count: int = 0    # consecutive readings near "stopped" ref
+        self._gps_stopped_ref_lat: float | None = None
+        self._gps_stopped_ref_lon: float | None = None
+        self._gps_stopped_ts: float = 0.0   # timestamp when vehicle first stopped
+        self._gps_departure_buffer: list[dict] = []  # candidate points while confirming departure
 
         # Config
         self._gps_entity = config.get(CONF_GPS_ENTITY, "")
@@ -96,7 +115,8 @@ class VanlifeCoordinator:
         if current_trip:
             self._current_trip_id = current_trip["id"]
 
-        # Watch the vehicle_moving entity for state changes
+        # Movement detection: prefer GPS-based (universal), fall back to
+        # binary_sensor if configured (legacy / faster response with OBD).
         if self._moving_entity:
             self._moving_unsub = async_track_state_change_event(
                 self.hass, [self._moving_entity], self._on_moving_state_change
@@ -106,14 +126,31 @@ class VanlifeCoordinator:
             if state and state.state == "on":
                 self._is_moving = True
                 self._start_gps_publishing()
-                # If moving but no active trip, create one
                 if not self._current_trip_id:
                     await self._async_start_trip()
+            _LOGGER.info(
+                "Movement detection: binary_sensor (%s)", self._moving_entity
+            )
+        elif self._gps_entity:
+            # Pure GPS-based movement detection — no OBD/WiCAN needed
+            gps = self._get_current_gps()
+            if gps:
+                self._gps_parked_lat = gps["lat"]
+                self._gps_parked_lon = gps["lon"]
+            self._gps_movement_unsub = async_track_time_interval(
+                self.hass,
+                self._async_gps_movement_check,
+                timedelta(seconds=GPS_POLL_INTERVAL_S),
+            )
+            _LOGGER.info(
+                "Movement detection: GPS-based (poll every %ds, move>%dm, stop<%dm)",
+                GPS_POLL_INTERVAL_S, GPS_MOVING_THRESHOLD_M, GPS_STOPPED_THRESHOLD_M,
+            )
 
         _LOGGER.info(
             "Vanlife Tracker started (GPS: %s, Moving: %s, Traccar: %s)",
             self._gps_entity,
-            self._moving_entity,
+            self._moving_entity or "GPS-based",
             "enabled" if self._traccar else "disabled",
         )
 
@@ -134,6 +171,9 @@ class VanlifeCoordinator:
         if self._gps_bg_unsub:
             self._gps_bg_unsub()
             self._gps_bg_unsub = None
+        if self._gps_movement_unsub:
+            self._gps_movement_unsub()
+            self._gps_movement_unsub = None
         if self._moving_unsub:
             self._moving_unsub()
         if self._traccar:
@@ -167,6 +207,7 @@ class VanlifeCoordinator:
                 "Vehicle stopped — starting %d min timer for auto-stop",
                 self._stop_delay,
             )
+            self._gps_stopped_ts = time.time()
             self._stop_gps_publishing()
             self.hass.async_create_task(self._async_end_trip())
             self._schedule_stop_detection()
@@ -185,11 +226,136 @@ class VanlifeCoordinator:
             self._stop_timer_handle.cancel()
             self._stop_timer_handle = None
 
+    # ─── GPS-based movement detection ─────────────────────────
+
+    async def _async_gps_movement_check(self, _now: datetime | None = None) -> None:
+        """Poll GPS and determine if the vehicle is moving or stopped.
+
+        State machine:
+          STOPPED: parked centroid is set. If GPS drifts > GPS_MOVING_THRESHOLD_M
+                   for GPS_MOVING_CONFIRM consecutive readings → transition to MOVING.
+          MOVING:  recording GPS every poll. If GPS stays within GPS_STOPPED_THRESHOLD_M
+                   of a reference for GPS_STOPPED_CONFIRM readings → transition to STOPPED.
+        """
+        gps = self._get_current_gps()
+        if gps is None:
+            return
+
+        lat, lon = gps["lat"], gps["lon"]
+        now_ts = time.time()
+
+        # Always record GPS while moving (high-frequency)
+        if self._is_moving:
+            await self.database.async_insert_gps_points(
+                [{"ts": now_ts, "lat": lat, "lon": lon}], source="live"
+            )
+
+        if not self._is_moving:
+            # ── STOPPED state: watch for departure ──
+            if self._gps_parked_lat is None:
+                # First reading — initialize parked reference
+                self._gps_parked_lat = lat
+                self._gps_parked_lon = lon
+                self._gps_moving_count = 0
+                return
+
+            dist = _haversine_m(lat, lon, self._gps_parked_lat, self._gps_parked_lon)
+            if dist > GPS_MOVING_THRESHOLD_M:
+                self._gps_moving_count += 1
+                # Buffer this candidate departure point
+                self._gps_departure_buffer.append(
+                    {"ts": now_ts, "lat": lat, "lon": lon}
+                )
+                if self._gps_moving_count >= GPS_MOVING_CONFIRM:
+                    # ── Transition: STOPPED → MOVING ──
+                    _LOGGER.debug(
+                        "GPS movement detected (%.0fm from parked, %d confirms)",
+                        dist, self._gps_moving_count,
+                    )
+                    self._is_moving = True
+                    self._gps_moving_count = 0
+                    self._gps_stopped_count = 0
+                    self._gps_stopped_ref_lat = None
+                    self._gps_stopped_ref_lon = None
+                    self._cancel_stop_timer()
+                    self._start_gps_publishing()
+                    await self._async_handle_departure()
+                    await self._async_start_trip()
+                    # Insert the stop centroid + buffered candidate points
+                    # so the trip track has no gap from parked → moving.
+                    # Prefer the current stop's averaged coordinates (matches
+                    # what the panel uses for the route anchor); fall back to
+                    # the raw parked reference if no stop was created yet.
+                    if self._current_stop:
+                        anchor_lat = self._current_stop["lat"]
+                        anchor_lon = self._current_stop["lon"]
+                    else:
+                        anchor_lat = self._gps_parked_lat
+                        anchor_lon = self._gps_parked_lon
+                    departure_pts = [
+                        {
+                            "ts": self._gps_departure_buffer[0]["ts"] - 1,
+                            "lat": anchor_lat,
+                            "lon": anchor_lon,
+                        }
+                    ] + self._gps_departure_buffer
+                    await self.database.async_insert_gps_points(
+                        departure_pts, source="live"
+                    )
+                    _LOGGER.debug(
+                        "Inserted %d departure points (anchor %.6f,%.6f + %d buffered)",
+                        len(departure_pts), anchor_lat, anchor_lon,
+                        len(self._gps_departure_buffer),
+                    )
+                    self._gps_departure_buffer = []
+            else:
+                self._gps_moving_count = 0
+                self._gps_departure_buffer = []
+        else:
+            # ── MOVING state: watch for arrival ──
+            if self._gps_stopped_ref_lat is None:
+                # Initialize stopped-detection reference
+                self._gps_stopped_ref_lat = lat
+                self._gps_stopped_ref_lon = lon
+                self._gps_stopped_count = 1
+                return
+
+            dist_from_ref = _haversine_m(
+                lat, lon, self._gps_stopped_ref_lat, self._gps_stopped_ref_lon
+            )
+
+            if dist_from_ref <= GPS_STOPPED_THRESHOLD_M:
+                self._gps_stopped_count += 1
+                if self._gps_stopped_count >= GPS_STOPPED_CONFIRM:
+                    # ── Transition: MOVING → STOPPED ──
+                    # Set parked centroid from the cluster of stopped readings
+                    self._gps_parked_lat = self._gps_stopped_ref_lat
+                    self._gps_parked_lon = self._gps_stopped_ref_lon
+                    self._gps_stopped_ts = now_ts
+                    self._is_moving = False
+                    self._gps_stopped_count = 0
+                    self._gps_moving_count = 0
+                    _LOGGER.debug(
+                        "GPS stop detected (within %dm for %d readings)",
+                        GPS_STOPPED_THRESHOLD_M, GPS_STOPPED_CONFIRM,
+                    )
+                    self._stop_gps_publishing()
+                    await self._async_end_trip()
+                    self._schedule_stop_detection()
+            else:
+                # Moved significantly — reset the stopped reference
+                self._gps_stopped_ref_lat = lat
+                self._gps_stopped_ref_lon = lon
+                self._gps_stopped_count = 1
+
     # ─── GPS publishing to Traccar ────────────────────────────
 
     def _start_gps_publishing(self) -> None:
-        """Start periodic GPS pushing to Traccar while moving."""
-        if not self._traccar or not self._gps_entity:
+        """Start periodic GPS pushing to Traccar while moving.
+
+        Also records to gps_track for route history even without Traccar.
+        """
+        if not self._gps_entity:
             return
         if self._gps_publish_unsub:
             return  # Already running
@@ -222,7 +388,7 @@ class VanlifeCoordinator:
         if lat is None or lon is None:
             return
 
-        ts = state.last_changed.timestamp()
+        ts = state.last_updated.timestamp()
         await self.database.async_insert_gps_points(
             [{"ts": ts, "lat": float(lat), "lon": float(lon)}], source="live"
         )
@@ -263,7 +429,7 @@ class VanlifeCoordinator:
         lon = state.attributes.get("longitude")
         if lat is None or lon is None:
             return
-        ts = state.last_changed.timestamp()
+        ts = state.last_updated.timestamp()
         await self.database.async_insert_gps_points(
             [{"ts": ts, "lat": float(lat), "lon": float(lon)}], source="bg"
         )
@@ -271,7 +437,12 @@ class VanlifeCoordinator:
     # ─── Stop management ──────────────────────────────────────
 
     async def _async_create_auto_stop(self) -> None:
-        """Auto-create a stop when the van has been stationary long enough."""
+        """Auto-create a stop when the van has been stationary long enough.
+
+        Uses averaged GPS coordinates from the stationary period rather than a
+        single point snapshot.  This gives a much more stable and accurate
+        stop location.
+        """
         # Don't create if vehicle started moving again
         if self._is_moving:
             return
@@ -281,10 +452,37 @@ class VanlifeCoordinator:
             _LOGGER.debug("Already at a stop, skipping auto-creation")
             return
 
+        # ── Compute averaged GPS centroid from stationary period ──
+        # Query gps_track for points since the vehicle stopped.
+        # The stop timer fires _stop_delay minutes after becoming stationary,
+        # so look back that far plus a small buffer.
         gps = self._get_current_gps()
         if not gps:
             _LOGGER.warning("Cannot create auto-stop: no GPS data")
             return
+
+        now_ts = time.time()
+        # Determine when the vehicle stopped
+        stopped_since = self._gps_stopped_ts if self._gps_stopped_ts else (
+            now_ts - self._stop_delay * 60
+        )
+        # Fetch GPS points from the stationary period
+        stationary_points = await self.database.async_get_gps_track(
+            stopped_since, now_ts
+        )
+
+        if len(stationary_points) >= 3:
+            # Average the stationary GPS readings for a stable centroid
+            avg_lat = sum(p["lat"] for p in stationary_points) / len(stationary_points)
+            avg_lon = sum(p["lon"] for p in stationary_points) / len(stationary_points)
+            _LOGGER.debug(
+                "Averaged %d GPS points for stop centroid: %.6f, %.6f",
+                len(stationary_points), avg_lat, avg_lon,
+            )
+        else:
+            # Not enough points — fall back to current reading
+            avg_lat = gps["lat"]
+            avg_lon = gps["lon"]
 
         # Check if an existing stop is nearby — reuse it instead of creating
         # a duplicate.  Prefer manually-named stops over auto-detected ones.
@@ -294,7 +492,7 @@ class VanlifeCoordinator:
         best_dist = float("inf")
         best_manual = False
         for es in existing_stops:
-            d = _haversine_m(gps["lat"], gps["lon"], es["lat"], es["lon"])
+            d = _haversine_m(avg_lat, avg_lon, es["lat"], es["lon"])
             if d >= STOP_MATCH_M:
                 continue
             es_manual = not es.get("auto_detected", 0)
@@ -317,10 +515,10 @@ class VanlifeCoordinator:
             best_stop["departed_at"] = None
             self._current_stop = best_stop
         else:
-            # Build new stop data
+            # Build new stop data using averaged coordinates
             stop_data: dict[str, Any] = {
-                "lat": gps["lat"],
-                "lon": gps["lon"],
+                "lat": avg_lat,
+                "lon": avg_lon,
                 "elevation": gps.get("elevation", 0),
                 "auto_detected": True,
                 "arrived_at": arrived_at,
@@ -330,7 +528,7 @@ class VanlifeCoordinator:
             if self._geocoding_enabled:
                 try:
                     session = aiohttp_client.async_get_clientsession(self.hass)
-                    geo = await async_reverse_geocode(gps["lat"], gps["lon"], session)
+                    geo = await async_reverse_geocode(avg_lat, avg_lon, session)
                     stop_data["nearest_town"] = geo.get("short_name", "")
                     stop_data["name"] = geo.get("short_name", "")
                 except Exception:  # noqa: BLE001
@@ -338,7 +536,7 @@ class VanlifeCoordinator:
 
             # Check if this location matches a named place
             named_place = await self.database.async_find_named_place_at(
-                gps["lat"], gps["lon"]
+                avg_lat, avg_lon
             )
             if named_place:
                 stop_data["name"] = named_place["name"]
@@ -378,10 +576,10 @@ class VanlifeCoordinator:
         # Fire HA event
         self.hass.bus.async_fire(EVENT_STOP_CREATED, self._current_stop)
         _LOGGER.info(
-            "Auto-detected stop: %s at %.4f, %.4f",
+            "Auto-detected stop: %s at %.6f, %.6f (averaged)",
             self._current_stop.get("name"),
-            gps["lat"],
-            gps["lon"],
+            avg_lat,
+            avg_lon,
         )
 
     async def _async_handle_departure(self) -> None:
@@ -622,8 +820,8 @@ class VanlifeCoordinator:
                 points.append({
                     "lat": float(lat),
                     "lon": float(lon),
-                    "ts": state.last_changed.timestamp(),
-                    "dt": state.last_changed.replace(tzinfo=None) if state.last_changed.tzinfo else state.last_changed,
+                    "ts": state.last_updated.timestamp(),
+                    "dt": state.last_updated.replace(tzinfo=None) if state.last_updated.tzinfo else state.last_updated,
                 })
             except (ValueError, TypeError):
                 continue

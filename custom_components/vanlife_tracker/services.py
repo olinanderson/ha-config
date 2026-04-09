@@ -93,6 +93,8 @@ UPDATE_NAMED_PLACE_SCHEMA = vol.Schema(
     {
         vol.Required("place_id"): cv.string,
         vol.Optional("name"): cv.string,
+        vol.Optional("lat"): vol.All(vol.Coerce(float), vol.Range(min=-90, max=90)),
+        vol.Optional("lon"): vol.All(vol.Coerce(float), vol.Range(min=-180, max=180)),
         vol.Optional("radius_m"): vol.All(
             vol.Coerce(float), vol.Range(min=50, max=5000)
         ),

@@ -12,6 +12,9 @@ vanlife_tracker.db-shm
 vanlife_tracker.db-wal
 starlink_gps_backup.db*
 db_backups/
+*.db
+*.db-shm
+*.db-wal
 *.db-journal
 *.pid
 

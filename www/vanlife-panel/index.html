@@ -197,18 +197,17 @@
       background: #fafafa; outline: none; width: 110px;
     }
     .vl-date-input:focus { border-color: #03a9f4; background: #fff; }
-    #vl-debug-pts-btn, #vl-debug-raw-btn, #vl-debug-shape-btn {
-      margin-left: 4px; padding: 4px 10px; border-radius: 14px;
-      font-size: 12px; font-weight: 600; cursor: pointer;
-      border: 1.5px solid; background: transparent;
-      transition: background 0.15s, color 0.15s;
+    .vl-route-toggle {
+      display: inline-flex; border-radius: 14px; overflow: hidden;
+      border: 1.5px solid #03a9f4; margin-left: 4px;
     }
-    #vl-debug-pts-btn { color: #ff6600; border-color: #ff6600; }
-    #vl-debug-pts-btn.active { background: #ff6600; color: #fff; }
-    #vl-debug-raw-btn { color: #00c853; border-color: #00c853; }
-    #vl-debug-raw-btn.active { background: #00c853; color: #fff; }
-    #vl-debug-shape-btn { color: #03a9f4; border-color: #03a9f4; }
-    #vl-debug-shape-btn.active { background: #03a9f4; color: #fff; }
+    .vl-route-toggle button {
+      padding: 4px 10px; font-size: 11px; font-weight: 600; cursor: pointer;
+      border: none; background: transparent; color: #03a9f4;
+      transition: background 0.15s, color 0.15s; white-space: nowrap;
+    }
+    .vl-route-toggle button.active { background: #03a9f4; color: #fff; }
+    .vl-route-toggle button:not(.active):hover { background: #e3f2fd; }
     .vl-bar-divider { width: 1px; height: 18px; background: #ddd; margin: 0 4px; }
   </style>
 </head>
@@ -234,9 +233,11 @@
       <input type="date" id="vl-date-end" class="vl-date-input" title="End date">
       <span id="vl-date-range-label" style="font-size:11px;color:#888;padding-left:4px"></span>
       <div class="vl-bar-divider"></div>
-      <button id="vl-debug-shape-btn" class="active" title="Show/hide ORS routed shape">shape</button>
-      <button id="vl-debug-pts-btn" title="Show/hide GPS waypoints sent to ORS">pts</button>
-      <button id="vl-debug-raw-btn" title="Show/hide raw GPS moving points">raw</button>
+      <div class="vl-route-toggle">
+        <button id="vl-mode-snap" class="active" title="Road-snapped via Valhalla">🛣 Road</button>
+        <button id="vl-mode-filtered" title="Filtered GPS track points (vanlife tracker DB)">📍 Filtered</button>
+        <button id="vl-mode-raw" title="Raw Starlink GPS history (unprocessed, from HA)">🛰 Raw</button>
+      </div>
     </div>
     <div id="vl-status" style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:9000;background:rgba(0,0,0,0.55);color:#fff;font-size:12px;padding:6px 14px;border-radius:20px;pointer-events:none;white-space:nowrap;display:block"></div>
     <div id="vl-sidebar">
@@ -300,16 +301,25 @@
           <select class="vl-pf-input" id="vl-pf-category"></select>
         </div>
         <div>
-          <label class="vl-pf-label">Radius (meters)</label>
-          <input class="vl-pf-input" id="vl-pf-radius" type="number" value="200">
+          <label class="vl-pf-label">Radius (<span id="vl-pf-radius-label">200</span>m)</label>
+          <input id="vl-pf-radius" type="range" min="50" max="2000" step="10" value="200"
+                 style="width:100%;accent-color:#7c3aed">
         </div>
         <div>
           <label class="vl-pf-label">Latitude</label>
-          <input class="vl-pf-input" id="vl-pf-lat" type="number" step="any" placeholder="39.7392">
+          <input class="vl-pf-input" id="vl-pf-lat" type="number" step="any" placeholder="50.973">
         </div>
         <div>
           <label class="vl-pf-label">Longitude</label>
-          <input class="vl-pf-input" id="vl-pf-lon" type="number" step="any" placeholder="-104.9903">
+          <input class="vl-pf-input" id="vl-pf-lon" type="number" step="any" placeholder="-114.139">
+        </div>
+        <div class="full">
+          <button class="vl-btn" id="vl-pf-pick" style="width:100%;background:#7c3aed;color:white;font-weight:600;border:none;border-radius:5px;padding:7px;cursor:pointer;font-size:13px">
+            📍 Pick location on map
+          </button>
+          <div id="vl-pf-pick-hint" style="display:none;font-size:11px;color:#7c3aed;font-weight:600;margin-top:4px;text-align:center">
+            Click anywhere on the map to set location… <a href="#" id="vl-pf-pick-cancel" style="color:#e53935">Cancel</a>
+          </div>
         </div>
         <div class="full">
           <label class="vl-pf-label">Notes</label>
@@ -508,7 +518,7 @@ async function getHistory(entityId, mode) {
 const OSRM_PROXY        = `${location.protocol}//${location.hostname}:8765`;
 const ROUTE_STRIDE      = 1;      // keep all GPS points
 const RDP_EPSILON       = 0;      // 0 = skip RDP entirely — send all points to ORS
-const STATIONARY_M      = 30;     // metres — tail points within this radius are trimmed
+const STATIONARY_M      = 15;     // metres — tail points within this radius are trimmed
                                   // so a parked van doesn't change the waypoint hash
 
 /**
@@ -549,10 +559,25 @@ function rdpSimplify(pts, epsilon) {
  * @param {Array} pts  [{lat,lon,ts},...] GPS points for this segment
  * @returns {Array|null}  [[lat,lon],...] routed geometry or null on failure
  */
-async function routeSegment(pts) {
+/** Preprocess GPS points: stride, head/tail stationary trim, RDP. Returns cleaned sample array. */
+function preprocessWaypoints(pts) {
   // Step 1: stride pre-filter
   let sample = pts.filter((_, i) => i % ROUTE_STRIDE === 0 || i === pts.length - 1);
-  // Step 2: trim stationary tail — if the last N points are all within STATIONARY_M of
+  // Step 2a: trim stationary head — remove clustered parked-van GPS drift at the
+  // start of the track. Keep only the last point in the stationary cluster (the one
+  // closest to when the van actually started moving).
+  if (sample.length > 2) {
+    const first = sample[0];
+    const threshDeg = STATIONARY_M / 111320;
+    let headCut = 0;
+    for (let i = 1; i < sample.length; i++) {
+      const d = Math.hypot(sample[i].lat - first.lat, (sample[i].lon - first.lon) * Math.cos(first.lat * Math.PI / 180));
+      if (d <= threshDeg) headCut = i;
+      else break;
+    }
+    if (headCut > 0) sample = sample.slice(headCut);
+  }
+  // Step 2b: trim stationary tail — if the last N points are all within STATIONARY_M of
   // the last point, they represent a parked van. Truncate to just that anchor point so
   // the waypoint list is stable across reloads → same hash → permanent cache hit.
   if (sample.length > 2) {
@@ -564,16 +589,18 @@ async function routeSegment(pts) {
       if (d <= threshDeg) cutIdx = i;
       else break;
     }
-    // Keep sample[cutIdx] (first stationary point) as endpoint — it's stable across
-    // reloads. Using `last` (most recent GPS ping) causes hash churn from GPS drift
-    // while parked (~±10m), defeating the permanent cache.
     if (cutIdx < sample.length - 1) sample = sample.slice(0, cutIdx + 1);
   }
   // Step 3: RDP simplification — skip if epsilon is 0
   if (RDP_EPSILON > 0) sample = rdpSimplify(sample, RDP_EPSILON);
+  return sample;
+}
+
+async function routeSegment(pts, {preProcessed = false} = {}) {
+  const sample = preProcessed ? pts : preprocessWaypoints(pts);
   const waypoints = sample.map(p => [p.lon, p.lat]);
   if (waypoints.length < 2) return null;
-  console.log(`[VL] routeSegment: ${pts.length} raw → ${sample.length} waypoints after stride+trim+RDP`);
+  console.log(`[VL] routeSegment: ${pts.length} input → ${sample.length} waypoints${preProcessed ? " (pre-processed)" : ""}`);
   // Debug: draw the actual waypoints sent to ORS
   if (_showDebugPts && _debugLayer) {
     sample.forEach(p => {
@@ -600,7 +627,6 @@ async function routeSegment(pts) {
 /** Draw a routed segment's geometry onto _routeLayer using the time-based colour gradient.
  *  If `travel` is provided, sub-polylines get a click popup showing "From → To". */
 function drawMoveSeg(pts, geom, totalStartT, totalDuration, travel = null) {
-  if (!_showShape) return;
   const segStartTs = pts[0].ts;
   const segEndTs   = pts[pts.length - 1].ts;
   const SUB     = Math.min(geom.length, 12);
@@ -681,11 +707,30 @@ function haversineM(lat1, lon1, lat2, lon2) {
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
-/** Sum haversine distance along a polyline geometry (array of [lat,lon]). Returns metres. */
+/** Split a [[lat,lon],...] coordinate array into continuous pieces at gaps > maxGapM.
+ *  Returns array of pieces; each piece is [[lat,lon],...] with length >= 2. */
+function splitGeomAtGaps(geom, maxGapM = 1500) {
+  if (geom.length < 2) return [geom];
+  const pieces = [];
+  let cur = [geom[0]];
+  for (let i = 1; i < geom.length; i++) {
+    if (haversineM(geom[i-1][0], geom[i-1][1], geom[i][0], geom[i][1]) > maxGapM) {
+      if (cur.length >= 2) pieces.push(cur);
+      cur = [];
+    }
+    cur.push(geom[i]);
+  }
+  if (cur.length >= 2) pieces.push(cur);
+  return pieces.length ? pieces : [geom];
+}
+
+/** Sum haversine distance along a polyline geometry (array of [lat,lon]).
+ *  Skips gaps > 1500m (Valhalla trace break artifacts). Returns metres. */
 function polylineDistanceM(geom) {
   let d = 0;
   for (let i = 1; i < geom.length; i++) {
-    d += haversineM(geom[i-1][0], geom[i-1][1], geom[i][0], geom[i][1]);
+    const seg = haversineM(geom[i-1][0], geom[i-1][1], geom[i][0], geom[i][1]);
+    if (seg <= 1500) d += seg;
   }
   return d;
 }
@@ -723,9 +768,15 @@ function clusterStops(stops, radiusM = 100) {
 // ─── App state ────────────────────────────────────────────
 
 let _map = null, _routeLayer = null, _debugLayer = null, _debugRawLayer = null;
+let _rawStarlinkLayer = null;  // raw Starlink GPS dots (HA history, unprocessed)
 let _showDebugPts = false, _showDebugRaw = false, _showShape = true;
+let _showFilteredDots = false;  // unused — kept for compat
+let _showRawStarlink = false;   // unused — kept for compat
+let _routeMode = "snap"; // "snap" = Valhalla road snap, "filtered" = vanlife GPS dots, "raw" = raw Starlink dots
 let _stops = [], _places = [];
-let _stopMarkers = {}, _placeMarkers = {};
+let _stopMarkers = {}, _placeMarkers = {}, _placeCircles = {};
+let _pickingPlaceLocation = false;  // true when user is clicking map to set place location
+let _placePreviewCircle = null;     // Leaflet circle shown during place edit
 let _vanMarker = null;
 let _dateMode = "today";
 let _customStart = null, _customEnd = null;
@@ -734,6 +785,7 @@ let _editingStop = null, _editingPlace = null, _editRating = 0;
 let _hasFitBounds = false;
 let _currentTab = "map";
 let _travels = [], _travelHighlight = null, _selectedTravelIdx = null;
+let _lastSegmentCount = 0, _lastParkingCount = 0;
 
 /** Check if a DB stop (by id) is the from/to of the currently selected travel. */
 function _isStopFocused(stopId) {
@@ -787,6 +839,7 @@ function setupTabs() {
 function getVanLocation() {
   const trackers = [
     "device_tracker.vanlife_tracker_van_location",
+    "device_tracker.starlink_device_location",
     "device_tracker.filtered_starlink_location",
   ];
   for (const id of trackers) {
@@ -809,17 +862,23 @@ function initMap() {
   _routeLayer = L.layerGroup().addTo(_map);
   _debugLayer = L.layerGroup().addTo(_map);
   _debugRawLayer = L.layerGroup().addTo(_map);
+  _rawStarlinkLayer = L.layerGroup().addTo(_map);
+  L.control.scale({ metric: true, imperial: true, maxWidth: 200 }).addTo(_map);
 
   drawRoute();
   renderPlaceMarkers();
   renderVanMarker();
 }
 
+// ─── Overlay dot layers (independent of route mode) ──────────────────
+// (removed — overlays merged into route modes)
+
 async function drawRoute() {
   if (!_routeLayer) return;
   _routeLayer.clearLayers();
   if (_debugLayer) _debugLayer.clearLayers();
   if (_debugRawLayer) _debugRawLayer.clearLayers();
+  if (_rawStarlinkLayer) _rawStarlinkLayer.clearLayers();
   _hasFitBounds = false;
   setStatus("Loading trips...");
 
@@ -828,129 +887,389 @@ async function drawRoute() {
   const { start, end } = _dateWindow(_dateMode);
   const startTs = start.getTime() / 1000;
   const endTs   = end.getTime() / 1000;
-
-  // ── Fetch pre-built trips from server ───────────────────────────────
-  let trips;
-  try {
-    const r = await fetch(
-      `/api/vanlife_tracker/trips?start=${startTs}&end=${endTs}`,
-      { headers: { Authorization: `Bearer ${token}` } }
-    );
-    if (!r.ok) throw new Error(`HTTP ${r.status}`);
-    trips = await r.json();
-  } catch (e) {
-    console.error("[VL] Failed to fetch trips:", e);
-    // Fallback: try loading raw GPS and show polyline without trips
-    setStatus("⚠ No trips found (run backfill_trips service)");
-    await _drawRawGpsFallback();
-    return;
-  }
-
-  if (trips.length === 0) {
-    setStatus("⚠ No trips in range — try a different date or run backfill_trips");
-    await _drawRawGpsFallback();
-    return;
-  }
-
-  // ── Build _travels from server trips ────────────────────────────────
-  _travels = [];
-  _selectedTravelIdx = null;
-  if (_travelHighlight) { _travelHighlight.remove(); _travelHighlight = null; }
-
-  // Compute colour gradient origin across all trips
-  const allPtsFlat = trips.flatMap(t => t.gps_points || []);
-  const totalStartT = allPtsFlat.length > 0 ? allPtsFlat[0].ts * 1000 : 0;
-  const totalDuration = allPtsFlat.length > 1
-    ? Math.max(1, (allPtsFlat[allPtsFlat.length - 1].ts - allPtsFlat[0].ts) * 1000)
-    : 1;
-
-  for (let i = 0; i < trips.length; i++) {
-    const t = trips[i];
-    const pts = (t.gps_points || []).map(p => ({ lat: p.lat, lon: p.lon, ts: p.ts * 1000 }));
-    const fromStop = t.from_stop || null;
-    const toStop   = t.to_stop || null;
-    // For unmatched endpoints, derive centroid from first/last GPS point
-    const firstPt = pts.length > 0 ? pts[0] : null;
-    const lastPt  = pts.length > 0 ? pts[pts.length - 1] : null;
-    const fromGps = fromStop
-      ? { centroid: { lat: fromStop.lat, lon: fromStop.lon }, startTs: t.start_ts * 1000, durationH: 0 }
-      : (firstPt ? { centroid: { lat: firstPt.lat, lon: firstPt.lon }, startTs: t.start_ts * 1000, durationH: 0 } : null);
-    const toGps = toStop
-      ? { centroid: { lat: toStop.lat, lon: toStop.lon }, startTs: (t.end_ts || t.start_ts) * 1000, durationH: 0 }
-      : (lastPt ? { centroid: { lat: lastPt.lat, lon: lastPt.lon }, startTs: (t.end_ts || t.start_ts) * 1000, durationH: 0 } : null);
-    _travels.push({
-      idx: i,
-      seg: { pts },
-      from: fromStop,
-      to: toStop,
-      fromGps,
-      toGps,
-      depTs: t.start_ts * 1000,
-      arrTs: (t.end_ts || Date.now() / 1000) * 1000,
-      geom: null,
-      distanceM: t.distance_m || 0,
-    });
-  }
-
-  // ── Route-fit each trip via Valhalla and draw ───────────────────────
   const label = _dateMode === "custom" && _customStart && _customEnd
     ? `${_customStart.toLocaleDateString("en-US", {month:"short",day:"numeric"})}-${new Date(_customEnd.getTime()-1).toLocaleDateString("en-US", {month:"short",day:"numeric"})}`
     : _dateMode;
-  let routedCount = 0;
-  let totalPts = 0;
 
-  for (let mi = 0; mi < _travels.length; mi++) {
-    const travel = _travels[mi];
-    const pts = travel.seg.pts;
-    totalPts += pts.length;
-    // Debug: draw raw GPS points as green circles
-    if (_showDebugRaw && _debugRawLayer) {
-      pts.forEach(p => {
-        L.circleMarker([p.lat, p.lon], {
-          radius: 3, color: '#00c853', fillColor: '#00c853',
-          fillOpacity: 0.85, weight: 0,
-        }).addTo(_debugRawLayer);
-      });
+  // ── RAW mode: fetch Starlink history directly from HA API ─────────
+  if (_routeMode === "raw") {
+    setStatus("Loading raw Starlink GPS...");
+    try {
+      const url = `/api/history/period/${start.toISOString()}?filter_entity_id=device_tracker.starlink_device_location&end_time=${end.toISOString()}&significant_changes_only=false`;
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      if (r.ok) {
+        const data = await r.json();
+        const states = data?.[0] || [];
+        let drawn = 0;
+        const coords = [];
+        states.forEach((s, i) => {
+          const lat = s.attributes?.latitude;
+          const lon = s.attributes?.longitude;
+          if (lat == null || lon == null) return;
+          coords.push([lat, lon]);
+          const ts = s.last_changed || s.last_updated || "";
+          const acc = s.attributes?.gps_accuracy;
+          const cm = L.circleMarker([lat, lon], {
+            radius: 2.5, color: '#ff5722', fillColor: '#ff5722',
+            fillOpacity: 0.55, weight: 0,
+          }).addTo(_rawStarlinkLayer);
+          const localTime = ts ? new Date(ts).toLocaleString("en-US", {
+            timeZone: _haTz || undefined,
+            hour: "numeric", minute: "2-digit", second: "2-digit",
+            hour12: true, month: "short", day: "numeric",
+          }) : "?";
+          cm.bindPopup(
+            `<div style="font-size:12px;line-height:1.4">` +
+            `<b>Raw Starlink #${i + 1}</b><br>` +
+            `🕐 ${localTime}<br>` +
+            `📍 ${lat.toFixed(6)}, ${lon.toFixed(6)}` +
+            (acc != null ? `<br>🎯 ±${acc}m` : "") +
+            `</div>`,
+            { closeButton: false, maxWidth: 220 }
+          );
+          drawn++;
+        });
+        if (_map && !_hasFitBounds && coords.length > 1) {
+          _map.fitBounds(L.latLngBounds(coords), { padding: [30, 30] });
+          _hasFitBounds = true;
+        }
+        setStatus(`${drawn.toLocaleString()} raw Starlink pts · ${label} · 🛰 Raw`);
+        console.log(`[VL] Raw Starlink: ${drawn} dots from ${states.length} states`);
+      } else {
+        setStatus("⚠ Failed to load Starlink history");
+      }
+    } catch(e) {
+      console.warn("[VL] Raw Starlink fetch failed:", e);
+      setStatus("⚠ Failed to load Starlink history");
     }
-    if (pts.length < 2) continue;
-    // Extend GPS points to stop locations so the road-snapped route
-    // reaches all the way to the origin/destination markers.
-    let routePts = pts;
-    const fromC = travel.from;
-    const toC   = travel.to;
-    if (fromC || toC) {
-      routePts = [...pts];
-      if (fromC) routePts.unshift({ lat: fromC.lat, lon: fromC.lon, ts: pts[0].ts - 1 });
-      if (toC)   routePts.push({ lat: toC.lat, lon: toC.lon, ts: pts[pts.length - 1].ts + 1 });
-    }
-    setStatus(`${_travels.length} trip${_travels.length!==1?"s":""} · ${label} · routing ${mi + 1}/${_travels.length}…`);
-    const geom = await routeSegment(routePts);
-    if (geom) {
-      travel.geom = geom;
-      travel.distanceM = polylineDistanceM(geom);
-      drawMoveSeg(pts, geom, totalStartT, totalDuration, travel);
-      routedCount++;
-    }
+    renderVanMarker();
+    return;
   }
 
-  renderStopList();
-  renderStopMarkers();
-  renderUnmatchedStopMarkers();
-  backfillFuelIfNeeded();
+  // ── FILTERED / ROAD: raw Starlink GPS → dedup → movement filter → render ──
+  setStatus(_routeMode === "snap" ? "Loading GPS for road-snap..." : "Loading filtered Starlink GPS...");
+  const filtered = await _fetchAndFilterStarlink(start, end, token);
+  if (!filtered) { renderVanMarker(); return; }
 
-  // Fit map to all routes on first load
-  if (_map && !_hasFitBounds && routedCount > 0) {
-    const allCoords = _travels.flatMap(t => t.geom || []);
-    if (allCoords.length > 1) {
+  const { movingSegments, parkingSpots, stats } = filtered;
+  const allCoords = [];
+
+  // Compute time gradient across all movement points
+  const allMovingPts = movingSegments.flatMap(s => s);
+  const totalStartT = allMovingPts.length > 0 ? allMovingPts[0].ts : 0;
+  const totalEndT = allMovingPts.length > 0 ? allMovingPts[allMovingPts.length - 1].ts : 1;
+  const totalDuration = Math.max(1, totalEndT - totalStartT);
+
+  if (_routeMode === "snap") {
+    // Road mode: snap each movement segment through Valhalla
+    // Build _travels for the clickable sidebar
+    _travels = [];
+    _selectedTravelIdx = null;
+    if (_travelHighlight) { _travelHighlight.remove(); _travelHighlight = null; }
+    let routedCount = 0;
+    for (let si = 0; si < movingSegments.length; si++) {
+      const seg = movingSegments[si];
+      if (seg.length < 2) continue;
+      setStatus(`${movingSegments.length} segment${movingSegments.length !== 1 ? "s" : ""} · ${label} · routing ${si + 1}/${movingSegments.length}…`);
+      // Trim off-road drift near parking spots, then add the spot as endpoint
+      // so Valhalla routes TO it (snaps to nearest road) instead of looping
+      const nextPark = parkingSpots.find(pk => pk.ts > seg[seg.length - 1].ts - 120000);
+      // Use parking END time (ts + durationS*1000) — parking can last hours but
+      // departure still happens right after it ends
+      const prevPark = parkingSpots.find(pk => {
+        const parkEnd = pk.ts + pk.durationS * 1000;
+        return parkEnd <= seg[0].ts + 60000 && seg[0].ts - parkEnd < 120000;
+      });
+      let trimmed = [...seg];
+      if (nextPark) {
+        let cutIdx = trimmed.length;
+        for (let i = trimmed.length - 1; i >= Math.max(0, trimmed.length - 20); i--) {
+          if (haversineM(trimmed[i].lat, trimmed[i].lon, nextPark.lat, nextPark.lon) < 30) cutIdx = i;
+          else break;
+        }
+        if (cutIdx < trimmed.length && cutIdx >= 2) trimmed = trimmed.slice(0, cutIdx);
+        // Add parking spot as final waypoint so route goes all the way there
+        trimmed.push({ lat: nextPark.lat, lon: nextPark.lon, ts: trimmed[trimmed.length - 1].ts + 1 });
+      }
+      if (prevPark && trimmed.length > 2) {
+        let headCut = 0;
+        for (let i = 0; i < Math.min(20, trimmed.length); i++) {
+          if (haversineM(trimmed[i].lat, trimmed[i].lon, prevPark.lat, prevPark.lon) < 30) headCut = i + 1;
+          else break;
+        }
+        if (headCut > 0 && headCut < trimmed.length - 1) trimmed = trimmed.slice(headCut);
+        // Add parking spot as first waypoint so route starts from there
+        trimmed.unshift({ lat: prevPark.lat, lon: prevPark.lon, ts: trimmed[0].ts - 1 });
+      }
+      const geom = await routeSegment(trimmed, { preProcessed: true });
+      const depTs = seg[0].ts;
+      const arrTs = seg[seg.length - 1].ts;
+      // Find adjacent parking spots for from/to labels
+      const fromPark = parkingSpots.filter(pk => pk.ts + pk.durationS * 1000 <= depTs + 60000).pop();
+      const toPark = parkingSpots.find(pk => pk.ts >= arrTs - 60000);
+      const travel = {
+        idx: si,
+        seg: { pts: seg },
+        from: null, to: null,
+        fromGps: fromPark ? { centroid: { lat: fromPark.lat, lon: fromPark.lon }, startTs: fromPark.ts, durationH: fromPark.durationS / 3600 } : { centroid: { lat: seg[0].lat, lon: seg[0].lon }, startTs: depTs, durationH: 0 },
+        toGps: toPark ? { centroid: { lat: toPark.lat, lon: toPark.lon }, startTs: toPark.ts, durationH: toPark.durationS / 3600 } : { centroid: { lat: seg[seg.length-1].lat, lon: seg[seg.length-1].lon }, startTs: arrTs, durationH: 0 },
+        depTs, arrTs,
+        geom: null, distanceM: 0,
+      };
+      if (geom && geom.length >= 2) {
+        travel.geom = geom;
+        travel.distanceM = polylineDistanceM(geom);
+        allCoords.push(...geom);
+        drawMoveSeg(seg, geom, totalStartT, totalDuration, travel);
+        routedCount++;
+      } else {
+        // Fallback: raw polyline
+        const rawGeom = seg.map(p => [p.lat, p.lon]);
+        travel.geom = rawGeom;
+        travel.distanceM = polylineDistanceM(rawGeom);
+        allCoords.push(...rawGeom);
+        L.polyline(rawGeom, { color: "#6495ed", weight: 3, opacity: 0.6 }).addTo(_routeLayer);
+        routedCount++;
+      }
+      _travels.push(travel);
+    }
+
+    // Draw parking spots on road mode too
+    parkingSpots.forEach(pk => {
+      allCoords.push([pk.lat, pk.lon]);
+      _drawParkingDot(pk);
+    });
+
+    if (_map && !_hasFitBounds && allCoords.length > 1) {
       _map.fitBounds(L.latLngBounds(allCoords), { padding: [30, 30] });
       _hasFitBounds = true;
     }
+    setStatus(`${stats.movingCount.toLocaleString()} pts · ${movingSegments.length} segment${movingSegments.length !== 1 ? "s" : ""} · ${parkingSpots.length} parked · ${label} · 🛣 ${routedCount}/${movingSegments.length} routed`);
+
+  } else {
+    // Filtered mode: draw movement dots + parking dots
+    allMovingPts.forEach((p, i) => {
+      const t = (p.ts - totalStartT) / totalDuration;
+      const cr = Math.round(100 + (3   - 100) * t);
+      const cg = Math.round(149 + (169 - 149) * t);
+      const cb = Math.round(237 + (244 - 237) * t);
+      const opacity = 0.6 + t * 0.35;
+      allCoords.push([p.lat, p.lon]);
+      const localTime = new Date(p.ts).toLocaleString("en-US", {
+        timeZone: _haTz || undefined,
+        hour: "numeric", minute: "2-digit", second: "2-digit",
+        hour12: true, month: "short", day: "numeric",
+      });
+      const cm = L.circleMarker([p.lat, p.lon], {
+        radius: 4, color: `rgb(${cr},${cg},${cb})`,
+        fillColor: `rgb(${cr},${cg},${cb})`, fillOpacity: opacity,
+        weight: 1, opacity: opacity,
+      }).addTo(_routeLayer);
+      cm.bindPopup(
+        `<div style="font-size:12px;line-height:1.4">` +
+        `<b>📍 #${i + 1}</b><br>` +
+        `🕐 ${localTime}<br>` +
+        `${p.lat.toFixed(6)}, ${p.lon.toFixed(6)}` +
+        (p.acc != null ? `<br>🎯 ±${p.acc}m` : "") +
+        `</div>`,
+        { closeButton: false, maxWidth: 220 }
+      );
+    });
+
+    parkingSpots.forEach(pk => {
+      allCoords.push([pk.lat, pk.lon]);
+      _drawParkingDot(pk);
+    });
+
+    if (_map && !_hasFitBounds && allCoords.length > 1) {
+      _map.fitBounds(L.latLngBounds(allCoords), { padding: [30, 30] });
+      _hasFitBounds = true;
+    }
+    setStatus(`${stats.movingCount.toLocaleString()} moving · ${parkingSpots.length} parked · ${stats.dedupedCount.toLocaleString()} unique of ${stats.rawCount.toLocaleString()} raw · ${label} · 📍 Filtered`);
   }
 
-  const roadLabel = routedCount
-    ? ` · 🛣 ${routedCount}/${_travels.length}`
-    : (_travels.length ? " · ⚠ routing failed" : "");
-  setStatus(`${totalPts.toLocaleString()} pts · ${_travels.length} trip${_travels.length!==1?"s":""} · ${label}${roadLabel}`);
+  _lastSegmentCount = movingSegments.length;
+  _lastParkingCount = parkingSpots.length;
+  renderStopList();
+  renderVanMarker();
+}
+
+/** Draw a parking spot dot on the map */
+function _drawParkingDot(pk) {
+  const localTime = new Date(pk.ts).toLocaleString("en-US", {
+    timeZone: _haTz || undefined,
+    hour: "numeric", minute: "2-digit", second: "2-digit",
+    hour12: true, month: "short", day: "numeric",
+  });
+  const durMin = Math.round(pk.durationS / 60);
+  const durStr = durMin >= 60 ? `${Math.floor(durMin/60)}h ${durMin%60}m` : `${durMin}m`;
+  const cm = L.circleMarker([pk.lat, pk.lon], {
+    radius: 6, color: '#78909c', fillColor: '#b0bec5',
+    fillOpacity: 0.8, weight: 2, opacity: 0.9,
+  }).addTo(_routeLayer);
+  cm.bindPopup(
+    `<div style="font-size:12px;line-height:1.4">` +
+    `<b>🅿️ Parked · ${durStr}</b><br>` +
+    `🕐 ${localTime}<br>` +
+    `📍 ${pk.lat.toFixed(6)}, ${pk.lon.toFixed(6)}` +
+    `</div>`,
+    { closeButton: false, maxWidth: 220 }
+  );
+}
+
+/**
+ * Fetch raw Starlink GPS from HA history, deduplicate, and run movement filter.
+ * Returns: { movingSegments: [[{lat,lon,ts,acc},...], ...], parkingSpots: [{lat,lon,ts,durationS,count},...], stats }
+ * movingSegments is an array of trip segments (split at each parking stop).
+ */
+async function _fetchAndFilterStarlink(start, end, token) {
+  const MIN_PARK_DURATION_S = 120; // 2 minutes — ignore traffic lights
+  const FILTER_RADIUS_M = 15;
+  const CONFIRM_COUNT = 3;
+
+  try {
+    const url = `/api/history/period/${start.toISOString()}?filter_entity_id=device_tracker.starlink_device_location&end_time=${end.toISOString()}&significant_changes_only=false`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) { setStatus("⚠ Failed to load Starlink history"); return null; }
+    const data = await r.json();
+    const rawStates = data?.[0] || [];
+    if (rawStates.length === 0) { setStatus("No GPS data in range"); return null; }
+
+    // Step 1: Extract valid points
+    const allPts = [];
+    for (const s of rawStates) {
+      const lat = s.attributes?.latitude;
+      const lon = s.attributes?.longitude;
+      if (lat == null || lon == null) continue;
+      const tsStr = s.last_updated || s.last_changed || "";
+      if (!tsStr) continue;
+      allPts.push({ lat, lon, ts: new Date(tsStr).getTime(), acc: s.attributes?.gps_accuracy });
+    }
+    allPts.sort((a, b) => a.ts - b.ts);
+    if (allPts.length === 0) { setStatus("No valid GPS points"); return null; }
+
+    // Step 2: Deduplicate (identical lat/lon from 1Hz HA recording of ~5s Starlink updates)
+    const deduped = [allPts[0]];
+    for (let i = 1; i < allPts.length; i++) {
+      if (allPts[i].lat !== deduped[deduped.length - 1].lat || allPts[i].lon !== deduped[deduped.length - 1].lon) {
+        deduped.push(allPts[i]);
+      }
+    }
+
+    // Step 3: Movement filter state machine
+    // Outputs segmented moving tracks + parking spots with duration
+    const rawParkingSpots = [];
+    let currentSegment = [];
+    const movingSegments = [];
+
+    let state = "stopped";
+    let clusterLat = deduped[0].lat, clusterLon = deduped[0].lon;
+    let clusterCount = 1, clusterStartTs = deduped[0].ts, clusterLastTs = deduped[0].ts;
+    let candidateBuffer = [];
+    let stoppedRef = null, stoppedCount = 0;
+
+    for (let i = 1; i < deduped.length; i++) {
+      const p = deduped[i];
+      const dist = haversineM(p.lat, p.lon, clusterLat, clusterLon);
+
+      if (state === "stopped") {
+        if (dist > FILTER_RADIUS_M) {
+          candidateBuffer.push(p);
+          if (candidateBuffer.length >= CONFIRM_COUNT) {
+            // Confirmed moving — save cluster
+            const durationS = (clusterLastTs - clusterStartTs) / 1000;
+            if (clusterCount > 1) {
+              rawParkingSpots.push({ lat: clusterLat, lon: clusterLon, ts: clusterStartTs, durationS, count: clusterCount });
+            }
+            currentSegment = [...candidateBuffer];
+            candidateBuffer = [];
+            state = "moving";
+            stoppedRef = null;
+            stoppedCount = 0;
+          }
+        } else {
+          clusterCount++;
+          clusterLat += (p.lat - clusterLat) / clusterCount;
+          clusterLon += (p.lon - clusterLon) / clusterCount;
+          clusterLastTs = p.ts;
+          candidateBuffer = [];
+        }
+      } else {
+        currentSegment.push(p);
+        if (stoppedRef === null) {
+          stoppedRef = p;
+          stoppedCount = 1;
+        } else {
+          const distRef = haversineM(p.lat, p.lon, stoppedRef.lat, stoppedRef.lon);
+          if (distRef <= FILTER_RADIUS_M) {
+            stoppedCount++;
+            if (stoppedCount >= CONFIRM_COUNT * 2) {
+              // Confirmed stopped — finalize segment, start new cluster
+              if (currentSegment.length >= 2) movingSegments.push(currentSegment);
+              currentSegment = [];
+              state = "stopped";
+              clusterLat = stoppedRef.lat;
+              clusterLon = stoppedRef.lon;
+              clusterCount = stoppedCount;
+              clusterStartTs = stoppedRef.ts;
+              clusterLastTs = p.ts;
+              candidateBuffer = [];
+              stoppedRef = null;
+              stoppedCount = 0;
+            }
+          } else {
+            stoppedRef = p;
+            stoppedCount = 1;
+          }
+        }
+      }
+    }
+    // Finalize
+    if (state === "moving" && currentSegment.length >= 2) movingSegments.push(currentSegment);
+    if (state === "stopped" && clusterCount > 1) {
+      const durationS = (clusterLastTs - clusterStartTs) / 1000;
+      rawParkingSpots.push({ lat: clusterLat, lon: clusterLon, ts: clusterStartTs, durationS, count: clusterCount });
+    }
+
+    // Filter out short stops (traffic lights, brief pauses)
+    const parkingSpots = rawParkingSpots.filter(pk => pk.durationS >= MIN_PARK_DURATION_S);
+    const shortStopIndices = new Set();
+    rawParkingSpots.forEach((pk, i) => { if (pk.durationS < MIN_PARK_DURATION_S) shortStopIndices.add(i); });
+
+    // Merge segments that were split by short stops back together
+    // State machine interleaves: park[0], seg[0], park[1], seg[1], park[2], ...
+    // So park[k] for k>=1 sits BETWEEN seg[k-1] and seg[k].
+    // park[0] is before seg[0] (initial parked state).
+    // We iterate through segment boundaries and merge across short stops.
+    const mergedSegments = [];
+    let current = movingSegments.length > 0 ? [...movingSegments[0]] : [];
+    for (let si = 1; si < movingSegments.length; si++) {
+      // rawParkingSpots[si] is between movingSegments[si-1] and movingSegments[si]
+      if (si < rawParkingSpots.length && shortStopIndices.has(si)) {
+        // Short stop — merge next segment into current
+        current.push(...movingSegments[si]);
+      } else {
+        // Real stop — finalize current, start new
+        if (current.length >= 2) mergedSegments.push(current);
+        current = [...movingSegments[si]];
+      }
+    }
+    if (current.length >= 2) mergedSegments.push(current);
+
+    const movingCount = mergedSegments.reduce((sum, s) => sum + s.length, 0);
+
+    console.log(`[VL] Filtered: ${allPts.length} raw → ${deduped.length} deduped → ${movingCount} moving in ${mergedSegments.length} segments + ${parkingSpots.length} parked (${rawParkingSpots.length - parkingSpots.length} short stops merged)`);
+
+    return {
+      movingSegments: mergedSegments,
+      parkingSpots,
+      stats: { rawCount: allPts.length, dedupedCount: deduped.length, movingCount },
+    };
+  } catch(e) {
+    console.warn("[VL] Starlink fetch/filter failed:", e);
+    setStatus("⚠ Failed to load GPS data");
+    return null;
+  }
 }
 
 /** Fallback: draw raw GPS track as a simple polyline when no trips exist. */
@@ -969,7 +1288,17 @@ async function _drawRawGpsFallback() {
     const pts = await r.json();
     if (pts.length < 2) return;
     const coords = pts.map(p => [p.lat, p.lon]);
-    L.polyline(coords, { color: "#6495ed", weight: 3, opacity: 0.6 }).addTo(_routeLayer);
+    if (_routeMode === "filtered") {
+      // Draw individual dots
+      pts.forEach(p => {
+        L.circleMarker([p.lat, p.lon], {
+          radius: 4, color: '#6495ed', fillColor: '#6495ed',
+          fillOpacity: 0.7, weight: 1, opacity: 0.7,
+        }).addTo(_routeLayer);
+      });
+    } else {
+      L.polyline(coords, { color: "#6495ed", weight: 3, opacity: 0.6 }).addTo(_routeLayer);
+    }
     if (_map && !_hasFitBounds) {
       _map.fitBounds(L.latLngBounds(coords), { padding: [30, 30] });
       _hasFitBounds = true;
@@ -978,8 +1307,7 @@ async function _drawRawGpsFallback() {
   } catch (e) {
     console.warn("[VL] raw GPS fallback failed:", e);
   }
-  // Still render stops/markers even without trips
-  renderStopMarkers();
+  renderVanMarker();
 }
 
 function renderVanMarker() {
@@ -989,11 +1317,6 @@ function renderVanMarker() {
   const pos = getVanLocation();
   if (!pos) return;
   const [lat, lon] = pos;
-
-  // If the van is within 80m of the active stop, renderStopMarkers already
-  // folded the van badge into that stop marker — don't double-render.
-  const activeStop = _stops.find(s => !s.departed_at && s.lat && s.lon);
-  if (activeStop && haversineM(lat, lon, activeStop.lat, activeStop.lon) <= 80) return;
 
   const icon = L.divIcon({
     html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.4))">
@@ -1108,9 +1431,10 @@ function renderStopMarkers() {
 
   const vanPos = getVanLocation();
   // Only show stops that are referenced by detected trips (from/to in _travels),
-  // plus the active stop (van's current location, no departed_at)
+  // plus the active stop (van's current location, no departed_at).
+  // When trips exist, strictly filter to only stops used by those trips.
   const relevantStops = _travels.length > 0
-    ? stopsInWindow().filter(s => !s.departed_at || _isStopInAnyTravel(s.id))
+    ? stopsInWindow().filter(s => _isStopInAnyTravel(s.id))
     : stopsInWindow();
   const clusters = clusterStops(relevantStops);
 
@@ -1235,6 +1559,8 @@ function renderPlaceMarkers() {
   if (!_map) return;
   Object.values(_placeMarkers).forEach(m => m.remove());
   _placeMarkers = {};
+  Object.values(_placeCircles).forEach(c => c.remove());
+  _placeCircles = {};
 
   _places.forEach(place => {
     if (!place.lat || !place.lon) return;
@@ -1248,10 +1574,11 @@ function renderPlaceMarkers() {
       className: "", iconAnchor: [16, 50], popupAnchor: [0, -52],
     });
 
-    L.circle([place.lat, place.lon], {
+    const circle = L.circle([place.lat, place.lon], {
       radius: place.radius_m, color: "#7c3aed", fillColor: "#7c3aed",
       fillOpacity: 0.07, weight: 1.5, dashArray: "4 4",
     }).addTo(_map);
+    _placeCircles[place.id] = circle;
 
     const m = L.marker([place.lat, place.lon], { icon: divIcon });
     m.bindPopup(`
@@ -1259,7 +1586,12 @@ function renderPlaceMarkers() {
       <div class="vl-popup-row">Category: ${place.category}</div>
       <div class="vl-popup-row">Radius: ${place.radius_m}m</div>
       ${place.notes ? `<div class="vl-popup-row" style="font-style:italic">${place.notes}</div>` : ""}
+      <button class="vl-popup-edit" data-place-edit="${place.id}">✏️ Edit Place</button>
     `);
+    m.on("popupopen", () => {
+      const btn = document.querySelector(`[data-place-edit="${place.id}"]`);
+      if (btn) btn.addEventListener("click", () => { m.closePopup(); showPlaceForm(place); });
+    });
     m.addTo(_map);
     _placeMarkers[place.id] = m;
   });
@@ -1275,7 +1607,15 @@ function renderStopList() {
   if (!list) return;
 
   if (count === 0) {
-    list.innerHTML = `<div style="padding:16px;color:#888;font-size:13px;text-align:center">No trips yet — route is loading…</div>`;
+    // No _travels populated — show segment summary from last render
+    const segCount = _lastSegmentCount || 0;
+    const parkCount = _lastParkingCount || 0;
+    if (segCount > 0 || parkCount > 0) {
+      list.innerHTML = `<div style="padding:16px;color:#888;font-size:13px;text-align:center">${segCount} driving segment${segCount !== 1 ? 's' : ''} · ${parkCount} stop${parkCount !== 1 ? 's' : ''}</div>`;
+      if (countEl) countEl.textContent = `${segCount} Segment${segCount !== 1 ? 's' : ''}`;
+    } else {
+      list.innerHTML = `<div style="padding:16px;color:#888;font-size:13px;text-align:center">No trips in range</div>`;
+    }
     return;
   }
 
@@ -1384,42 +1724,7 @@ function escHtml(s) {
   return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
-let _fuelBackfillDone = false;
-/** Ask the backend to backfill fuel_pct from HA recorder history. Re-render if data changed. */
-async function backfillFuelIfNeeded() {
-  if (_fuelBackfillDone) return;
-  // Check if any travel's stops are missing fuel
-  const anyMissing = _travels.some(t =>
-    (t.from && t.from.fuel_pct_depart == null) || (t.to && t.to.fuel_pct_arrive == null)
-  );
-  if (!anyMissing) { _fuelBackfillDone = true; return; }
 
-  try {
-    const token = getToken();
-    if (!token) return;
-    const r = await fetch("/api/vanlife_tracker/backfill_fuel", {
-      method: "POST",
-      headers: { Authorization: `Bearer ${token}` },
-    });
-    if (!r.ok) { console.warn("[VL] fuel backfill:", r.status); return; }
-    const j = await r.json();
-    console.log("[VL] fuel backfill result:", j);
-    _fuelBackfillDone = true;
-    if (j.updated > 0) {
-      // Reload stops from sensor state (coordinator will have refreshed)
-      // Give HA a moment to update the sensor attribute
-      await new Promise(ok => setTimeout(ok, 2000));
-      const state = getStates()["sensor.vanlife_tracker_recent_stops"];
-      _stops = state?.attributes?.stops || [];
-      // Re-match fuel data into existing travels
-      for (const travel of _travels) {
-        if (travel.fromGps) travel.from = findNearestDBStop(travel.fromGps.centroid, 500);
-        if (travel.toGps) travel.to = findNearestDBStop(travel.toGps.centroid, 500);
-      }
-      renderStopList();
-    }
-  } catch(e) { console.warn("[VL] fuel backfill error:", e); }
-}
 
 /** Highlight a travel's route on the map (toggle off if clicked again). */
 function selectTravel(idx) {
@@ -1513,8 +1818,73 @@ function setupPlacesTab() {
   document.getElementById("vl-pf-cancel").addEventListener("click", () => {
     document.getElementById("vl-place-form-wrap").style.display = "none";
     _editingPlace = null;
+    _stopPickingPlace();
+    _removePlacePreview();
   });
   document.getElementById("vl-pf-save").addEventListener("click", savePlace);
+
+  // ── Radius slider: live-update label + preview circle ──
+  const radiusSlider = document.getElementById("vl-pf-radius");
+  radiusSlider.addEventListener("input", () => {
+    document.getElementById("vl-pf-radius-label").textContent = radiusSlider.value;
+    _updatePlacePreview();
+  });
+
+  // ── Pick location on map ──
+  document.getElementById("vl-pf-pick").addEventListener("click", _startPickingPlace);
+  document.getElementById("vl-pf-pick-cancel").addEventListener("click", e => { e.preventDefault(); _stopPickingPlace(); });
+
+  // ── Update preview when lat/lon fields change manually ──
+  document.getElementById("vl-pf-lat").addEventListener("input", _updatePlacePreview);
+  document.getElementById("vl-pf-lon").addEventListener("input", _updatePlacePreview);
+}
+
+function _startPickingPlace() {
+  if (!_map) return;
+  _pickingPlaceLocation = true;
+  _map.getContainer().style.cursor = "crosshair";
+  document.getElementById("vl-pf-pick").style.display = "none";
+  document.getElementById("vl-pf-pick-hint").style.display = "block";
+  _map.once("click", _onPlaceMapClick);
+}
+
+function _stopPickingPlace() {
+  _pickingPlaceLocation = false;
+  if (_map) {
+    _map.getContainer().style.cursor = "";
+    _map.off("click", _onPlaceMapClick);
+  }
+  document.getElementById("vl-pf-pick").style.display = "";
+  document.getElementById("vl-pf-pick-hint").style.display = "none";
+}
+
+function _onPlaceMapClick(e) {
+  document.getElementById("vl-pf-lat").value = e.latlng.lat.toFixed(6);
+  document.getElementById("vl-pf-lon").value = e.latlng.lng.toFixed(6);
+  _stopPickingPlace();
+  _updatePlacePreview();
+  // Pan to the picked location
+  _map.panTo(e.latlng);
+}
+
+function _updatePlacePreview() {
+  const lat = parseFloat(document.getElementById("vl-pf-lat").value);
+  const lon = parseFloat(document.getElementById("vl-pf-lon").value);
+  const radius = parseFloat(document.getElementById("vl-pf-radius").value) || 200;
+  if (!lat || !lon || !_map) { _removePlacePreview(); return; }
+  if (_placePreviewCircle) {
+    _placePreviewCircle.setLatLng([lat, lon]);
+    _placePreviewCircle.setRadius(radius);
+  } else {
+    _placePreviewCircle = L.circle([lat, lon], {
+      radius, color: "#7c3aed", fillColor: "#7c3aed",
+      fillOpacity: 0.12, weight: 2, dashArray: "6 4",
+    }).addTo(_map);
+  }
+}
+
+function _removePlacePreview() {
+  if (_placePreviewCircle) { _placePreviewCircle.remove(); _placePreviewCircle = null; }
 }
 
 function setupDateBar() {
@@ -1578,7 +1948,6 @@ function setupDateBar() {
       if (mode === _dateMode) return;
       _dateMode = mode;
       _customStart = null; _customEnd = null;
-      _fuelBackfillDone = false;
       startInput.value = ""; endInput.value = "";
       const u = new URL(window.location);
       u.searchParams.set("mode", mode);
@@ -1599,13 +1968,11 @@ function setupDateBar() {
     if (isNaN(s) || isNaN(e)) return;
     const days = Math.round((e - s) / 86400000) + 1;
     if (days < 1) { rangeLabel.textContent = "⚠ end < start"; rangeLabel.style.color = "#d32f2f"; return; }
-    if (days > 7) { rangeLabel.textContent = `${days}d (max 7)`; rangeLabel.style.color = "#d32f2f"; return; }
     _dateMode = "custom";
     _customStart = new Date(startInput.value + "T00:00:00");
     const endNext = new Date(endInput.value + "T00:00:00");
     endNext.setDate(endNext.getDate() + 1);
     _customEnd = endNext > new Date() ? new Date() : endNext;
-    _fuelBackfillDone = false;
     const u = new URL(window.location);
     u.searchParams.delete("mode");
     u.searchParams.set("start", startInput.value);
@@ -1619,24 +1986,24 @@ function setupDateBar() {
   startInput.addEventListener("change", onDateChange);
   endInput.addEventListener("change", onDateChange);
 
-  // Debug toggle buttons
-  document.getElementById("vl-debug-shape-btn").addEventListener("click", async () => {
-    _showShape = !_showShape;
-    document.getElementById("vl-debug-shape-btn").classList.toggle("active", _showShape);
+  // Route mode toggle (Road / Filtered / Raw)
+  function setRouteMode(mode) {
+    _routeMode = mode;
+    document.getElementById("vl-mode-snap").classList.toggle("active", mode === "snap");
+    document.getElementById("vl-mode-filtered").classList.toggle("active", mode === "filtered");
+    document.getElementById("vl-mode-raw").classList.toggle("active", mode === "raw");
     if (_routeLayer) _routeLayer.clearLayers();
-    if (_routeLayer) await drawRoute();
+    if (_rawStarlinkLayer) _rawStarlinkLayer.clearLayers();
+    drawRoute();
+  }
+  document.getElementById("vl-mode-snap").addEventListener("click", () => {
+    if (_routeMode !== "snap") setRouteMode("snap");
   });
-  document.getElementById("vl-debug-pts-btn").addEventListener("click", async () => {
-    _showDebugPts = !_showDebugPts;
-    document.getElementById("vl-debug-pts-btn").classList.toggle("active", _showDebugPts);
-    if (_debugLayer) _debugLayer.clearLayers();
-    if (_showDebugPts && _routeLayer) await drawRoute();
+  document.getElementById("vl-mode-filtered").addEventListener("click", () => {
+    if (_routeMode !== "filtered") setRouteMode("filtered");
   });
-  document.getElementById("vl-debug-raw-btn").addEventListener("click", async () => {
-    _showDebugRaw = !_showDebugRaw;
-    document.getElementById("vl-debug-raw-btn").classList.toggle("active", _showDebugRaw);
-    if (_debugRawLayer) _debugRawLayer.clearLayers();
-    if (_showDebugRaw && _routeLayer) await drawRoute();
+  document.getElementById("vl-mode-raw").addEventListener("click", () => {
+    if (_routeMode !== "raw") setRouteMode("raw");
   });
 }
 
@@ -1687,16 +2054,25 @@ function renderPlacesList() {
 
 function showPlaceForm(place) {
   _editingPlace = place;
+  _stopPickingPlace();
   const wrap = document.getElementById("vl-place-form-wrap");
   wrap.style.display = "block";
   document.getElementById("vl-pf-title").textContent = place ? `Edit: ${place.name}` : "Add Named Place";
   document.getElementById("vl-pf-name").value = place?.name || "";
   document.getElementById("vl-pf-category").value = place?.category || "other";
-  document.getElementById("vl-pf-radius").value = place?.radius_m ?? 200;
+  const radius = place?.radius_m ?? 200;
+  document.getElementById("vl-pf-radius").value = radius;
+  document.getElementById("vl-pf-radius-label").textContent = radius;
   document.getElementById("vl-pf-lat").value = place?.lat ?? "";
   document.getElementById("vl-pf-lon").value = place?.lon ?? "";
   document.getElementById("vl-pf-notes").value = place?.notes || "";
   wrap.scrollIntoView({ behavior: "smooth" });
+  // Show preview circle if editing an existing place
+  _updatePlacePreview();
+  // Pan map to the place if it has coordinates
+  if (place?.lat && place?.lon && _map) {
+    _map.panTo([place.lat, place.lon]);
+  }
 }
 
 async function savePlace() {
@@ -1719,6 +2095,8 @@ async function savePlace() {
   }
   document.getElementById("vl-place-form-wrap").style.display = "none";
   _editingPlace = null;
+  _stopPickingPlace();
+  _removePlacePreview();
   _places = await getNamedPlaces();
   renderPlacesList();
   renderPlaceMarkers();

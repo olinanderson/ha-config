@@ -115,9 +115,10 @@ def _match_chunk(lonlat_pts):
         "costing": "auto",
         "shape_match": "map_snap",
         "trace_options": {
-            "search_radius": 35,       # metres to search for a road from each GPS point
-            "gps_accuracy": 15,        # expected GPS noise (m) — higher = more smoothing
-            "breakage_distance": 5000, # max gap (m) before straight-line fallback; was 2000
+            "search_radius": 50,       # metres — find road candidates near each GPS point
+            "gps_accuracy": 30,        # expected GPS noise (m) — Starlink ~15-30m
+            "breakage_distance": 5000, # max gap (m) before trace break
+            "turn_penalty_factor": 0,  # no penalty for turns — trace is known path
         },
     }).encode()
     req = urllib.request.Request(
@@ -153,12 +154,59 @@ def route_segment(lonlat_pts):
     while i < len(lonlat_pts):
         chunk = lonlat_pts[i: i + CHUNK]
         seg   = _match_chunk(chunk)
-        result.extend(seg if i == 0 else seg[1:])
+        if i == 0:
+            result.extend(seg)
+        else:
+            # Better overlap stitching: find the point in the new segment
+            # closest to result[-1] (the overlap region may snap differently
+            # between adjacent chunks, so seg[0] != result[-1]).
+            best_idx = 0
+            best_dist = float('inf')
+            search_limit = min(len(seg), CHUNK_OVL * 4)
+            for j in range(search_limit):
+                d = _haversine_m(result[-1][0], result[-1][1], seg[j][0], seg[j][1])
+                if d < best_dist:
+                    best_dist = d
+                    best_idx = j
+            result.extend(seg[best_idx + 1:])
         advance = CHUNK - CHUNK_OVL
         i += advance
         if i >= len(lonlat_pts) - 1:
             break
-    return result
+    return _remove_straight_lines(result)
+
+
+def _haversine_m(lat1, lon1, lat2, lon2):
+    """Haversine distance in metres between two points."""
+    import math
+    R = 6371000
+    dlat = math.radians(lat2 - lat1)
+    dlon = math.radians(lon2 - lon1)
+    a = math.sin(dlat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dlon/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+
+def _remove_straight_lines(coords, max_gap_m=1500):
+    """Remove straight-line breakage artifacts from Valhalla geometry.
+
+    Valhalla inserts straight lines when it can't match a trace segment to roads.
+    We detect point-to-point gaps > max_gap_m and remove those jumps.
+    Compares against the last *kept* point (not the original predecessor)
+    to avoid cascading removals on straight roads.
+    """
+    if len(coords) < 2:
+        return coords
+    cleaned = [coords[0]]
+    removed = 0
+    for i in range(1, len(coords)):
+        d = _haversine_m(cleaned[-1][0], cleaned[-1][1], coords[i][0], coords[i][1])
+        if d > max_gap_m:
+            removed += 1
+        else:
+            cleaned.append(coords[i])
+    if removed:
+        print(f"[straight-line filter] removed {removed} breakage segments (>{max_gap_m}m gaps)", flush=True)
+    return cleaned
 
 
 def parse_osrm_coords(path):

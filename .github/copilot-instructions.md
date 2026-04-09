@@ -6,6 +6,12 @@
 > The old SMB network drive (`H:` / `\\homeassistant\config`) still works but is
 > slow — prefer editing the local copy.
 
+> **⚠ SYNCTHING CHECK**: Before relying on file sync, **always verify Syncthing is
+> running on Windows** (`tasklist | grep -i syncthing`). If not running, start it:
+> `start "" "$(where syncthing)" --no-browser`. Also verify after any deploy that
+> the file actually arrived on HA (`ssh hassio@100.80.15.86 "grep -c 'UNIQUE_STRING' /config/path/to/file"`).
+> Syncthing on Windows does NOT auto-start — it must be launched manually after reboot.
+
 ---
 
 ## Overview
