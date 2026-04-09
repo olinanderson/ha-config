@@ -825,3 +825,13 @@
     - delay: "00:00:35"
     - action: shell_command.start_osrm_proxy
 
+- id: gps_filter_start_on_boot
+  alias: "GPS Filter • Start on HA boot"
+  mode: single
+  trigger:
+    - trigger: homeassistant
+      event: start
+  action:
+    - delay: "00:00:45"
+    - action: shell_command.start_gps_filter
+

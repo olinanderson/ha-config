@@ -50,6 +50,8 @@ www/images/
 # --- Frontend runtime caches ---
 www/vanlife-panel/route_cache.db
 www/vanlife-panel/osrm_proxy.log
+www/vanlife-panel/gps_filter.log
+.gps_filter_token
 
 # --- Zigbee2MQTT (managed by Z2M, not hand-edited) ---
 zigbee2mqtt/

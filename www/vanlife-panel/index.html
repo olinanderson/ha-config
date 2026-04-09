@@ -123,6 +123,37 @@
     .vl-btn-danger { background: #e53935; color: #fff; }
     .vl-btn-ghost { background: none; border: 1px solid #ccc !important; color: inherit; }
 
+    /* ─── Trip inspector panel ────────────────────── */
+    #vl-trip-inspector {
+      position: absolute; bottom: 0; left: 0; right: 0; z-index: 9500;
+      max-height: 55vh; display: none; flex-direction: column;
+      background: #fff; border-top: 2px solid #03a9f4;
+      box-shadow: 0 -4px 20px rgba(0,0,0,0.25); border-radius: 8px 8px 0 0;
+    }
+    #vl-trip-inspector.open { display: flex; }
+    #vl-ti-header {
+      display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+      background: #e1f5fe; border-bottom: 1px solid #e0e0e0;
+      border-radius: 8px 8px 0 0; flex-shrink: 0;
+    }
+    #vl-ti-header span { flex: 1; font-size: 13px; font-weight: 600; }
+    #vl-ti-body {
+      overflow-y: auto; font-size: 12px; flex: 1;
+    }
+    #vl-ti-body table { width: 100%; border-collapse: collapse; }
+    #vl-ti-body th {
+      position: sticky; top: 0; background: #f5f5f5;
+      padding: 4px 8px; text-align: left; font-size: 11px;
+      color: #666; border-bottom: 1px solid #ddd;
+    }
+    #vl-ti-body td {
+      padding: 3px 8px; border-bottom: 1px solid #f0f0f0;
+      font-family: monospace; font-size: 11px; white-space: nowrap;
+    }
+    #vl-ti-body tr.gap-warn { background: #fff3e0; }
+    #vl-ti-body tr.gap-stop { background: #ffebee; font-weight: 600; }
+    #vl-ti-body tr:hover { background: #e3f2fd; cursor: pointer; }
+
     /* ─── Places pane ─────────────────────────────── */
     #vl-places-pane {
       position: absolute; inset: 0;
@@ -279,6 +310,14 @@
           <button class="vl-btn vl-btn-primary" id="vl-edit-save">Save</button>
         </div>
       </div>
+    </div>
+    <!-- Trip Inspector Panel -->
+    <div id="vl-trip-inspector">
+      <div id="vl-ti-header">
+        <span id="vl-ti-title">Trip Inspector</span>
+        <button class="vl-btn vl-btn-ghost" onclick="closeTripInspector()" style="padding:3px 8px">✕</button>
+      </div>
+      <div id="vl-ti-body"></div>
     </div>
   </div>
 
@@ -522,6 +561,48 @@ const STATIONARY_M      = 15;     // metres — tail points within this radius a
                                   // so a parked van doesn't change the waypoint hash
 
 /**
+ * Try to fetch pre-filtered GPS data from the server-side cache (gps_filter.py → osrm_proxy.py).
+ * Returns { movingSegments, parkingSpots, stats, preRouted } or null if not available.
+ */
+async function _fetchPreFiltered(start, end) {
+  try {
+    const r = await fetch(
+      `${OSRM_PROXY}/vanlife/filtered-gps?start=${start.getTime()}&end=${end.getTime()}`
+    );
+    if (!r.ok) return null;
+    const d = await r.json();
+    if (!d.ready || !d.segments || d.segments.length === 0) return null;
+
+    // Convert server format to same shape as _fetchAndFilterStarlink output
+    const movingSegments = d.segments.map(s => s.points.map(p => ({
+      lat: p.lat, lon: p.lon, ts: p.ts, acc: null,
+    })));
+    const parkingSpots = d.parking_spots.map(pk => ({
+      lat: pk.lat, lon: pk.lon, ts: pk.start_ts,
+      durationS: pk.duration_s, count: pk.point_count,
+    }));
+
+    // Collect pre-routed geometries + DB ids (may be null for some segments)
+    const preRouted = d.segments.map(s => ({
+      geometry: s.routed_geometry && s.routed_geometry.length >= 2 ? s.routed_geometry : null,
+      distance_m: s.distance_m || 0,
+      dbId: s.id || null,
+    }));
+
+    const movingCount = movingSegments.reduce((sum, s) => sum + s.length, 0);
+    const rawCount = movingCount; // approximate — server doesn't track raw count
+    console.log(`[VL] Pre-filtered: ${movingSegments.length} segments, ${parkingSpots.length} parking, ${preRouted.filter(r => r.geometry).length} pre-routed`);
+    return {
+      movingSegments, parkingSpots, preRouted,
+      stats: { rawCount, dedupedCount: rawCount, movingCount },
+    };
+  } catch (e) {
+    console.warn("[VL] Pre-filtered fetch failed, will use client-side:", e);
+    return null;
+  }
+}
+
+/**
  * Ramer-Douglas-Peucker simplification on an array of {lat,lon} points.
  * Keeps points that deviate more than epsilon from the straight line between
  * their neighbours — naturally removes GPS drift on straight roads while
@@ -643,7 +724,9 @@ function drawMoveSeg(pts, geom, totalStartT, totalDuration, travel = null) {
     const dateStr  = formatDate(depIso);
     const stayDur  = travel.to ? formatDuration(travel.to.arrived_at, travel.to.departed_at) : null;
     const stayStr  = stayDur ? ` · ${stayDur} stay` : "";
-    popupHtml = `<b>🚐 ${fromName} → ${toName}</b><br><span style="color:#777;font-size:12px">${dateStr}${driveDur ? ` · ${driveDur} drive` : ""}${stayStr}</span>`;
+    const idTag = travel.dbId ? `<span style="color:#999;font-size:11px">DB #${travel.dbId}</span> · ` : '';
+    const distTag = travel.distanceM > 0 ? ` · ${(travel.distanceM/1000).toFixed(1)} km` : '';
+    popupHtml = `<b>🚐 ${fromName} → ${toName}</b><br>${idTag}<span style="color:#777;font-size:12px">${dateStr}${driveDur ? ` · ${driveDur} drive` : ''}${distTag}${stayStr}</span><br><a href="#" onclick="event.preventDefault();showTripInspector(${travel.idx})" style="color:#03a9f4;font-size:11px">🔍 Inspect points</a>`;
   }
 
   for (let k = 0; k < SUB; k++) {
@@ -946,12 +1029,37 @@ async function drawRoute() {
     return;
   }
 
-  // ── FILTERED / ROAD: raw Starlink GPS → dedup → movement filter → render ──
+  // ── FILTERED / ROAD: try pre-filtered server cache, fall back to client-side ──
   setStatus(_routeMode === "snap" ? "Loading GPS for road-snap..." : "Loading filtered Starlink GPS...");
-  const filtered = await _fetchAndFilterStarlink(start, end, token);
+
+  // Try server-side pre-filtered data first (instant if gps_filter daemon has processed)
+  setStatus("Checking server cache…");
+  let filtered = await _fetchPreFiltered(start, end);
+  let preRouted = null;
+  if (filtered) {
+    preRouted = filtered.preRouted;
+    const preCached = preRouted ? preRouted.filter(r => r.geometry).length : 0;
+    setStatus(`Server cache: ${filtered.movingSegments.length} trips, ${filtered.parkingSpots.length} stops, ${preCached} pre-routed`);
+  } else {
+    // Fall back to client-side filtering
+    setStatus("No server cache — filtering client-side…");
+    filtered = await _fetchAndFilterStarlink(start, end, token);
+  }
   if (!filtered) { renderVanMarker(); return; }
 
-  const { movingSegments, parkingSpots, stats } = filtered;
+  let { movingSegments, parkingSpots, stats } = filtered;
+  // Drop tiny trips (≤300m displacement) — GPS drift or van shuffled in parking
+  // Use start-to-end displacement, not cumulative distance (GPS noise inflates point-to-point sums)
+  const beforeFilter = movingSegments.length;
+  const keepMask = movingSegments.map(seg => {
+    if (seg.length < 2) return false;
+    return haversineM(seg[0].lat, seg[0].lon, seg[seg.length-1].lat, seg[seg.length-1].lon) > 300;
+  });
+  movingSegments = movingSegments.filter((_, i) => keepMask[i]);
+  if (preRouted) preRouted = preRouted.filter((_, i) => keepMask[i]);
+  if (beforeFilter !== movingSegments.length) {
+    setStatus(`Filtered: dropped ${beforeFilter - movingSegments.length} trips <300m · ${movingSegments.length} remaining`);
+  }
   const allCoords = [];
 
   // Compute time gradient across all movement points
@@ -970,45 +1078,56 @@ async function drawRoute() {
     for (let si = 0; si < movingSegments.length; si++) {
       const seg = movingSegments[si];
       if (seg.length < 2) continue;
-      setStatus(`${movingSegments.length} segment${movingSegments.length !== 1 ? "s" : ""} · ${label} · routing ${si + 1}/${movingSegments.length}…`);
-      // Trim off-road drift near parking spots, then add the spot as endpoint
-      // so Valhalla routes TO it (snaps to nearest road) instead of looping
-      const nextPark = parkingSpots.find(pk => pk.ts > seg[seg.length - 1].ts - 120000);
-      // Use parking END time (ts + durationS*1000) — parking can last hours but
-      // departure still happens right after it ends
-      const prevPark = parkingSpots.find(pk => {
-        const parkEnd = pk.ts + pk.durationS * 1000;
-        return parkEnd <= seg[0].ts + 60000 && seg[0].ts - parkEnd < 120000;
-      });
-      let trimmed = [...seg];
-      if (nextPark) {
-        let cutIdx = trimmed.length;
-        for (let i = trimmed.length - 1; i >= Math.max(0, trimmed.length - 20); i--) {
-          if (haversineM(trimmed[i].lat, trimmed[i].lon, nextPark.lat, nextPark.lon) < 30) cutIdx = i;
-          else break;
+
+      let geom = null;
+      let preRouteDist = 0;
+
+      // Use pre-routed geometry from server if available
+      if (preRouted && preRouted[si] && preRouted[si].geometry) {
+        geom = preRouted[si].geometry;
+        preRouteDist = preRouted[si].distance_m || 0;
+        setStatus(`Drawing trip ${si + 1}/${movingSegments.length} (cached)…`);
+      } else {
+        setStatus(`Routing trip ${si + 1}/${movingSegments.length} via Valhalla…`);
+        // Trim off-road drift near parking spots, then add the spot as endpoint
+        // so Valhalla routes TO it (snaps to nearest road) instead of looping
+        const nextPark = parkingSpots.find(pk => pk.ts > seg[seg.length - 1].ts - 120000);
+        // Use parking END time (ts + durationS*1000) — parking can last hours but
+        // departure still happens right after it ends
+        const prevPark = parkingSpots.find(pk => {
+          const parkEnd = pk.ts + pk.durationS * 1000;
+          return parkEnd <= seg[0].ts + 60000 && seg[0].ts - parkEnd < 120000;
+        });
+        let trimmed = [...seg];
+        if (nextPark) {
+          let cutIdx = trimmed.length;
+          for (let i = trimmed.length - 1; i >= Math.max(0, trimmed.length - 20); i--) {
+            if (haversineM(trimmed[i].lat, trimmed[i].lon, nextPark.lat, nextPark.lon) < 30) cutIdx = i;
+            else break;
+          }
+          if (cutIdx < trimmed.length && cutIdx >= 2) trimmed = trimmed.slice(0, cutIdx);
+          trimmed.push({ lat: nextPark.lat, lon: nextPark.lon, ts: trimmed[trimmed.length - 1].ts + 1 });
         }
-        if (cutIdx < trimmed.length && cutIdx >= 2) trimmed = trimmed.slice(0, cutIdx);
-        // Add parking spot as final waypoint so route goes all the way there
-        trimmed.push({ lat: nextPark.lat, lon: nextPark.lon, ts: trimmed[trimmed.length - 1].ts + 1 });
-      }
-      if (prevPark && trimmed.length > 2) {
-        let headCut = 0;
-        for (let i = 0; i < Math.min(20, trimmed.length); i++) {
-          if (haversineM(trimmed[i].lat, trimmed[i].lon, prevPark.lat, prevPark.lon) < 30) headCut = i + 1;
-          else break;
+        if (prevPark && trimmed.length > 2) {
+          let headCut = 0;
+          for (let i = 0; i < Math.min(20, trimmed.length); i++) {
+            if (haversineM(trimmed[i].lat, trimmed[i].lon, prevPark.lat, prevPark.lon) < 30) headCut = i + 1;
+            else break;
+          }
+          if (headCut > 0 && headCut < trimmed.length - 1) trimmed = trimmed.slice(headCut);
+          trimmed.unshift({ lat: prevPark.lat, lon: prevPark.lon, ts: trimmed[0].ts - 1 });
         }
-        if (headCut > 0 && headCut < trimmed.length - 1) trimmed = trimmed.slice(headCut);
-        // Add parking spot as first waypoint so route starts from there
-        trimmed.unshift({ lat: prevPark.lat, lon: prevPark.lon, ts: trimmed[0].ts - 1 });
+        geom = await routeSegment(trimmed, { preProcessed: true });
       }
-      const geom = await routeSegment(trimmed, { preProcessed: true });
       const depTs = seg[0].ts;
       const arrTs = seg[seg.length - 1].ts;
       // Find adjacent parking spots for from/to labels
       const fromPark = parkingSpots.filter(pk => pk.ts + pk.durationS * 1000 <= depTs + 60000).pop();
       const toPark = parkingSpots.find(pk => pk.ts >= arrTs - 60000);
+      const dbId = (preRouted && preRouted[si]) ? preRouted[si].dbId : null;
       const travel = {
         idx: si,
+        dbId: dbId,
         seg: { pts: seg },
         from: null, to: null,
         fromGps: fromPark ? { centroid: { lat: fromPark.lat, lon: fromPark.lon }, startTs: fromPark.ts, durationH: fromPark.durationS / 3600 } : { centroid: { lat: seg[0].lat, lon: seg[0].lon }, startTs: depTs, durationH: 0 },
@@ -1018,7 +1137,7 @@ async function drawRoute() {
       };
       if (geom && geom.length >= 2) {
         travel.geom = geom;
-        travel.distanceM = polylineDistanceM(geom);
+        travel.distanceM = preRouteDist > 0 ? preRouteDist : polylineDistanceM(geom);
         allCoords.push(...geom);
         drawMoveSeg(seg, geom, totalStartT, totalDuration, travel);
         routedCount++;
@@ -1044,7 +1163,8 @@ async function drawRoute() {
       _map.fitBounds(L.latLngBounds(allCoords), { padding: [30, 30] });
       _hasFitBounds = true;
     }
-    setStatus(`${stats.movingCount.toLocaleString()} pts · ${movingSegments.length} segment${movingSegments.length !== 1 ? "s" : ""} · ${parkingSpots.length} parked · ${label} · 🛣 ${routedCount}/${movingSegments.length} routed`);
+    const totalDistKm = _travels.reduce((sum, t) => sum + (t.distanceM || 0), 0) / 1000;
+    setStatus(`🛣 ${movingSegments.length} trip${movingSegments.length !== 1 ? "s" : ""} · ${totalDistKm.toFixed(1)} km · ${parkingSpots.length} stop${parkingSpots.length !== 1 ? "s" : ""} · ${routedCount} routed · ${label}`);
 
   } else {
     // Filtered mode: draw movement dots + parking dots
@@ -1085,7 +1205,7 @@ async function drawRoute() {
       _map.fitBounds(L.latLngBounds(allCoords), { padding: [30, 30] });
       _hasFitBounds = true;
     }
-    setStatus(`${stats.movingCount.toLocaleString()} moving · ${parkingSpots.length} parked · ${stats.dedupedCount.toLocaleString()} unique of ${stats.rawCount.toLocaleString()} raw · ${label} · 📍 Filtered`);
+    setStatus(`📍 ${movingSegments.length} trip${movingSegments.length !== 1 ? "s" : ""} · ${stats.movingCount.toLocaleString()} pts · ${parkingSpots.length} stop${parkingSpots.length !== 1 ? "s" : ""} · ${label}`);
   }
 
   _lastSegmentCount = movingSegments.length;
@@ -1123,17 +1243,19 @@ function _drawParkingDot(pk) {
  * movingSegments is an array of trip segments (split at each parking stop).
  */
 async function _fetchAndFilterStarlink(start, end, token) {
-  const MIN_PARK_DURATION_S = 120; // 2 minutes — ignore traffic lights
+  const MIN_PARK_DURATION_S = 180; // 3 min — avoid splitting trips at traffic lights
   const FILTER_RADIUS_M = 15;
   const CONFIRM_COUNT = 3;
 
   try {
     const url = `/api/history/period/${start.toISOString()}?filter_entity_id=device_tracker.starlink_device_location&end_time=${end.toISOString()}&significant_changes_only=false`;
+    setStatus("Fetching raw GPS from HA history…");
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
     if (!r.ok) { setStatus("⚠ Failed to load Starlink history"); return null; }
     const data = await r.json();
     const rawStates = data?.[0] || [];
     if (rawStates.length === 0) { setStatus("No GPS data in range"); return null; }
+    setStatus(`Got ${rawStates.length.toLocaleString()} raw states — filtering…`);
 
     // Step 1: Extract valid points
     const allPts = [];
@@ -1256,12 +1378,35 @@ async function _fetchAndFilterStarlink(start, end, token) {
     }
     if (current.length >= 2) mergedSegments.push(current);
 
-    const movingCount = mergedSegments.reduce((sum, s) => sum + s.length, 0);
+    // Split segments at large GPS time gaps (Starlink blocked under roof/cover)
+    const GPS_GAP_SPLIT_S = 180; // 3 min
+    const splitSegments = [];
+    for (const seg of mergedSegments) {
+      let cur = [seg[0]];
+      for (let i = 1; i < seg.length; i++) {
+        const gapS = (seg[i].ts - seg[i - 1].ts) / 1000;
+        if (gapS > GPS_GAP_SPLIT_S) {
+          if (cur.length >= 2) splitSegments.push(cur);
+          // Insert synthetic parking spot for the gap
+          parkingSpots.push({
+            lat: seg[i - 1].lat, lon: seg[i - 1].lon,
+            ts: seg[i - 1].ts, durationS: gapS, count: 0,
+          });
+          cur = [seg[i]];
+        } else {
+          cur.push(seg[i]);
+        }
+      }
+      if (cur.length >= 2) splitSegments.push(cur);
+    }
+    parkingSpots.sort((a, b) => a.ts - b.ts);
 
-    console.log(`[VL] Filtered: ${allPts.length} raw → ${deduped.length} deduped → ${movingCount} moving in ${mergedSegments.length} segments + ${parkingSpots.length} parked (${rawParkingSpots.length - parkingSpots.length} short stops merged)`);
+    const movingCount = splitSegments.reduce((sum, s) => sum + s.length, 0);
+
+    console.log(`[VL] Filtered: ${allPts.length} raw → ${deduped.length} deduped → ${movingCount} moving in ${splitSegments.length} segments + ${parkingSpots.length} parked (${rawParkingSpots.length - parkingSpots.length} short stops merged)`);
 
     return {
-      movingSegments: mergedSegments,
+      movingSegments: splitSegments,
       parkingSpots,
       stats: { rawCount: allPts.length, dedupedCount: deduped.length, movingCount },
     };
@@ -1755,6 +1900,93 @@ function selectTravel(idx) {
   renderUnmatchedStopMarkers();
 }
 
+// ─── Trip Inspector ─────────────────────────────────────────
+
+function showTripInspector(idx) {
+  const travel = _travels[idx];
+  if (!travel || !travel.seg || !travel.seg.pts) return;
+  const pts = travel.seg.pts;
+  const tz = _haTz || undefined;
+  const timeFmt = { timeZone: tz, hour: "numeric", minute: "2-digit", second: "2-digit", hour12: true };
+  const dateFmt = { timeZone: tz, month: "short", day: "numeric" };
+
+  const idLabel = travel.dbId ? `DB #${travel.dbId}` : `Trip #${idx + 1}`;
+  const distKm = (travel.distanceM / 1000).toFixed(1);
+  const dateStr = new Date(pts[0].ts).toLocaleDateString("en-US", dateFmt);
+  document.getElementById("vl-ti-title").textContent =
+    `🔍 ${idLabel} · ${dateStr} · ${pts.length} pts · ${distKm} km`;
+
+  let html = '<table><thead><tr>' +
+    '<th>#</th><th>Time</th><th>Δt</th><th>Lat</th><th>Lon</th><th>Δ dist</th><th>Speed</th>' +
+    '</tr></thead><tbody>';
+
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i];
+    const timeStr = new Date(p.ts).toLocaleTimeString("en-US", timeFmt);
+    let dtStr = '', distStr = '', speedStr = '', rowClass = '';
+    if (i > 0) {
+      const dtMs = p.ts - pts[i-1].ts;
+      const dtS = dtMs / 1000;
+      const distM = haversineM(pts[i-1].lat, pts[i-1].lon, p.lat, p.lon);
+      dtStr = dtS >= 60 ? `${Math.floor(dtS/60)}m ${Math.round(dtS%60)}s` : `${dtS.toFixed(0)}s`;
+      distStr = distM >= 1000 ? `${(distM/1000).toFixed(2)} km` : `${distM.toFixed(1)} m`;
+      speedStr = dtS > 0 ? `${((distM / dtS) * 3.6).toFixed(0)} km/h` : '';
+      // Highlight stationary periods
+      if (distM < 15 && dtS >= 30) rowClass = 'gap-warn';
+      if (distM < 15 && dtS >= 60) rowClass = 'gap-stop';
+    }
+    html += `<tr class="${rowClass}" onclick="panToPoint(${p.lat},${p.lon})">` +
+      `<td>${i}</td><td>${timeStr}</td><td>${dtStr}</td>` +
+      `<td>${p.lat.toFixed(6)}</td><td>${p.lon.toFixed(6)}</td>` +
+      `<td>${distStr}</td><td>${speedStr}</td></tr>`;
+  }
+  html += '</tbody></table>';
+
+  // Find stationary runs (consecutive stationary points within 15m)
+  let stationaryRuns = [];
+  let runStart = null;
+  for (let i = 1; i < pts.length; i++) {
+    const distM = haversineM(pts[i-1].lat, pts[i-1].lon, pts[i].lat, pts[i].lon);
+    if (distM < 15) {
+      if (runStart === null) runStart = i - 1;
+    } else {
+      if (runStart !== null) {
+        const durS = (pts[i-1].ts - pts[runStart].ts) / 1000;
+        if (durS >= 20) stationaryRuns.push({ from: runStart, to: i - 1, durS });
+        runStart = null;
+      }
+    }
+  }
+  if (runStart !== null) {
+    const durS = (pts[pts.length-1].ts - pts[runStart].ts) / 1000;
+    if (durS >= 20) stationaryRuns.push({ from: runStart, to: pts.length - 1, durS });
+  }
+
+  if (stationaryRuns.length > 0) {
+    html += '<div style="padding:8px 10px;font-size:12px;background:#fff3e0;border-top:1px solid #ddd">' +
+      '<b>⚠ Stationary runs detected:</b><ul style="margin:4px 0 0 16px;padding:0">';
+    for (const run of stationaryRuns) {
+      const fromTime = new Date(pts[run.from].ts).toLocaleTimeString("en-US", timeFmt);
+      const toTime = new Date(pts[run.to].ts).toLocaleTimeString("en-US", timeFmt);
+      const durStr = run.durS >= 60 ? `${Math.floor(run.durS/60)}m ${Math.round(run.durS%60)}s` : `${run.durS.toFixed(0)}s`;
+      const wouldSplit = run.durS >= 90 ? ' ✅ would split (≥90s)' : ' ❌ too short to split (<90s)';
+      html += `<li>pts ${run.from}–${run.to} · ${fromTime}–${toTime} · <b>${durStr}</b>${wouldSplit}</li>`;
+    }
+    html += '</ul></div>';
+  }
+
+  document.getElementById("vl-ti-body").innerHTML = html;
+  document.getElementById("vl-trip-inspector").classList.add("open");
+}
+
+function closeTripInspector() {
+  document.getElementById("vl-trip-inspector").classList.remove("open");
+}
+
+function panToPoint(lat, lon) {
+  if (_map) _map.setView([lat, lon], Math.max(_map.getZoom(), 16));
+}
+
 // ─── Edit panel ───────────────────────────────────────────
 
 function setupEditPanel() {
@@ -2130,7 +2362,7 @@ async function _maybeBackfill(mode) {
   const days = mode === "custom" && _customStart && _customEnd
     ? Math.ceil((_customEnd - _customStart) / 86400000)
     : (modeDays[mode] || 7);
-  _LOGGER.info?.(`[VL] No stops in ${mode} window — triggering backfill for ${days} days`);
+  console.log(`[VL] No stops in ${mode} window — triggering backfill for ${days} days`);
   setStatus(`⏳ No stops found — scanning ${days}d of GPS history...`);
   try {
     await callService("vanlife_tracker", "backfill_stops", {

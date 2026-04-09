@@ -60,19 +60,6 @@ lovelace:
       icon: mdi:wrench
       show_in_sidebar: true
       filename: dashboards/system_v2.yaml
-    yaml-map:
-      mode: yaml
-      title: Map
-      icon: mdi:map-marker-path
-      show_in_sidebar: true
-      filename: dashboards/map.yaml
-    yaml-vanlife-map:
-      mode: yaml
-      title: Vanlife Map
-      icon: mdi:van-utility
-      show_in_sidebar: true
-      filename: dashboards/vanlife_map.yaml
-
 # --- Custom Panels ---
 panel_custom:
   - name: vanlife-panel

@@ -23,6 +23,7 @@ import threading
 import time
 import urllib.request
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from urllib.parse import urlparse, parse_qs
 
 # ── Config ────────────────────────────────────────────────────────────────────
 VALHALLA       = "https://valhalla1.openstreetmap.de/trace_route"
@@ -32,6 +33,7 @@ PORT           = 8765
 TIMEOUT        = 45     # seconds; public Valhalla can be slow
 REQUEST_DELAY  = 1.2    # seconds between Valhalla calls — avoids 429 rate limit
 CACHE_DB    = "/config/www/vanlife-panel/route_cache.db"
+FILTERED_DB = "/config/www/vanlife-panel/filtered_gps.db"
 
 # ── SQLite cache (content-addressed by MD5 of waypoints) ────────────────────
 _db_lock = threading.Lock()
@@ -287,8 +289,62 @@ class ProxyHandler(BaseHTTPRequestHandler):
             print(f"[route error] {seg_hash}: {e}", flush=True)
             self._json(502, {"error": str(e)})
 
+    # ── GET /vanlife/filtered-gps?start=TS&end=TS ──────────────────────────────
+    # Serve pre-filtered GPS segments + parking from gps_filter.py's DB.
     # ── GET /route/v1/driving/... (legacy fallback) ───────────────────────────
     def do_GET(self):
+        if self.path.startswith("/vanlife/filtered-gps"):
+            try:
+                qs = parse_qs(urlparse(self.path).query)
+                start_ts = float(qs.get("start", [0])[0])
+                end_ts = float(qs.get("end", [0])[0])
+                if not start_ts or not end_ts:
+                    self._json(400, {"error": "start and end params required (epoch ms)"})
+                    return
+
+                import os
+                if not os.path.exists(FILTERED_DB):
+                    self._json(200, {"segments": [], "parking_spots": [], "ready": False})
+                    return
+
+                con = sqlite3.connect(FILTERED_DB)
+                segs = con.execute(
+                    "SELECT id, start_ts, end_ts, points, point_count, routed_geometry, distance_m "
+                    "FROM segments WHERE end_ts >= ? AND start_ts <= ? ORDER BY start_ts",
+                    (start_ts, end_ts)
+                ).fetchall()
+                parks = con.execute(
+                    "SELECT lat, lon, start_ts, duration_s, point_count "
+                    "FROM parking_spots WHERE start_ts + duration_s * 1000 >= ? AND start_ts <= ? "
+                    "ORDER BY start_ts",
+                    (start_ts, end_ts)
+                ).fetchall()
+                con.close()
+
+                result = {
+                    "segments": [
+                        {
+                            "id": r[0],
+                            "start_ts": r[1], "end_ts": r[2],
+                            "points": json.loads(r[3]), "point_count": r[4],
+                            "routed_geometry": json.loads(r[5]) if r[5] else None,
+                            "distance_m": r[6],
+                        }
+                        for r in segs
+                    ],
+                    "parking_spots": [
+                        {"lat": r[0], "lon": r[1], "start_ts": r[2],
+                         "duration_s": r[3], "point_count": r[4]}
+                        for r in parks
+                    ],
+                    "ready": True,
+                }
+                self._json(200, result)
+            except Exception as e:
+                print(f"[filtered-gps error] {e}", flush=True)
+                self._json(500, {"error": str(e)})
+            return
+
         pts = parse_osrm_coords(self.path)
         if not pts or len(pts) < 2:
             self._json(400, {"code": "Error", "message": "bad path"})
