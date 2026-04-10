@@ -16,7 +16,7 @@
  */
 
 const BASE = '/local/react-dashboard';
-const CACHE_VER = 'v9';
+const CACHE_VER = 'v14';
 
 // Cache the module import so it's only loaded once
 let _modulePromise = null;

@@ -19,6 +19,16 @@ export interface HassAuth {
   };
 }
 
+/** Minimal Connection type matching home-assistant-js-websocket */
+export interface HassConnection {
+  subscribeMessage: <T>(
+    callback: (msg: T) => void,
+    params: Record<string, unknown>,
+    options?: { resubscribe?: boolean },
+  ) => Promise<() => void>;
+  sendMessagePromise: <T>(msg: Record<string, unknown>) => Promise<T>;
+}
+
 export interface HomeAssistant {
   states: Record<string, HassEntity>;
   callService: (
@@ -27,6 +37,7 @@ export interface HomeAssistant {
     data?: Record<string, any>,
     target?: { entity_id?: string | string[] },
   ) => Promise<void>;
+  connection: HassConnection;
   user: HassUser;
   auth: HassAuth;
   language: string;

@@ -59,3 +59,9 @@
 .tabular-nums {
   font-variant-numeric: tabular-nums;
 }
+
+/* Gentle breathing animation for active toggle button icons */
+@keyframes toggle-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.18); }
+}
