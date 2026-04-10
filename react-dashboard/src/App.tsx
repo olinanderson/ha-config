@@ -1,5 +1,5 @@
-import { useEffect, useState, useCallback, type ComponentType } from 'react';
-import { HassProvider } from '@/context/HomeAssistantContext';
+import { useEffect, useState, useCallback, useRef, type ComponentType } from 'react';
+import { HassProvider, useHassStore } from '@/context/HomeAssistantContext';
 import { HistoryDialogProvider } from '@/components/EntityHistoryDialog';
 import { cn } from '@/lib/utils';
 import {
@@ -47,6 +47,25 @@ function getPageFromHash(): string {
   return hash && hash in pages ? hash : 'home';
 }
 
+/** Auto-switch to Van tab when the vehicle starts moving */
+function AutoVanNav({ navigate }: { navigate: (id: string) => void }) {
+  const store = useHassStore();
+  const prevMoving = useRef(false);
+
+  useEffect(() => {
+    return store.subscribeEntity('binary_sensor.vehicle_is_moving', () => {
+      const entity = store.getEntity('binary_sensor.vehicle_is_moving');
+      const isMoving = entity?.state === 'on';
+      if (isMoving && !prevMoving.current) {
+        navigate('van');
+      }
+      prevMoving.current = isMoving;
+    });
+  }, [store, navigate]);
+
+  return null;
+}
+
 function useDarkMode() {
   const [isDark, setIsDark] = useState(false);
   useEffect(() => {
@@ -89,6 +108,7 @@ export default function App() {
 
   return (
     <HassProvider>
+      <AutoVanNav navigate={navigate} />
       <div className={`van-dash-root ${isDark ? 'dark' : ''}`} style={{ position: 'relative' }}>
         <HistoryDialogProvider>
         <div className="h-screen flex flex-col bg-background text-foreground">

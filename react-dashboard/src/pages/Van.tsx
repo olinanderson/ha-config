@@ -226,7 +226,6 @@ function DiagnosticsCard() {
       </CardHeader>
       <CardContent className="space-y-1">
         <SparklineStat entityId="sensor.wican_oil_life" label="Oil Life" value={fmt(oilLife, 0)} unit="%" color="#22c55e" />
-        <SparklineStat entityId="sensor.wican_transmission_temperature" label="Trans Temp" value={fmt(transTemp, 0)} unit="°C" color="#ef4444" />
         <SparklineStat entityId="sensor.wican_wastegate" label="Wastegate" value={fmt(wastegate, 0)} unit="%" color="#f59e0b" />
         <SparklineStat entityId="sensor.wican_alternator_duty" label="Alt Duty" value={fmt(altDuty, 0)} unit="%" color="#6366f1" />
         <SparklineStat entityId="sensor.wican_intake_air_temperature" label="Intake Air" value={fmt(intakeAir, 0)} unit="°C" color="#06b6d4" />
@@ -237,10 +236,55 @@ function DiagnosticsCard() {
   );
 }
 
+/** Big at-a-glance driving stats — always visible at the top on mobile */
+function DrivingHeroCard() {
+  const { value: rpm } = useEntityNumeric('sensor.wican_rpm');
+  const { value: ecuV } = useEntityNumeric('sensor.wican_control_module_voltage');
+  const { value: coolant } = useEntityNumeric('sensor.wican_coolant_temperature');
+  const { value: transTemp } = useEntityNumeric('sensor.wican_transmission_temperature');
+  const { value: gradePct } = useEntityNumeric('sensor.road_grade_percent');
+  const aggression = useEntity('sensor.hill_aggression');
+  const { open } = useHistoryDialog();
+
+  const coolantColor = (coolant ?? 0) > 105 ? 'text-red-500' : (coolant ?? 0) > 95 ? 'text-orange-400' : 'text-foreground';
+  const transColor = (transTemp ?? 0) > 110 ? 'text-red-500' : (transTemp ?? 0) > 95 ? 'text-orange-400' : 'text-foreground';
+
+  return (
+    <Card>
+      <CardContent className="pt-4 pb-3">
+        <div className="grid grid-cols-2 gap-3">
+          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.wican_rpm', 'RPM', 'rpm')}>
+            <p className="text-3xl font-bold tabular-nums">{fmt(rpm, 0)}</p>
+            <p className="text-[10px] text-muted-foreground">RPM</p>
+          </div>
+          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.wican_control_module_voltage', 'Battery Voltage', 'V')}>
+            <p className="text-3xl font-bold tabular-nums">{fmt(ecuV, 2)}</p>
+            <p className="text-[10px] text-muted-foreground">Battery V</p>
+          </div>
+          <div className={cn('cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors')} onClick={() => open('sensor.wican_coolant_temperature', 'Coolant Temp', '°C')}>
+            <p className={cn('text-3xl font-bold tabular-nums', coolantColor)}>{fmt(coolant, 0)}°</p>
+            <p className="text-[10px] text-muted-foreground">Coolant</p>
+          </div>
+          <div className={cn('cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors')} onClick={() => open('sensor.wican_transmission_temperature', 'Trans Temp', '°C')}>
+            <p className={cn('text-3xl font-bold tabular-nums', transColor)}>{fmt(transTemp, 0)}°</p>
+            <p className="text-[10px] text-muted-foreground">Trans</p>
+          </div>
+        </div>
+        <div className="mt-2 flex items-center justify-center gap-3 cursor-pointer hover:bg-muted/50 rounded-lg p-2 transition-colors" onClick={() => open('sensor.road_grade_percent', 'Road Grade', '%')}>
+          <Mountain className="h-4 w-4 text-muted-foreground" />
+          <span className="text-2xl font-bold tabular-nums">{fmt(gradePct, 1)}%</span>
+          <span className="text-xs text-muted-foreground">{aggression?.state ?? '—'}</span>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Van() {
   return (
     <PageContainer title="Van & Vehicle">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      <DrivingHeroCard />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mt-4">
         <div className="space-y-4">
           <EngineCard />
           <FuelCard />

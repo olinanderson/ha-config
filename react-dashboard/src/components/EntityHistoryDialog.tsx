@@ -1,4 +1,4 @@
-import { useEffect, useState, createContext, useContext, useCallback, type ReactNode } from 'react';
+import { useEffect, useState, useRef, createContext, useContext, useCallback, type ReactNode } from 'react';
 import { useHistory } from '@/hooks/useHistory';
 import { useEntity } from '@/hooks/useEntity';
 import { HistoryChart } from '@/components/Chart';
@@ -36,6 +36,7 @@ const RANGES = [
 export function HistoryDialogProvider({ children }: { children: ReactNode }) {
   const [state, setState] = useState<DialogState | null>(null);
   const [hours, setHours] = useState(24);
+  const backdropPointerDown = useRef(false);
 
   const open = useCallback((entityId: string, name: string, unit = '') => {
     setState({ entityId, name, unit });
@@ -65,7 +66,9 @@ export function HistoryDialogProvider({ children }: { children: ReactNode }) {
         <div
           className="absolute inset-0 z-[9999] flex items-center justify-center"
           style={{ background: 'rgba(0,0,0,0.5)' }}
-          onClick={(e) => { if (e.target === e.currentTarget) close(); }}
+          onMouseDown={(e) => { backdropPointerDown.current = e.target === e.currentTarget; }}
+          onTouchStart={(e) => { backdropPointerDown.current = e.target === e.currentTarget; }}
+          onClick={(e) => { if (e.target === e.currentTarget && backdropPointerDown.current) close(); backdropPointerDown.current = false; }}
         >
           <div
             className={cn(

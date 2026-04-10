@@ -9,12 +9,13 @@ import { HeatingControls } from '@/components/HeatingControls';
 import { FanControl } from '@/components/FanControl';
 import { PresenceBar } from '@/components/PresenceBar';
 import { ToggleButton } from '@/components/ToggleButton';
+import { InverterButton } from '@/components/InverterButton';
 import { StatusDot } from '@/components/StatusDot';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
-import { useButtonPress, useToggle } from '@/hooks/useService';
+import { useToggle } from '@/hooks/useService';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
 import { cn, fmt } from '@/lib/utils';
-import { useState, useEffect, useCallback, useRef } from 'react';
+import { useState, useCallback } from 'react';
 import {
   Battery,
   Sun,
@@ -177,77 +178,6 @@ function BadgeBar() {
 }
 
 // ─── Quick controls ───
-
-const INVERTER_TIMEOUT_MS = 15000;
-
-function InverterButton() {
-  const pressInverter = useButtonPress('button.a32_pro_inverter_on_off_toggle');
-  const shellyPing = useEntity('binary_sensor.shelly_em_reachable');
-  const isOn = shellyPing?.state === 'on';
-  const [pending, setPending] = useState(false);
-  const pendingRef = useRef(false);
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const prevState = useRef(shellyPing?.state);
-
-  // When shelly state changes while pending, clear pending
-  useEffect(() => {
-    if (pendingRef.current && shellyPing?.state !== prevState.current) {
-      pendingRef.current = false;
-      setPending(false);
-      if (timerRef.current) clearTimeout(timerRef.current);
-    }
-    prevState.current = shellyPing?.state;
-  }, [shellyPing?.state]);
-
-  // Cleanup on unmount
-  useEffect(() => () => { if (timerRef.current) clearTimeout(timerRef.current); }, []);
-
-  const handlePress = useCallback(() => {
-    pressInverter();
-    setPending(true);
-    pendingRef.current = true;
-    prevState.current = shellyPing?.state;
-    if (timerRef.current) clearTimeout(timerRef.current);
-    timerRef.current = setTimeout(() => {
-      pendingRef.current = false;
-      setPending(false);
-    }, INVERTER_TIMEOUT_MS);
-  }, [pressInverter, shellyPing?.state]);
-
-  const colors = {
-    border: 'border-green-500',
-    bg: 'bg-green-500/10',
-    text: 'text-green-500',
-    glow: 'shadow-green-500/25',
-  };
-
-  const label = pending ? 'Loading…' : isOn ? 'ON' : 'OFF';
-
-  return (
-    <button
-      onClick={handlePress}
-      disabled={pending}
-      className={cn(
-        'flex flex-col items-center gap-2 p-3 rounded-xl border-2 transition-all duration-300 min-w-[5rem]',
-        pending
-          ? 'border-yellow-500 bg-yellow-500/10 text-yellow-500'
-          : isOn
-            ? `${colors.border} ${colors.bg} ${colors.text} shadow-lg ${colors.glow}`
-            : 'border-border bg-card text-muted-foreground hover:bg-accent',
-      )}
-    >
-      <Zap
-        className={cn(
-          'h-5 w-5 transition-transform duration-300',
-          pending && 'animate-pulse',
-          isOn && !pending && 'scale-110',
-        )}
-        style={isOn && !pending ? { animation: 'toggle-breathe 3s ease-in-out infinite' } : undefined}
-      />
-      <span className="text-xs font-medium">{label}</span>
-    </button>
-  );
-}
 
 function QuickControls() {
   return (

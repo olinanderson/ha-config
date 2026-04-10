@@ -16,9 +16,9 @@
  */
 
 const BASE = '/local/react-dashboard';
-const CACHE_VER = 'v14';
+const CACHE_VER = Date.now(); // always fresh — no manual bumping needed
 
-// Cache the module import so it's only loaded once
+// Load module fresh each page load
 let _modulePromise = null;
 function getModule() {
   if (!_modulePromise) {
@@ -27,7 +27,7 @@ function getModule() {
   return _modulePromise;
 }
 
-// Fetch CSS text once, cache it for injection into the panel's DOM
+// Fetch CSS fresh each page load
 let _cssPromise = null;
 function getCss() {
   if (!_cssPromise) {

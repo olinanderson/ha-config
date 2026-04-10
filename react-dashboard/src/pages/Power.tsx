@@ -1,12 +1,12 @@
 import { PageContainer } from '@/components/layout/PageContainer';
 import { BatteryCard } from '@/components/BatteryCard';
 import { SolarCard } from '@/components/SolarCard';
-import { PowerBreakdown } from '@/components/PowerBreakdown';
+import { PowerFlow } from '@/components/PowerFlow';
 import { ToggleButton } from '@/components/ToggleButton';
+import { InverterButton } from '@/components/InverterButton';
 import { SparklineStat } from '@/components/ClickableValue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { useEntityNumeric } from '@/hooks/useEntity';
-import { useButtonPress } from '@/hooks/useService';
 import { fmt } from '@/lib/utils';
 import { Zap, PlugZap, Gauge } from 'lucide-react';
 
@@ -33,8 +33,6 @@ function VoltageCard() {
 }
 
 function ChargingControls() {
-  const pressInverter = useButtonPress('button.a32_pro_inverter_on_off_toggle');
-
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -46,18 +44,12 @@ function ChargingControls() {
       <CardContent>
         <div className="flex flex-wrap gap-2">
           <ToggleButton
-            entityId="switch.a32_pro_do8_switch04_shore_power_charger"
+            entityId="input_boolean.shore_power_charger_enabled"
             name="Shore Charger"
             icon={PlugZap}
             activeColor="green"
           />
-          <ToggleButton
-            entityId="binary_sensor.shelly_em_reachable"
-            name="Inverter"
-            icon={Zap}
-            activeColor="green"
-            onToggle={pressInverter}
-          />
+          <InverterButton />
         </div>
       </CardContent>
     </Card>
@@ -76,8 +68,8 @@ export default function Power() {
           <SolarCard />
           <ChargingControls />
         </div>
-        <div className="xl:col-span-1 md:col-span-2 xl:col-span-1">
-          <PowerBreakdown />
+        <div className="space-y-4">
+          <PowerFlow />
         </div>
       </div>
     </PageContainer>

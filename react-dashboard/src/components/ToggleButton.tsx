@@ -48,7 +48,6 @@ export function ToggleButton({
     >
       <Icon
         className={cn('h-5 w-5 transition-transform duration-300')}
-        style={isOn ? { animation: 'toggle-breathe 3s ease-in-out infinite' } : undefined}
       />
       <span className="text-xs font-medium">{name}</span>
     </button>

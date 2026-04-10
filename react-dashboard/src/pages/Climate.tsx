@@ -1,5 +1,5 @@
 import { PageContainer } from '@/components/layout/PageContainer';
-import { ThermostatControl } from '@/components/ThermostatControl';
+import { ClimateCard } from '@/components/ClimateCard';
 import { HeatingControls } from '@/components/HeatingControls';
 import { TemperatureCard } from '@/components/TemperatureCard';
 import { FanControl } from '@/components/FanControl';
@@ -56,7 +56,7 @@ export default function Climate() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         {/* Column 1: Thermostat + Heating */}
         <div className="space-y-4">
-          <ThermostatControl />
+          <ClimateCard />
           <HeatingControls />
         </div>
 
