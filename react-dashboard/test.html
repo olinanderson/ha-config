@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Van Dashboard — Test</title>
+  <link rel="stylesheet" href="van-dashboard.css" />
+  <style>
+    html, body, #root { margin: 0; padding: 0; height: 100%; width: 100%; }
+  </style>
+</head>
+<body>
+  <div id="root"></div>
+  <script type="module">
+    // Usage: /local/react-dashboard/test.html?token=YOUR_TOKEN#home
+    // Navigate via hash: #home | #power | #climate | #water | #van | #system
+    const params = new URLSearchParams(location.search);
+    const token = params.get('token');
+    if (!location.hash) location.hash = 'home';
+    const haUrl = location.origin;
+
+    if (!token) {
+      document.getElementById('root').innerHTML =
+        '<p style="padding:2em;font-family:sans-serif;color:#ef4444">Missing <code>?token=</code> parameter.<br>Usage: <code>test.html?token=YOUR_LONG_LIVED_TOKEN&page=home</code></p>';
+      throw new Error('No token');
+    }
+
+    // 1) Load the bundle (includes WS library exports)
+    const mod = await import('./van-dashboard.js');
+    const { createConnection, createLongLivedTokenAuth, subscribeEntities, callService, mount } = mod;
+
+    // 2) Connect to HA via WebSocket
+    const auth = createLongLivedTokenAuth(haUrl, token);
+    const conn = await createConnection({ auth });
+
+    const hass = {
+      states: {},
+      callService: async (domain, service, data, target) => {
+        return callService(conn, domain, service, data, target);
+      },
+      user: { name: 'Test', is_admin: true },
+      auth: { data: { access_token: token } },
+      language: 'en',
+      themes: { darkMode: window.matchMedia('(prefers-color-scheme: dark)').matches },
+    };
+
+    // Start entity subscription (populates hass.states)
+    let firstUpdate = false;
+    const statesReady = new Promise(resolve => {
+      subscribeEntities(conn, (entities) => {
+        hass.states = entities;
+        window.__HASS__ = hass;
+        window.dispatchEvent(new Event('hass-updated'));
+        if (!firstUpdate) { firstUpdate = true; resolve(); }
+      });
+    });
+
+    // Set initial hass so provider can find it immediately
+    window.__HASS__ = hass;
+    console.log('[Van Dashboard Test] Connected to HA via WebSocket');
+
+    // 3) Wait for first entity update so data is available before mount
+    await statesReady;
+    console.log(`[Van Dashboard Test] Entities loaded: ${Object.keys(hass.states).length}`);
+
+    // 4) Mount the React app
+    const root = document.getElementById('root');
+    mount(root);
+    console.log(`[Van Dashboard Test] Mounted — use hash to navigate (#home, #power, etc.)`);
+  </script>
+</body>
+</html>
