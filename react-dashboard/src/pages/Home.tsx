@@ -31,6 +31,8 @@ import {
   Lightbulb,
   Wifi,
   Trash,
+  LampDesk,
+  AirVent,
 } from 'lucide-react';
 
 // ─── Badge bar ───
@@ -195,6 +197,30 @@ function QuickControls() {
         activeColor="orange"
       />
       <InverterButton />
+      <ToggleButton
+        entityId="switch.a32_pro_switch21_left_outdoor_lights"
+        name="Left Light"
+        icon={LampDesk}
+        activeColor="yellow"
+      />
+      <ToggleButton
+        entityId="switch.a32_pro_switch22_right_outdoor_lights"
+        name="Right Light"
+        icon={LampDesk}
+        activeColor="yellow"
+      />
+      <ToggleButton
+        entityId="switch.a32_pro_switch23_rear_outdoor_lights"
+        name="Rear Light"
+        icon={LampDesk}
+        activeColor="yellow"
+      />
+      <ToggleButton
+        entityId="switch.a32_pro_switch28_compressor"
+        name="Compressor"
+        icon={AirVent}
+        activeColor="cyan"
+      />
     </div>
   );
 }

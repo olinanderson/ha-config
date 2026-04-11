@@ -20,7 +20,7 @@ import {
 function EngineCard() {
   const { value: speed } = useEntityNumeric('sensor.wican_speed');
   const { value: rpm } = useEntityNumeric('sensor.wican_rpm');
-  const gear = useEntity('sensor.wican_gear_display');
+  const gear = useEntity('sensor.gear_display');
   const { value: throttle } = useEntityNumeric('sensor.wican_throttle_position');
   const { value: load } = useEntityNumeric('sensor.wican_engine_load');
   const { value: coolant } = useEntityNumeric('sensor.wican_coolant_temperature');
@@ -86,9 +86,9 @@ function FuelCard() {
   const { value: stable } = useEntityNumeric('sensor.stable_fuel_level');
   const { value: raw } = useEntityNumeric('sensor.wican_fuel');
   const { value: mean5 } = useEntityNumeric('sensor.wican_fuel_5_min_mean');
-  const { value: economy } = useEntityNumeric('sensor.fuel_consumption_l100km');
-  const { value: rate } = useEntityNumeric('sensor.fuel_consumption_lh');
-  const { value: fuelRate } = useEntityNumeric('sensor.wican_fuel_rate');
+  const { value: economy } = useEntityNumeric('sensor.fuel_consumption_l_100km');
+  const { value: rate } = useEntityNumeric('sensor.fuel_consumption_l_h');
+  const { value: fuelRate } = useEntityNumeric('sensor.wican_wican_fuel_rate');
 
   const { data: fuelHistory } = useHistory('sensor.stable_fuel_level', 24);
   const { open: openFuel } = useHistoryDialog();
@@ -116,19 +116,19 @@ function FuelCard() {
         <SparklineStat entityId="sensor.stable_fuel_level" label="Estimated" value={fmt(tankLiters, 1)} unit="L" color="#22c55e" />
         <SparklineStat entityId="sensor.wican_fuel_5_min_mean" label="5min Mean" value={fmt(mean5, 0)} unit="%" color="#3b82f6" />
         <SparklineStat entityId="sensor.wican_fuel" label="Raw OBD" value={fmt(raw, 0)} unit="%" color="#64748b" />
-        {(economy ?? 0) > 0 && <SparklineStat entityId="sensor.fuel_consumption_l100km" label="Economy" value={fmt(economy, 1)} unit="L/100km" color="#8b5cf6" />}
-        {(rate ?? 0) > 0 && <SparklineStat entityId="sensor.fuel_consumption_lh" label="Rate" value={fmt(rate, 1)} unit="L/h" color="#f59e0b" />}
-        {(fuelRate ?? 0) > 0 && <SparklineStat entityId="sensor.wican_fuel_rate" label="Fuel Rate" value={fmt(fuelRate, 2)} unit="g/s" color="#06b6d4" />}
+        {(economy ?? 0) > 0 && <SparklineStat entityId="sensor.fuel_consumption_l_100km" label="Economy" value={fmt(economy, 1)} unit="L/100km" color="#8b5cf6" />}
+        {(rate ?? 0) > 0 && <SparklineStat entityId="sensor.fuel_consumption_l_h" label="Rate" value={fmt(rate, 1)} unit="L/h" color="#f59e0b" />}
+        {(fuelRate ?? 0) > 0 && <SparklineStat entityId="sensor.wican_wican_fuel_rate" label="Fuel Rate" value={fmt(fuelRate, 2)} unit="g/s" color="#06b6d4" />}
       </CardContent>
     </Card>
   );
 }
 
 function TirePressureCard() {
-  const { value: fl } = useEntityNumeric('sensor.wican_tire_pressure_fl');
-  const { value: fr } = useEntityNumeric('sensor.wican_tire_pressure_fr');
-  const { value: rl } = useEntityNumeric('sensor.wican_tire_pressure_rl');
-  const { value: rr } = useEntityNumeric('sensor.wican_tire_pressure_rr');
+  const { value: fl } = useEntityNumeric('sensor.wican_wican_tire_pressure_fl');
+  const { value: fr } = useEntityNumeric('sensor.wican_wican_tire_pressure_fr');
+  const { value: rl } = useEntityNumeric('sensor.wican_wican_tire_pressure_rl');
+  const { value: rr } = useEntityNumeric('sensor.wican_wican_tire_pressure_rr');
   const lowTire = useEntity('binary_sensor.low_tire_pressure');
   const isLow = lowTire?.state === 'on';
 
@@ -178,7 +178,7 @@ function TirePressureCard() {
 
 function RoadGradeCard() {
   const { value: gradeDeg } = useEntityNumeric('sensor.road_grade_deg');
-  const { value: gradePct } = useEntityNumeric('sensor.road_grade_percent');
+  const { value: gradePct } = useEntityNumeric('sensor.road_grade');
   const aggression = useEntity('sensor.hill_aggression');
 
   return (
@@ -190,7 +190,7 @@ function RoadGradeCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-1">
-        <SparklineStat entityId="sensor.road_grade_percent" label="Grade" value={fmt(gradePct, 1)} unit="%" color="#22c55e" />
+        <SparklineStat entityId="sensor.road_grade" label="Grade" value={fmt(gradePct, 1)} unit="%" color="#22c55e" />
         <SparklineStat entityId="sensor.road_grade_deg" label="Degrees" value={fmt(gradeDeg, 1)} unit="°" color="#6366f1" />
         <SparklineStat entityId="sensor.hill_aggression" label="Terrain" value={aggression?.state ?? '—'} unit="" color="#64748b" />
       </CardContent>
@@ -199,13 +199,13 @@ function RoadGradeCard() {
 }
 
 function DiagnosticsCard() {
-  const { value: oilLife } = useEntityNumeric('sensor.wican_oil_life');
-  const { value: transTemp } = useEntityNumeric('sensor.wican_transmission_temperature');
-  const { value: wastegate } = useEntityNumeric('sensor.wican_wastegate');
-  const { value: altDuty } = useEntityNumeric('sensor.wican_alternator_duty');
-  const { value: intakeAir } = useEntityNumeric('sensor.wican_intake_air_temperature');
+  const { value: oilLife } = useEntityNumeric('sensor.wican_wican_oil_life');
+  const { value: transTemp } = useEntityNumeric('sensor.wican_wican_transmission_temperature');
+  const { value: wastegate } = useEntityNumeric('sensor.wican_wican_wastegate_duty');
+  const { value: altDuty } = useEntityNumeric('sensor.wican_wican_alternator_duty');
+  const { value: intakeAir } = useEntityNumeric('sensor.wican_wican_intake_air_temperature');
   const { value: ambientAir } = useEntityNumeric('sensor.wican_ambient_air_temperature');
-  const { value: fuelPressure } = useEntityNumeric('sensor.wican_fuel_pressure');
+  const { value: fuelPressure } = useEntityNumeric('sensor.wican_wican_fuel_pressure');
   const cel = useEntity('binary_sensor.check_engine_light');
   const { value: dtcCount } = useEntityNumeric('sensor.dtc_count');
   const isCel = cel?.state === 'on';
@@ -225,12 +225,12 @@ function DiagnosticsCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-1">
-        <SparklineStat entityId="sensor.wican_oil_life" label="Oil Life" value={fmt(oilLife, 0)} unit="%" color="#22c55e" />
-        <SparklineStat entityId="sensor.wican_wastegate" label="Wastegate" value={fmt(wastegate, 0)} unit="%" color="#f59e0b" />
-        <SparklineStat entityId="sensor.wican_alternator_duty" label="Alt Duty" value={fmt(altDuty, 0)} unit="%" color="#6366f1" />
-        <SparklineStat entityId="sensor.wican_intake_air_temperature" label="Intake Air" value={fmt(intakeAir, 0)} unit="°C" color="#06b6d4" />
+        <SparklineStat entityId="sensor.wican_wican_oil_life" label="Oil Life" value={fmt(oilLife, 0)} unit="%" color="#22c55e" />
+        <SparklineStat entityId="sensor.wican_wican_wastegate_duty" label="Wastegate" value={fmt(wastegate, 0)} unit="%" color="#f59e0b" />
+        <SparklineStat entityId="sensor.wican_wican_alternator_duty" label="Alt Duty" value={fmt(altDuty, 0)} unit="%" color="#6366f1" />
+        <SparklineStat entityId="sensor.wican_wican_intake_air_temperature" label="Intake Air" value={fmt(intakeAir, 0)} unit="°C" color="#06b6d4" />
         <SparklineStat entityId="sensor.wican_ambient_air_temperature" label="Ambient Air" value={fmt(ambientAir, 0)} unit="°C" color="#3b82f6" />
-        <SparklineStat entityId="sensor.wican_fuel_pressure" label="Fuel Pressure" value={fmt(fuelPressure, 0)} unit="kPa" color="#8b5cf6" />
+        <SparklineStat entityId="sensor.wican_wican_fuel_pressure" label="Fuel Pressure" value={fmt(fuelPressure, 0)} unit="kPa" color="#8b5cf6" />
       </CardContent>
     </Card>
   );
@@ -241,8 +241,8 @@ function DrivingHeroCard() {
   const { value: rpm } = useEntityNumeric('sensor.wican_rpm');
   const { value: ecuV } = useEntityNumeric('sensor.wican_control_module_voltage');
   const { value: coolant } = useEntityNumeric('sensor.wican_coolant_temperature');
-  const { value: transTemp } = useEntityNumeric('sensor.wican_transmission_temperature');
-  const { value: gradePct } = useEntityNumeric('sensor.road_grade_percent');
+  const { value: transTemp } = useEntityNumeric('sensor.wican_wican_transmission_temperature');
+  const { value: gradePct } = useEntityNumeric('sensor.road_grade');
   const aggression = useEntity('sensor.hill_aggression');
   const { open } = useHistoryDialog();
 
@@ -265,12 +265,12 @@ function DrivingHeroCard() {
             <p className={cn('text-3xl font-bold tabular-nums', coolantColor)}>{fmt(coolant, 0)}°</p>
             <p className="text-[10px] text-muted-foreground">Coolant</p>
           </div>
-          <div className={cn('cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors')} onClick={() => open('sensor.wican_transmission_temperature', 'Trans Temp', '°C')}>
+          <div className={cn('cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors')} onClick={() => open('sensor.wican_wican_transmission_temperature', 'Trans Temp', '°C')}>
             <p className={cn('text-3xl font-bold tabular-nums', transColor)}>{fmt(transTemp, 0)}°</p>
             <p className="text-[10px] text-muted-foreground">Trans</p>
           </div>
         </div>
-        <div className="mt-2 flex items-center justify-center gap-3 cursor-pointer hover:bg-muted/50 rounded-lg p-2 transition-colors" onClick={() => open('sensor.road_grade_percent', 'Road Grade', '%')}>
+        <div className="mt-2 flex items-center justify-center gap-3 cursor-pointer hover:bg-muted/50 rounded-lg p-2 transition-colors" onClick={() => open('sensor.road_grade', 'Road Grade', '%')}>
           <Mountain className="h-4 w-4 text-muted-foreground" />
           <span className="text-2xl font-bold tabular-nums">{fmt(gradePct, 1)}%</span>
           <span className="text-xs text-muted-foreground">{aggression?.state ?? '—'}</span>

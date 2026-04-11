@@ -9,6 +9,7 @@ import {
   Droplets,
   Truck,
   Settings,
+  Camera,
   type LucideIcon,
 } from 'lucide-react';
 import Home from '@/pages/Home';
@@ -17,6 +18,7 @@ import Climate from '@/pages/Climate';
 import Water from '@/pages/Water';
 import Van from '@/pages/Van';
 import System from '@/pages/System';
+import Cameras from '@/pages/Cameras';
 
 const pages: Record<string, ComponentType> = {
   home: Home,
@@ -25,6 +27,7 @@ const pages: Record<string, ComponentType> = {
   water: Water,
   van: Van,
   system: System,
+  cameras: Cameras,
 };
 
 interface NavItem {
@@ -39,6 +42,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'climate', label: 'Climate', icon: Thermometer },
   { id: 'water', label: 'Water', icon: Droplets },
   { id: 'van', label: 'Van', icon: Truck },
+  { id: 'cameras', label: 'Cameras', icon: Camera },
   { id: 'system', label: 'System', icon: Settings },
 ];
 
@@ -134,7 +138,11 @@ export default function App() {
           </nav>
           {/* Page content */}
           <div className="flex-1 overflow-auto">
-            <Page />
+            {/* Cameras always mounted — hidden when not active to preserve WebRTC */}
+            <div className={page === 'cameras' ? '' : 'hidden'}>
+              <Cameras />
+            </div>
+            {page !== 'cameras' && <Page />}
           </div>
         </div>
         </HistoryDialogProvider>
