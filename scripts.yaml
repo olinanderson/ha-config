@@ -540,3 +540,146 @@ vanlife_quick_save_stop:
         entity_id: input_number.vanlife_stop_rating
       data:
         value: 0
+
+# ────────────────────────────────────────────────────────────────
+# WiCAN OBD Diagnostic Scripts
+# ────────────────────────────────────────────────────────────────
+
+# Read stored DTCs (Mode 03) via raw CAN frame on MQTT
+# Response arrives on wican/tx → sensor.wican_tx_raw_frame
+# DTC format: response ID 0x7E8, service 0x43, then pairs of DTC bytes
+wican_read_dtc:
+  alias: "WiCAN • Read Stored DTCs"
+  icon: mdi:car-wrench
+  mode: single
+  sequence:
+    # Send OBD Mode 03 (Read Stored DTCs) to broadcast address 0x7DF
+    - action: mqtt.publish
+      data:
+        topic: "wican/rx"
+        payload: >
+          {"bus":"0","type":"tx","ts":0,"frame":[{"id":"7DF","dlc":8,"rtr":false,"extd":false,"data":"01 03 00 00 00 00 00 00"}]}
+    - action: system_log.write
+      data:
+        level: info
+        logger: script.wican_read_dtc
+        message: "Sent OBD Mode 03 (Read Stored DTCs) request → check sensor.wican_tx_raw_frame for response"
+    - action: persistent_notification.create
+      data:
+        title: "WiCAN DTC Read"
+        message: >
+          Sent DTC read request. Check Developer Tools → States → sensor.wican_tx_raw_frame
+          for the raw response. DTC count from PID 0x01: {{ states('sensor.wican_monitor_status_raw') | default('unknown') }}
+        notification_id: wican_dtc_read
+
+# Clear all DTCs and MIL (Mode 04) via raw CAN frame on MQTT
+# WARNING: This clears ALL stored DTCs and turns off the check engine light.
+wican_clear_dtc:
+  alias: "WiCAN • Clear DTCs (Mode 04)"
+  icon: mdi:eraser
+  mode: single
+  sequence:
+    - action: mqtt.publish
+      data:
+        topic: "wican/rx"
+        payload: >
+          {"bus":"0","type":"tx","ts":0,"frame":[{"id":"7DF","dlc":8,"rtr":false,"extd":false,"data":"01 04 00 00 00 00 00 00"}]}
+    - action: system_log.write
+      data:
+        level: warning
+        logger: script.wican_clear_dtc
+        message: "Sent OBD Mode 04 (Clear DTCs) — all stored codes and MIL cleared"
+    - action: persistent_notification.create
+      data:
+        title: "WiCAN DTC Clear"
+        message: "DTCs cleared. The check engine light should turn off. Monitor status will reset on next drive cycle."
+        notification_id: wican_dtc_clear
+
+# Read pending DTCs (Mode 07) — codes from current drive cycle
+wican_read_pending_dtc:
+  alias: "WiCAN • Read Pending DTCs"
+  icon: mdi:car-wrench
+  mode: single
+  sequence:
+    - action: mqtt.publish
+      data:
+        topic: "wican/rx"
+        payload: >
+          {"bus":"0","type":"tx","ts":0,"frame":[{"id":"7DF","dlc":8,"rtr":false,"extd":false,"data":"01 07 00 00 00 00 00 00"}]}
+    - action: system_log.write
+      data:
+        level: info
+        logger: script.wican_read_pending_dtc
+        message: "Sent OBD Mode 07 (Read Pending DTCs) request"
+    - action: persistent_notification.create
+      data:
+        title: "WiCAN Pending DTC Read"
+        message: "Sent pending DTC read request. Check sensor.wican_tx_raw_frame for raw response."
+        notification_id: wican_dtc_pending
+
+# Manual tire pressure raw byte request — sends Mode 22 PIDs
+# directly to the IPC module (0x726) for all 4 tires.
+# Captures raw CAN response bytes on wican/tx for debugging
+# the tire pressure expression ([B4:B5]/10 vs /2.036 etc.)
+wican_raw_tire_pressure:
+  alias: "WiCAN • Raw Tire Pressure Request"
+  icon: mdi:car-tire-alert
+  mode: single
+  sequence:
+    # Front-left (DID 0x2813, header 0x726 → response from 0x72E)
+    - action: mqtt.publish
+      data:
+        topic: "wican/rx"
+        payload: >
+          {"bus":"0","type":"tx","ts":0,"frame":[{"id":"726","dlc":8,"rtr":false,"extd":false,"data":"03 22 28 13 00 00 00 00"}]}
+    - delay: "00:00:01"
+    # Front-right (DID 0x2814)
+    - action: mqtt.publish
+      data:
+        topic: "wican/rx"
+        payload: >
+          {"bus":"0","type":"tx","ts":0,"frame":[{"id":"726","dlc":8,"rtr":false,"extd":false,"data":"03 22 28 14 00 00 00 00"}]}
+    - delay: "00:00:01"
+    # Rear-left (DID 0x2815)
+    - action: mqtt.publish
+      data:
+        topic: "wican/rx"
+        payload: >
+          {"bus":"0","type":"tx","ts":0,"frame":[{"id":"726","dlc":8,"rtr":false,"extd":false,"data":"03 22 28 15 00 00 00 00"}]}
+    - delay: "00:00:01"
+    # Rear-right (DID 0x2816)
+    - action: mqtt.publish
+      data:
+        topic: "wican/rx"
+        payload: >
+          {"bus":"0","type":"tx","ts":0,"frame":[{"id":"726","dlc":8,"rtr":false,"extd":false,"data":"03 22 28 16 00 00 00 00"}]}
+    - action: system_log.write
+      data:
+        level: info
+        logger: script.wican_raw_tire_pressure
+        message: >
+          Sent raw tire pressure requests for all 4 wheels (DIDs 0x2813-0x2816, header 0x726).
+          Check sensor.wican_tx_raw_frame for raw CAN response bytes.
+          Current parsed values — FL: {{ states('sensor.wican_tire_pressure_fl') }},
+          FR: {{ states('sensor.wican_tire_pressure_fr') }},
+          RL: {{ states('sensor.wican_tire_pressure_rl') }},
+          RR: {{ states('sensor.wican_tire_pressure_rr') }}
+    - action: persistent_notification.create
+      data:
+        title: "WiCAN Raw Tire Pressure"
+        message: >
+          Sent raw requests for all 4 tire pressure DIDs (0x2813–0x2816).
+          Check sensor.wican_tx_raw_frame for raw CAN bytes.
+          
+          Current parsed values:
+          FL: {{ states('sensor.wican_tire_pressure_fl') }} psi
+          FR: {{ states('sensor.wican_tire_pressure_fr') }} psi
+          RL: {{ states('sensor.wican_tire_pressure_rl') }} psi
+          RR: {{ states('sensor.wican_tire_pressure_rr') }} psi
+          
+          Raw debug sensors:
+          FL: {{ states('sensor.wican_raw_tire_pressure_fl') }}
+          FR: {{ states('sensor.wican_raw_tire_pressure_fr') }}
+          RL: {{ states('sensor.wican_raw_tire_pressure_rl') }}
+          RR: {{ states('sensor.wican_raw_tire_pressure_rr') }}
+        notification_id: wican_tire_raw

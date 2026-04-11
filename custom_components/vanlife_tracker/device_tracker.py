@@ -18,6 +18,7 @@ from homeassistant.helpers.event import (
 
 from .const import (
     DOMAIN,
+    VERSION,
     CONF_GPS_ENTITY,
     ATTR_LATITUDE,
     ATTR_LONGITUDE,
@@ -66,7 +67,7 @@ class VanlifeDeviceTracker(TrackerEntity):
             "name": "Vanlife Tracker",
             "manufacturer": "Vanlife Tracker",
             "model": "Travel & Campsite Logger",
-            "sw_version": "0.1.0",
+            "sw_version": VERSION,
         }
         self._latitude: float | None = None
         self._longitude: float | None = None

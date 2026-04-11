@@ -216,6 +216,12 @@ function QuickControls() {
         activeColor="yellow"
       />
       <ToggleButton
+        entityId="switch.a32_pro_switch31_lightbar"
+        name="Lightbar"
+        icon={Lightbulb}
+        activeColor="yellow"
+      />
+      <ToggleButton
         entityId="switch.a32_pro_switch28_compressor"
         name="Compressor"
         icon={AirVent}

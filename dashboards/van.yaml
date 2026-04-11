@@ -1,12 +1,9 @@
-title: Van
+title: Van & Vehicle
 views:
   - title: Van
     path: van
-    icon: mdi:van-passenger
+    icon: mdi:van-utility
 
-    # ─────────────────────────────────────────────
-    #  BADGE BAR — critical driving info at a glance
-    # ─────────────────────────────────────────────
     badges:
       # ── Battery SOC ──
       - type: custom:mushroom-template-badge
@@ -20,7 +17,7 @@ views:
         color: >
           {% set batt = states('sensor.olins_van_bms_battery') | float(0) %}
           {{ 'red' if batt < 30 else 'orange' if batt < 65 else 'green' }}
-        label: Battery
+        label: SOC
         tap_action:
           action: more-info
 
@@ -39,10 +36,10 @@ views:
       - type: custom:mushroom-template-badge
         entity: sensor.stable_fuel_level
         icon: mdi:gas-station
-        content: "{{ states('sensor.stable_fuel_level') }}%"
+        content: "{{ states('sensor.stable_fuel_level') | float(0) | round(0) }}%"
         color: >
-          {% set v = states('sensor.stable_fuel_level') | float(0) %}
-          {{ 'red' if v < 15 else 'orange' if v < 30 else 'green' }}
+          {% set fuel = states('sensor.stable_fuel_level') | float(0) %}
+          {{ 'red' if fuel < 15 else 'orange' if fuel < 30 else 'green' }}
         label: Fuel
         tap_action:
           action: more-info
@@ -60,198 +57,39 @@ views:
         tap_action:
           action: more-info
 
-      # ── Inverter ──
+      # ── Tires ──
       - type: custom:mushroom-template-badge
-        entity: binary_sensor.shelly_em_reachable
+        entity: sensor.wican_tyre_pressure_min
         icon: >
-          {{ 'mdi:power-plug' if is_state('binary_sensor.shelly_em_reachable', 'on') else 'mdi:power-plug-off' }}
-        content: >
-          {{ 'ON' if is_state('binary_sensor.shelly_em_reachable', 'on') else 'OFF' }}
+          {% set min_p = states('sensor.wican_tyre_pressure_min') | float(0) %}
+          {{ 'mdi:car-tire-alert' if min_p < 35 and min_p > 0 else 'mdi:tire' }}
+        content: "{{ states('sensor.wican_tyre_pressure_min') | float(0) | round(0) }} psi"
         color: >
-          {{ 'green' if is_state('binary_sensor.shelly_em_reachable', 'on') else 'grey' }}
-        label: Inverter
+          {% set min_p = states('sensor.wican_tyre_pressure_min') | float(0) %}
+          {{ 'red' if min_p < 35 and min_p > 0 else 'green' if min_p > 0 else 'grey' }}
+        label: Tires
         tap_action:
-          action: call-service
-          service: button.press
-          target:
-            entity_id: button.a32_pro_inverter_on_off_toggle
+          action: more-info
 
-    # ─────────────────────────────────────────────
-    #  SECTIONS
-    # ─────────────────────────────────────────────
+      # ── Check Engine ──
+      - type: custom:mushroom-template-badge
+        entity: binary_sensor.check_engine_light
+        icon: mdi:engine-outline
+        content: >
+          {% if is_state('binary_sensor.check_engine_light', 'on') %}
+            {{ states('sensor.dtc_count') }} DTC
+          {% else %}
+            Clear
+          {% endif %}
+        color: >
+          {{ 'red' if is_state('binary_sensor.check_engine_light', 'on') else 'green' }}
+        label: CEL
+        tap_action:
+          action: more-info
+
     sections:
-
       # ═══════════════════════════════════════════
-      #  COLUMN 1: Battery + Power while driving
-      # ═══════════════════════════════════════════
-      - type: grid
-        column_span: 1
-        cards:
-          # ── Battery hero card ──
-          - type: custom:button-card
-            entity: sensor.olins_van_bms_battery
-            show_name: false
-            show_state: false
-            show_icon: false
-            show_label: true
-            label: |
-              [[[
-                var soc = parseFloat(states['sensor.olins_van_bms_battery'].state);
-                var current = parseFloat(states['sensor.olins_van_bms_current'].state);
-                var voltage = parseFloat(states['sensor.olins_van_bms_voltage'].state);
-                var power = parseFloat(states['sensor.olins_van_bms_power'].state);
-                var stored = parseFloat(states['sensor.olins_van_bms_stored_energy'].state);
-                var temp = parseFloat(states['sensor.olins_van_bms_temperature'].state);
-
-                var socColor = soc < 30 ? 'var(--error-color)' : soc < 65 ? 'var(--warning-color)' : 'var(--success-color)';
-                var status = current > 0.5 ? 'Charging' : current < -0.5 ? 'Discharging' : 'Idle';
-                var statusColor = current > 0.5 ? 'var(--success-color)' : current < -0.5 ? 'var(--warning-color)' : 'var(--secondary-text-color)';
-
-                var timeStr = '';
-                if (current > 0.5) {
-                  var whRemaining = 8700 - stored;
-                  var hours = whRemaining / Math.abs(power);
-                  if (hours < 48) {
-                    var h = Math.floor(hours);
-                    var m = Math.round((hours - h) * 60);
-                    timeStr = h + 'h ' + m + 'm to full';
-                  }
-                } else if (current < -0.5) {
-                  var hours = stored / Math.abs(power);
-                  if (hours < 48) {
-                    var h = Math.floor(hours);
-                    var m = Math.round((hours - h) * 60);
-                    timeStr = h + 'h ' + m + 'm remaining';
-                  }
-                }
-
-                return `<div style="padding:2px 0;">
-                  <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:6px;">
-                    <span style="font-size:32px; font-weight:700; letter-spacing:-1px; color:${socColor};">${soc}%</span>
-                    <span style="font-size:13px; font-weight:500; color:${statusColor};">${status}</span>
-                  </div>
-                  <div style="width:100%; height:6px; background:var(--divider-color); border-radius:3px; margin-bottom:10px; overflow:hidden;">
-                    <div style="width:${soc}%; height:100%; background:${socColor}; border-radius:3px; transition:width 1s ease;"></div>
-                  </div>
-                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
-                    <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">Voltage</div>
-                      <div style="font-size:14px; font-weight:600;">${voltage.toFixed(1)}V</div>
-                    </div>
-                    <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">Current</div>
-                      <div style="font-size:14px; font-weight:600;">${current.toFixed(1)}A</div>
-                    </div>
-                    <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">Power</div>
-                      <div style="font-size:14px; font-weight:600;">${Math.abs(power).toFixed(0)}W</div>
-                    </div>
-                    <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">Temp</div>
-                      <div style="font-size:14px; font-weight:600;">${temp.toFixed(1)}°C</div>
-                    </div>
-                    <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">Stored</div>
-                      <div style="font-size:14px; font-weight:600;">${(stored/1000).toFixed(1)}kWh</div>
-                    </div>
-                    <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">Estimate</div>
-                      <div style="font-size:14px; font-weight:600;">${timeStr || '—'}</div>
-                    </div>
-                  </div>
-                </div>`;
-              ]]]
-            tap_action:
-              action: more-info
-            styles:
-              card:
-                - background: var(--card-background-color)
-                - border: 1px solid var(--divider-color)
-                - border-radius: 12px
-                - padding: 14px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
-              label:
-                - font-size: 14px
-                - color: var(--primary-text-color)
-                - text-align: left
-            grid_options:
-              columns: full
-              rows: auto
-
-          # ── Charging sources row ──
-          - type: custom:button-card
-            show_name: false
-            show_state: false
-            show_icon: false
-            show_label: true
-            label: |
-              [[[
-                var alt = parseFloat(states['sensor.alternator_charger_power_24v'].state) || 0;
-                var solar = parseFloat(states['sensor.total_mppt_pv_power'].state) || 0;
-                var shore = parseFloat(states['sensor.shore_power_charger_power_24v'].state) || 0;
-
-                var altColor = alt > 10 ? 'var(--success-color)' : 'var(--secondary-text-color)';
-                var solarColor = solar > 10 ? 'var(--warning-color)' : 'var(--secondary-text-color)';
-                var shoreColor = shore > 10 ? 'var(--info-color)' : 'var(--secondary-text-color)';
-
-                return `<div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px; text-align:center;">
-                  <div>
-                    <ha-icon icon="mdi:car-battery" style="--mdc-icon-size:20px; color:${altColor};"></ha-icon>
-                    <div style="font-size:16px; font-weight:700; margin-top:2px;">${alt.toFixed(0)}W</div>
-                    <div style="font-size:10px; color:var(--secondary-text-color);">Alternator</div>
-                  </div>
-                  <div>
-                    <ha-icon icon="mdi:solar-power-variant" style="--mdc-icon-size:20px; color:${solarColor};"></ha-icon>
-                    <div style="font-size:16px; font-weight:700; margin-top:2px;">${solar.toFixed(0)}W</div>
-                    <div style="font-size:10px; color:var(--secondary-text-color);">Solar</div>
-                  </div>
-                  <div>
-                    <ha-icon icon="mdi:ev-plug-type1" style="--mdc-icon-size:20px; color:${shoreColor};"></ha-icon>
-                    <div style="font-size:16px; font-weight:700; margin-top:2px;">${shore.toFixed(0)}W</div>
-                    <div style="font-size:10px; color:var(--secondary-text-color);">Shore</div>
-                  </div>
-                </div>`;
-              ]]]
-            styles:
-              card:
-                - background: var(--card-background-color)
-                - border: 1px solid var(--divider-color)
-                - border-radius: 12px
-                - padding: 12px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
-              label:
-                - font-size: 14px
-                - color: var(--primary-text-color)
-            grid_options:
-              columns: full
-              rows: 1
-
-          # ── Battery SOC history chart ──
-          - type: custom:apexcharts-card
-            header:
-              show: true
-              show_states: true
-              colorize_states: true
-              title: Battery SOC
-            graph_span: 4h
-            yaxis:
-              - min: 0
-                max: 100
-                decimals: 0
-            series:
-              - entity: sensor.olins_van_bms_battery
-                name: SOC
-                type: area
-                color: '#22c55e'
-                curve: smooth
-                stroke_width: 2
-                opacity: 0.15
-            grid_options:
-              columns: full
-              rows: auto
-
-      # ═══════════════════════════════════════════
-      #  COLUMN 2: Engine + Vehicle data
+      #  COLUMN 1 — Engine & Drivetrain
       # ═══════════════════════════════════════════
       - type: grid
         column_span: 1
@@ -264,69 +102,60 @@ views:
             show_label: true
             label: |
               [[[
-                var rpm = parseFloat(states['sensor.wican_rpm'].state) || 0;
-                var speed = parseFloat(states['sensor.wican_speed'].state) || 0;
-                var coolant = states['sensor.coolant_temp_last'] ? parseFloat(states['sensor.coolant_temp_last'].state) : 0;
-                var throttle = parseFloat(states['sensor.wican_throttle_position'].state) || 0;
-                var load = parseFloat(states['sensor.wican_engine_load'].state) || 0;
-                var ambient = states['sensor.ambient_air_temp_last'] ? parseFloat(states['sensor.ambient_air_temp_last'].state) : 0;
-
-                var rpmPct = Math.min(rpm / 6000 * 100, 100);
-                var rpmColor = rpm > 4000 ? 'var(--error-color)' : rpm > 2500 ? 'var(--warning-color)' : 'var(--success-color)';
-                var coolantColor = coolant > 105 ? 'var(--error-color)' : coolant > 95 ? 'var(--warning-color)' : 'var(--info-color)';
-
-                return `<div style="padding:2px 0;">
-                  <div style="display:flex; justify-content:space-between; align-items:baseline; margin-bottom:10px;">
-                    <div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">Speed</div>
-                      <div style="font-size:28px; font-weight:700; letter-spacing:-0.5px;">${speed.toFixed(0)} <span style="font-size:14px; font-weight:400;">km/h</span></div>
-                    </div>
-                    <div style="text-align:right;">
-                      <div style="font-size:11px; color:var(--secondary-text-color);">RPM</div>
-                      <div style="font-size:28px; font-weight:700; letter-spacing:-0.5px; color:${rpmColor};">${rpm.toFixed(0)}</div>
-                    </div>
+                function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
+                function fmt(n,d){ return isNaN(n)?'—':n.toFixed(d); }
+                var rpm=s('sensor.wican_rpm'), speed=s('sensor.wican_speed'),
+                    coolant=s('sensor.coolant_temp_last'), throttle=s('sensor.wican_throttle_position'),
+                    load=s('sensor.wican_engine_load'), ecuV=s('sensor.wican_control_module_voltage');
+                var gear=states['sensor.wican_gear_display']?states['sensor.wican_gear_display'].state:'—';
+                var running=states['binary_sensor.engine_is_running'].state==='on';
+                var runDot=running?'#22c55e':'#6b7280';
+                return `<div style="padding:4px 0;">
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+                    <div style="width:6px;height:6px;border-radius:50%;background:${runDot};"></div>
+                    <span style="font-size:13px; font-weight:600;">Engine</span>
+                    <span style="font-size:12px; color:var(--secondary-text-color);">3.5L EcoBoost V6</span>
                   </div>
-                  <div style="width:100%; height:4px; background:var(--divider-color); border-radius:2px; margin-bottom:12px; overflow:hidden;">
-                    <div style="width:${rpmPct}%; height:100%; background:${rpmColor}; border-radius:2px; transition:width 0.5s ease;"></div>
+                  <div style="display:flex; align-items:baseline; gap:12px; margin-bottom:14px;">
+                    <span style="font-variant-numeric:tabular-nums; font-size:36px; font-weight:700; letter-spacing:-0.025em; line-height:1;">${isNaN(rpm)?'—':rpm.toFixed(0)}</span>
+                    <span style="font-size:14px; color:var(--secondary-text-color);">RPM</span>
+                    <span style="font-size:14px; color:var(--secondary-text-color); margin-left:auto;">Gear: <b>${gear}</b></span>
                   </div>
-                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;">
                     <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">Coolant</div>
-                      <div style="font-size:14px; font-weight:600; color:${coolantColor};">${coolant.toFixed(1)}°C</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Speed</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${fmt(speed,0)} km/h</div>
                     </div>
                     <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">Throttle</div>
-                      <div style="font-size:14px; font-weight:600;">${throttle.toFixed(0)}%</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Coolant</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px; color:${isNaN(coolant)||coolant<105?'var(--primary-text-color)':'#ef4444'};">${fmt(coolant,0)}°C</div>
                     </div>
                     <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">Load</div>
-                      <div style="font-size:14px; font-weight:600;">${load.toFixed(0)}%</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Throttle</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${fmt(throttle,0)}%</div>
                     </div>
                     <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">Ambient</div>
-                      <div style="font-size:14px; font-weight:600;">${ambient.toFixed(1)}°C</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Load</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${fmt(load,0)}%</div>
                     </div>
                     <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">ECU Volt</div>
-                      <div style="font-size:14px; font-weight:600;">${(parseFloat(states['sensor.wican_control_module_voltage'].state) || 0).toFixed(1)}V</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">ECU Voltage</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${fmt(ecuV,1)}V</div>
                     </div>
                     <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">Fuel</div>
-                      <div style="font-size:14px; font-weight:600;">${(parseFloat(states['sensor.stable_fuel_level'].state) || 0).toFixed(0)}%</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Status</div>
+                      <div style="font-size:16px; font-weight:600; margin-top:2px; color:${running?'#22c55e':'var(--secondary-text-color)'};">${running?'Running':'Off'}</div>
                     </div>
                   </div>
                 </div>`;
               ]]]
-            tap_action:
-              action: more-info
-              entity: sensor.wican_rpm
             styles:
               card:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 14px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 20px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
@@ -335,7 +164,7 @@ views:
               columns: full
               rows: auto
 
-          # ── Road grade + driving status ──
+          # ── Tire pressures ──
           - type: custom:button-card
             show_name: false
             show_state: false
@@ -343,50 +172,161 @@ views:
             show_label: true
             label: |
               [[[
-                var grade = parseFloat(states['sensor.road_grade_percent'].state) || 0;
-                var gradeDeg = parseFloat(states['sensor.road_grade_deg'].state) || 0;
-                var hill = states['sensor.hill_aggression'] ? states['sensor.hill_aggression'].state.trim() : 'Flat';
-                var moving = states['binary_sensor.vehicle_is_moving'].state === 'on';
-                var stable = states['binary_sensor.vehicle_is_stable'].state === 'on';
+                function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
+                var fl=s('sensor.wican_tire_pressure_fl'), fr=s('sensor.wican_tire_pressure_fr'),
+                    rl=s('sensor.wican_tire_pressure_rl'), rr=s('sensor.wican_tire_pressure_rr');
+                function tc(p){ return isNaN(p)||p===0?'var(--secondary-text-color)':p<35?'#ef4444':'var(--primary-text-color)'; }
+                return `<div style="padding:4px 0;">
+                  <div style="font-size:13px; font-weight:600; margin-bottom:14px;">Tire Pressure (psi)</div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; text-align:center;">
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px;">
+                      <div style="font-size:10px; color:var(--secondary-text-color);">FL</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:20px; font-weight:700; color:${tc(fl)};">${isNaN(fl)||fl===0?'—':fl.toFixed(0)}</div>
+                    </div>
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px;">
+                      <div style="font-size:10px; color:var(--secondary-text-color);">FR</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:20px; font-weight:700; color:${tc(fr)};">${isNaN(fr)||fr===0?'—':fr.toFixed(0)}</div>
+                    </div>
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px;">
+                      <div style="font-size:10px; color:var(--secondary-text-color);">RL</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:20px; font-weight:700; color:${tc(rl)};">${isNaN(rl)||rl===0?'—':rl.toFixed(0)}</div>
+                    </div>
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px;">
+                      <div style="font-size:10px; color:var(--secondary-text-color);">RR</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:20px; font-weight:700; color:${tc(rr)};">${isNaN(rr)||rr===0?'—':rr.toFixed(0)}</div>
+                    </div>
+                  </div>
+                </div>`;
+              ]]]
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 16px 20px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)
+              label:
+                - font-size: 14px
+                - color: var(--primary-text-color)
+            grid_options:
+              columns: full
+              rows: auto
 
-                var gradeColor = Math.abs(grade) > 10 ? 'var(--error-color)' : Math.abs(grade) > 5 ? 'var(--warning-color)' : 'var(--success-color)';
-                var gradeIcon = grade > 3 ? 'mdi:arrow-top-right' : grade < -3 ? 'mdi:arrow-bottom-right' : 'mdi:arrow-right';
+          # ── Ford Mode 22 extras ──
+          - type: custom:button-card
+            show_name: false
+            show_state: false
+            show_icon: false
+            show_label: true
+            label: |
+              [[[
+                function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
+                function fmt(n,d){ return isNaN(n)?'—':n.toFixed(d); }
+                var transTemp=s('sensor.trans_temp_last'), oilLife=s('sensor.wican_oil_life'),
+                    fuelRate=s('sensor.wican_fuel_rate'), wastegate=s('sensor.wican_wastegate'),
+                    intakeTemp=s('sensor.wican_intake_air_temperature'), fuelPress=s('sensor.wican_fuel_pressure'),
+                    altDuty=s('sensor.wican_alternator_duty'), ambient=s('sensor.ambient_air_temp_last');
+                function row(label,val,unit,color){
+                  var c=color||'var(--primary-text-color)';
+                  return `<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--divider-color);">
+                    <span style="font-size:12px; font-weight:500; color:var(--secondary-text-color);">${label}</span>
+                    <span style="font-variant-numeric:tabular-nums; font-size:14px; font-weight:600; color:${c};">${val}${unit}</span>
+                  </div>`;
+                }
+                return `<div style="padding:2px 0;">
+                  <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Drivetrain Details</div>
+                  ${row('Trans Temp',fmt(transTemp,0),'°C',isNaN(transTemp)||transTemp<120?'':'#ef4444')}
+                  ${row('Oil Life',fmt(oilLife,0),'%',isNaN(oilLife)||oilLife>15?'':'#ef4444')}
+                  ${row('Fuel Rate',fmt(fuelRate,2),' g/s')}
+                  ${row('Wastegate',fmt(wastegate,0),'%')}
+                  ${row('Intake Temp',fmt(intakeTemp,0),'°C')}
+                  ${row('Fuel Pressure',fmt(fuelPress,0),' kPa')}
+                  ${row('Alt Duty',fmt(altDuty,0),'%')}
+                  ${row('Ambient',fmt(ambient,0),'°C')}
+                </div>`;
+              ]]]
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 16px 20px
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
+              label:
+                - font-size: 14px
+                - color: var(--primary-text-color)
+                - text-align: left
+            grid_options:
+              columns: full
+              rows: auto
 
-                return `<div style="display:flex; justify-content:space-between; align-items:center;">
-                  <div style="display:flex; align-items:center; gap:10px;">
-                    <ha-icon icon="${gradeIcon}" style="--mdc-icon-size:24px; color:${gradeColor};"></ha-icon>
+      # ═══════════════════════════════════════════
+      #  COLUMN 2 — Fuel, Road Grade, Charts
+      # ═══════════════════════════════════════════
+      - type: grid
+        column_span: 1
+        cards:
+          # ── Fuel hero ──
+          - type: custom:button-card
+            entity: sensor.stable_fuel_level
+            show_name: false
+            show_state: false
+            show_icon: false
+            show_label: true
+            label: |
+              [[[
+                function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
+                var fuel=s('sensor.stable_fuel_level'), rawFuel=s('sensor.wican_fuel'),
+                    meanFuel=s('sensor.wican_fuel_5_min_mean'),
+                    l100=s('sensor.fuel_consumption_l100km'), lh=s('sensor.fuel_consumption_lh');
+                var fuelColor=isNaN(fuel)||fuel<15?'#ef4444':fuel<30?'#f59e0b':'#22c55e';
+                return `<div style="padding:4px 0;">
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+                    <div style="width:6px;height:6px;border-radius:50%;background:${fuelColor};"></div>
+                    <span style="font-size:13px; font-weight:600;">Fuel</span>
+                    <span style="font-size:12px; color:var(--secondary-text-color);">94.6 L tank (25 gal)</span>
+                  </div>
+                  <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:8px;">
+                    <span style="font-variant-numeric:tabular-nums; font-size:36px; font-weight:700; letter-spacing:-0.025em; color:${fuelColor};">${isNaN(fuel)?'—':fuel.toFixed(0)+'%'}</span>
+                    <span style="font-size:13px; color:var(--secondary-text-color);">≈ ${isNaN(fuel)?'—':(fuel*0.946).toFixed(1)+'L'}</span>
+                  </div>
+                  <div style="width:100%; height:8px; background:var(--divider-color); border-radius:4px; margin-bottom:16px; overflow:hidden;">
+                    <div style="width:${isNaN(fuel)?0:fuel}%; height:100%; background:linear-gradient(90deg, ${fuelColor}, ${fuelColor}dd); border-radius:4px; transition:width 1s ease;"></div>
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;">
                     <div>
-                      <div style="font-size:18px; font-weight:700; color:${gradeColor};">${grade.toFixed(1)}%</div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">${hill} · ${gradeDeg.toFixed(1)}°</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Economy</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${isNaN(l100)?'—':l100.toFixed(1)} L/100</div>
                     </div>
-                  </div>
-                  <div style="display:flex; gap:12px;">
-                    <div style="text-align:center;">
-                      <ha-icon icon="${moving ? 'mdi:car' : 'mdi:car-brake-parking'}" style="--mdc-icon-size:18px; color:${moving ? 'var(--info-color)' : 'var(--secondary-text-color)'};"></ha-icon>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">${moving ? 'Moving' : 'Parked'}</div>
+                    <div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Rate</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${isNaN(lh)?'—':lh.toFixed(1)} L/h</div>
                     </div>
-                    <div style="text-align:center;">
-                      <ha-icon icon="${stable ? 'mdi:check-circle' : 'mdi:car-speed-limiter'}" style="--mdc-icon-size:18px; color:${stable ? 'var(--success-color)' : 'var(--warning-color)'};"></ha-icon>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">${stable ? 'Stable' : 'Accel'}</div>
+                    <div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">5m Mean</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${isNaN(meanFuel)?'—':meanFuel.toFixed(0)}%</div>
                     </div>
                   </div>
                 </div>`;
               ]]]
+            tap_action:
+              action: more-info
             styles:
               card:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 12px 16px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 20px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
+                - text-align: left
             grid_options:
               columns: full
-              rows: 1
+              rows: auto
 
-          # ── Temperatures ──
+          # ── Road grade ──
           - type: custom:button-card
             show_name: false
             show_state: false
@@ -394,26 +334,19 @@ views:
             show_label: true
             label: |
               [[[
-                var t1 = parseFloat(states['sensor.a32_pro_bme280_1_temperature'].state);
-                var t2 = parseFloat(states['sensor.a32_pro_bme280_2_temperature'].state);
-                var t4 = parseFloat(states['sensor.a32_pro_bme280_4_temperature'].state);
-                var h1 = parseFloat(states['sensor.a32_pro_bme280_1_relative_humidity'].state);
-
-                return `<div style="display:flex; gap:20px; justify-content:center; align-items:center; padding:2px 0;">
-                  <div style="text-align:center;">
-                    <div style="font-size:22px; font-weight:600;">${t1.toFixed(1)}°</div>
-                    <div style="font-size:10px; color:var(--secondary-text-color);">Inside · ${h1.toFixed(0)}%</div>
+                function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
+                var deg=s('sensor.road_grade_deg'), pct=s('sensor.road_grade_percent_last');
+                var hill=states['sensor.hill_aggression']?states['sensor.hill_aggression'].state:'Flat';
+                var color=isNaN(pct)?'var(--secondary-text-color)':Math.abs(pct)<3?'#22c55e':Math.abs(pct)<7?'#f59e0b':'#ef4444';
+                return `<div style="padding:4px 0;">
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                    <span style="font-size:13px; font-weight:600;">Road Grade</span>
                   </div>
-                  <div style="width:1px; height:28px; background:var(--divider-color);"></div>
-                  <div style="text-align:center;">
-                    <div style="font-size:22px; font-weight:600;">${t2.toFixed(1)}°</div>
-                    <div style="font-size:10px; color:var(--secondary-text-color);">Cab</div>
+                  <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:8px;">
+                    <span style="font-variant-numeric:tabular-nums; font-size:28px; font-weight:700; letter-spacing:-0.025em; color:${color};">${isNaN(pct)?'—':pct.toFixed(1)+'%'}</span>
+                    <span style="font-size:13px; color:var(--secondary-text-color);">${isNaN(deg)?'':'('+deg.toFixed(1)+'°)'}</span>
                   </div>
-                  <div style="width:1px; height:28px; background:var(--divider-color);"></div>
-                  <div style="text-align:center;">
-                    <div style="font-size:22px; font-weight:600;">${t4.toFixed(1)}°</div>
-                    <div style="font-size:10px; color:var(--secondary-text-color);">Outside</div>
-                  </div>
+                  <div style="font-size:12px; color:var(--secondary-text-color);">${hill}</div>
                 </div>`;
               ]]]
             styles:
@@ -421,22 +354,23 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 10px 14px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 16px 20px
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
+                - text-align: left
             grid_options:
               columns: full
-              rows: 1
+              rows: auto
 
-          # ── Fuel level chart ──
+          # ── Fuel level chart 24h ──
           - type: custom:apexcharts-card
             header:
               show: true
               show_states: true
               colorize_states: true
-              title: Fuel Level
+              title: Fuel Level (24h)
             graph_span: 24h
             yaxis:
               - min: 0
@@ -444,33 +378,84 @@ views:
                 decimals: 0
             series:
               - entity: sensor.stable_fuel_level
-                name: Fuel
+                name: Stable
                 type: area
-                color: '#f59e0b'
+                color: '#22c55e'
                 curve: stepline
                 stroke_width: 2
-                opacity: 0.15
+                opacity: 0.1
+              - entity: sensor.wican_fuel
+                name: Raw OBD
+                type: line
+                color: '#6b7280'
+                curve: smooth
+                stroke_width: 1
+                opacity: 0.5
             grid_options:
               columns: full
               rows: auto
 
-          # ── Road grade chart ──
-          - type: custom:apexcharts-card
-            header:
-              show: true
-              show_states: true
-              colorize_states: true
-              title: Road Grade
-            graph_span: 30min
-            yaxis:
-              - decimals: 1
-            series:
-              - entity: sensor.road_grade_percent
-                name: Grade %
-                type: line
-                color: '#8b5cf6'
-                curve: smooth
-                stroke_width: 2
+          # ── Road grade chart 1h ──
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: binary_sensor.engine_is_running
+                state: 'on'
+            card:
+              type: custom:apexcharts-card
+              header:
+                show: true
+                show_states: true
+                colorize_states: true
+                title: Road Grade (1h)
+              graph_span: 1h
+              yaxis:
+                - decimals: 1
+              series:
+                - entity: sensor.road_grade_percent_last
+                  name: Grade %
+                  type: area
+                  color: '#f59e0b'
+                  curve: smooth
+                  stroke_width: 2
+                  opacity: 0.1
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Engine temps 6h ──
+          - type: conditional
+            conditions:
+              - condition: state
+                entity: binary_sensor.engine_is_running
+                state: 'on'
+            card:
+              type: custom:apexcharts-card
+              header:
+                show: true
+                show_states: true
+                colorize_states: true
+                title: Engine Temps (6h)
+              graph_span: 6h
+              series:
+                - entity: sensor.coolant_temp_last
+                  name: Coolant
+                  type: line
+                  color: '#ef4444'
+                  curve: smooth
+                  stroke_width: 2
+                - entity: sensor.trans_temp_last
+                  name: Trans
+                  type: line
+                  color: '#f59e0b'
+                  curve: smooth
+                  stroke_width: 2
+                - entity: sensor.ambient_air_temp_last
+                  name: Ambient
+                  type: line
+                  color: '#3b82f6'
+                  curve: smooth
+                  stroke_width: 1.5
             grid_options:
               columns: full
               rows: auto

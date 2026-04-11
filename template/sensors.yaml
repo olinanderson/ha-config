@@ -19,8 +19,9 @@
       unique_id: coolant_temp_last
       unit_of_measurement: "°C"
       state: >
-        {% if states('sensor.wican_coolant_temperature') not in ['unknown','unavailable'] %}
-          {{ states('sensor.wican_coolant_temperature') }}
+        {% set v = states('sensor.wican_coolant_temperature') %}
+        {% if v not in ['unknown','unavailable'] and v | float(-99) > -39 %}
+          {{ v }}
         {% else %}
           {{ this.state if this.state not in ['unknown','unavailable'] else '0' }}
         {% endif %}
@@ -92,30 +93,32 @@
         {{ ((mppt1_kwh + mppt2_kwh) * 1000) | round(2) }}
 
     # ─── Propane tank calculations ───
+    # Standard 20 lb BBQ propane tank with 2:1 ellipsoidal heads
+    # Mopeka Pro Check F317 ultrasonic sensor on tank bottom
+    # Sensor reports liquid height in mm (HA integration applies propane medium coefficient)
     - name: Propane Tank Percentage
       unique_id: propane_tank_percentage
       unit_of_measurement: "%"
       state: >
-        {% set wall   = 3.175 %}
+        {% set R      = 149.2 %}
+        {% set Ec     = R / 2 %}
         {% set side   = 203.0 %}
-        {% set R      = (304.0 - 2*wall) / 2 %}
-        {% set H      = side + R %}
-        {% set Ec = R / 2 %}
+        {% set H      = side + 2*Ec %}
         {% set d_raw = states('sensor.pro_check_f317_tank_level') | float(0) %}
-        {% set h_liq = [ [ d_raw - wall, 0 ] | max, H ] | min %}
-        {% set V_hemi = (1/3) * pi * R**3 %}
+        {% set h_liq = [ [ d_raw, 0 ] | max, H ] | min %}
+        {% set V_cap  = (2/3) * pi * R**2 * Ec %}
         {% set V_cyl  = side * pi * R**2 %}
-        {% set V_max  = 2*V_hemi + V_cyl %}
+        {% set V_max  = 2*V_cap + V_cyl %}
         {% if h_liq <= Ec %}
-          {% set V_liq = pi*R**2 * ((2/3)*h_liq - (h_liq**3)/(3*Ec**2)) %}
+          {% set V_liq = pi*R**2 * (h_liq**2/Ec - h_liq**3/(3*Ec**2)) %}
         {% elif h_liq <= Ec + side %}
-          {% set V_liq = V_hemi + (h_liq - Ec)*pi*R**2 %}
+          {% set V_liq = V_cap + (h_liq - Ec)*pi*R**2 %}
         {% else %}
           {% set h2 = h_liq - (Ec + side) %}
-          {% set V_liq = V_hemi + V_cyl +
-                          pi*R**2 * ((2/3)*h2 - (h2**3)/(3*Ec**2)) %}
+          {% set V_liq = V_cap + V_cyl +
+                          pi*R**2 * (h2**2/Ec - h2**3/(3*Ec**2)) %}
         {% endif %}
-        {{ (100 * V_liq / (0.8 * V_max)) | round(1) }}
+        {{ [ (100 * V_liq / (0.8 * V_max)) | round(1), 100 ] | min }}
 
     - name: "Propane – Raw Distance"
       unit_of_measurement: mm
@@ -123,13 +126,19 @@
 
     - name: "Propane – Liquid Depth"
       unit_of_measurement: mm
-      state: "{{ (states('sensor.pro_check_f317_tank_level') | float(0)) - 3.175 }}"
+      state: "{{ states('sensor.pro_check_f317_tank_level') | float(0) }}"
 
     - name: "Propane – Liquid Volume"
       unit_of_measurement: L
       state: >
         {% set pct = states('sensor.propane_tank_percentage') | float(0) %}
-        {{ (pct / 100 * 0.8 * 21.0) | round(2) }}
+        {% set R = 149.2 %}
+        {% set Ec = R / 2 %}
+        {% set side = 203.0 %}
+        {% set V_cap = (2/3) * pi * R**2 * Ec %}
+        {% set V_cyl = side * pi * R**2 %}
+        {% set V_max = 2*V_cap + V_cyl %}
+        {{ (pct / 100 * 0.8 * V_max / 1000000) | round(2) }}
 
     # ─── Power sensors (24V / 12V) ───
     - name: "Air Conditioning Power (24V)"
@@ -251,9 +260,9 @@
       state_class: measurement
       icon: mdi:gas-station
       state: >
-        {% set rate_gs = states('sensor.wican_fuel_rate') | float(0) %}
+        {% set rate_gs = states('sensor.wican_wican_fuel_rate') | float(0) %}
         {% set speed = states('sensor.wican_speed') | float(0) %}
-        {% if rate_gs > 0 and speed > 5 %}
+        {% if rate_gs > 0 and speed > 5 and speed < 255 %}
           {% set l_per_h = rate_gs * 3600 / 755 %}
           {{ (l_per_h / speed * 100) | round(1) }}
         {% else %}
@@ -266,7 +275,7 @@
       state_class: measurement
       icon: mdi:gas-station-outline
       state: >
-        {% set rate_gs = states('sensor.wican_fuel_rate') | float(0) %}
+        {% set rate_gs = states('sensor.wican_wican_fuel_rate') | float(0) %}
         {% if rate_gs > 0 %}
           {{ (rate_gs * 3600 / 755) | round(2) }}
         {% else %}
@@ -278,8 +287,8 @@
       unit_of_measurement: "°C"
       icon: mdi:car-cog
       state: >
-        {% if states('sensor.wican_transmission_temperature') not in ['unknown','unavailable'] %}
-          {{ states('sensor.wican_transmission_temperature') }}
+        {% if states('sensor.wican_wican_transmission_temperature') not in ['unknown','unavailable'] %}
+          {{ states('sensor.wican_wican_transmission_temperature') }}
         {% else %}
           {{ this.state if this.state not in ['unknown','unavailable'] else '0' }}
         {% endif %}
@@ -288,7 +297,7 @@
       unique_id: wican_gear_display
       icon: mdi:car-shift-pattern
       state: >
-        {% set g = states('sensor.wican_current_gear') | int(-1) %}
+        {% set g = states('sensor.wican_wican_current_gear') | int(-1) %}
         {% if g == 0 %}Park
         {% elif g == 255 %}Reverse
         {% elif g >= 1 and g <= 6 %}{{ g }}
@@ -302,11 +311,11 @@
       device_class: pressure
       icon: mdi:car-tire-alert
       state: >
-        {% set fl = states('sensor.wican_tire_pressure_fl') | float(0) %}
-        {% set fr = states('sensor.wican_tire_pressure_fr') | float(0) %}
-        {% set rl = states('sensor.wican_tire_pressure_rl') | float(0) %}
-        {% set rr = states('sensor.wican_tire_pressure_rr') | float(0) %}
-        {% set pressures = [fl, fr, rl, rr] | select('gt', 0) | list %}
+        {% set fl = states('sensor.wican_wican_tire_pressure_fl') | float(0) %}
+        {% set fr = states('sensor.wican_wican_tire_pressure_fr') | float(0) %}
+        {% set rl = states('sensor.wican_wican_tire_pressure_rl') | float(0) %}
+        {% set rr = states('sensor.wican_wican_tire_pressure_rr') | float(0) %}
+        {% set pressures = [fl, fr, rl, rr] | select('gt', 0) | reject('gt', 120) | list %}
         {{ pressures | min | round(1) if pressures | length > 0 else 0 }}
 
     # ─── Check Engine Light / MIL (from PID 0x01 Monitor Status) ───
@@ -316,4 +325,4 @@
       icon: mdi:car-wrench
       state_class: measurement
       state: >
-        {{ states('sensor.wican_monitor_status_raw') | int(0) % 128 }}
+        {{ states('sensor.wican_wican_monitor_status_raw') | int(0) % 128 }}

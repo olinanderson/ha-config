@@ -71,6 +71,7 @@
   state_class: measurement
   unit_of_measurement: "km/h"
   value_template: "{{ value_json.get('0D-VehicleSpeed') | float }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -84,6 +85,7 @@
   state_class: measurement
   unit_of_measurement: "%"
   value_template: "{{ value_json.get('2F-FuelTankLevel') | float | round(2) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -98,6 +100,7 @@
   state_class: measurement
   unit_of_measurement: "°C"
   value_template: "{{ value_json.get('05-EngineCoolantTemp') | float }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -111,6 +114,7 @@
   state_class: measurement
   unit_of_measurement: "rpm"
   value_template: "{{ value_json.get('0C-EngineRPM') | float }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -124,6 +128,7 @@
   state_class: measurement
   unit_of_measurement: "%"
   value_template: "{{ value_json.get('11-ThrottlePosition') | float | round(2) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -138,6 +143,7 @@
   state_class: measurement
   unit_of_measurement: "km"
   value_template: "{{ value_json.get('21-DistanceMILOn') | float | round(1) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -151,6 +157,7 @@
   state_class: measurement
   unit_of_measurement: "%"
   value_template: "{{ value_json.get('04-CalcEngineLoad') | float | round(2) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -165,6 +172,7 @@
   state_class: measurement
   unit_of_measurement: "V"
   value_template: "{{ value_json.get('42-ControlModuleVolt') | float | round(2) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -179,11 +187,86 @@
   state_class: measurement
   unit_of_measurement: "°C"
   value_template: "{{ value_json.get('46-AmbientAirTemp') | float | round(1) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
     model: "WiCAN OBD"
     name: "WiCAN"
+
+# ─── WiCAN RAW debug sensors for Mode 22 / Ford PIDs ───
+# These capture the full MQTT payload from Mode 22 topics
+# for post-drive analysis (especially tire pressure raw bytes).
+- name: "WiCAN RAW Tire Pressure FL"
+  unique_id: wican_raw_tyre_p_fl
+  state_topic: "wican/tyre_p_fl"
+  value_template: "{{ value }}"
+
+- name: "WiCAN RAW Tire Pressure FR"
+  unique_id: wican_raw_tyre_p_fr
+  state_topic: "wican/tyre_p_fr"
+  value_template: "{{ value }}"
+
+- name: "WiCAN RAW Tire Pressure RL"
+  unique_id: wican_raw_tyre_p_rl
+  state_topic: "wican/tyre_p_rl"
+  value_template: "{{ value }}"
+
+- name: "WiCAN RAW Tire Pressure RR"
+  unique_id: wican_raw_tyre_p_rr
+  state_topic: "wican/tyre_p_rr"
+  value_template: "{{ value }}"
+
+- name: "WiCAN RAW Transmission Temp"
+  unique_id: wican_raw_trans_temp
+  state_topic: "wican/trans_temp"
+  value_template: "{{ value }}"
+
+- name: "WiCAN RAW Current Gear"
+  unique_id: wican_raw_gear
+  state_topic: "wican/gear"
+  value_template: "{{ value }}"
+
+- name: "WiCAN RAW Oil Life"
+  unique_id: wican_raw_oil_life
+  state_topic: "wican/oil_life"
+  value_template: "{{ value }}"
+
+- name: "WiCAN RAW Fuel Rate"
+  unique_id: wican_raw_fuel_rate
+  state_topic: "wican/fuel_rate"
+  value_template: "{{ value }}"
+
+- name: "WiCAN RAW Wastegate"
+  unique_id: wican_raw_wastegate
+  state_topic: "wican/wastegate"
+  value_template: "{{ value }}"
+
+- name: "WiCAN RAW Intake Air Temp"
+  unique_id: wican_raw_intake_air_temp
+  state_topic: "wican/intake_air_temp"
+  value_template: "{{ value }}"
+
+- name: "WiCAN RAW Fuel Pressure"
+  unique_id: wican_raw_fuel_pressure
+  state_topic: "wican/fuel_pressure"
+  value_template: "{{ value }}"
+
+- name: "WiCAN RAW Alternator Duty"
+  unique_id: wican_raw_alt_duty
+  state_topic: "wican/alt_duty"
+  value_template: "{{ value }}"
+
+- name: "WiCAN RAW Monitor Status"
+  unique_id: wican_raw_monitor_status
+  state_topic: "wican/monitor_status"
+  value_template: "{{ value }}"
+
+# ─── WiCAN raw CAN frame monitor (for manual queries & DTC responses) ───
+- name: "WiCAN TX Raw Frame"
+  unique_id: wican_tx_raw_frame
+  state_topic: "wican/tx"
+  value_template: "{{ value[:255] }}"
 
 # ─── WiCAN Ford-Specific PIDs (Mode 22, WiCAN Pro) ───
 # TPMS — Tire Pressure Monitoring (IPC module via ATSH000726)
@@ -195,6 +278,7 @@
   state_class: measurement
   unit_of_measurement: "psi"
   value_template: "{{ value_json.get('TYRE_P_FL') | float | round(1) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -209,6 +293,7 @@
   state_class: measurement
   unit_of_measurement: "psi"
   value_template: "{{ value_json.get('TYRE_P_FR') | float | round(1) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -223,6 +308,7 @@
   state_class: measurement
   unit_of_measurement: "psi"
   value_template: "{{ value_json.get('TYRE_P_RL') | float | round(1) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -237,6 +323,7 @@
   state_class: measurement
   unit_of_measurement: "psi"
   value_template: "{{ value_json.get('TYRE_P_RR') | float | round(1) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -252,6 +339,7 @@
   state_class: measurement
   unit_of_measurement: "°C"
   value_template: "{{ value_json.get('TRAN_F_TEMP') | float | round(1) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -264,6 +352,7 @@
   icon: mdi:car-shift-pattern
   state_class: measurement
   value_template: "{{ value_json.get('GEAR') | int }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -277,6 +366,7 @@
   state_class: measurement
   unit_of_measurement: "%"
   value_template: "{{ value_json.get('OIL_LIFE') | float | round(0) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -291,6 +381,7 @@
   state_class: measurement
   unit_of_measurement: "g/s"
   value_template: "{{ value_json.get('FUEL_RATE') | float | round(2) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -304,6 +395,7 @@
   state_class: measurement
   unit_of_measurement: "%"
   value_template: "{{ value_json.get('WASTEGATE') | float | round(1) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -318,6 +410,7 @@
   state_class: measurement
   unit_of_measurement: "°C"
   value_template: "{{ value_json.get('INTAKE_AIR_TMP') | float | round(1) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -332,6 +425,7 @@
   state_class: measurement
   unit_of_measurement: "kPa"
   value_template: "{{ value_json.get('FUEL_PRESSURE') | float | round(0) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -345,6 +439,7 @@
   state_class: measurement
   unit_of_measurement: "%"
   value_template: "{{ value_json.get('ALT_DUTY') | float | round(0) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"
@@ -358,6 +453,7 @@
   icon: mdi:car-wrench
   state_class: measurement
   value_template: "{{ value_json.get('MONITOR_STATUS') | int(0) }}"
+  expire_after: 120
   device:
     identifiers: ["WiCAN"]
     manufacturer: "MeatPi"

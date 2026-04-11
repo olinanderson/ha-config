@@ -1,0 +1,432 @@
+title: Water & Propane
+views:
+  - title: Water & Propane
+    path: water-propane
+    icon: mdi:water
+
+    # ─────────────────────────────────────────────
+    #  BADGE BAR — tank levels at a glance
+    # ─────────────────────────────────────────────
+    badges:
+      # ── Fresh Water ──
+      - type: custom:mushroom-template-badge
+        entity: sensor.a32_pro_fresh_water_tank_level
+        icon: >
+          {{ 'mdi:water-off' if states('sensor.a32_pro_fresh_water_tank_level') | float(0) < 20 else 'mdi:water' }}
+        content: "{{ states('sensor.a32_pro_fresh_water_tank_level') }}%"
+        color: >
+          {% set v = states('sensor.a32_pro_fresh_water_tank_level') | float(0) %}
+          {{ 'red' if v < 20 else 'orange' if v < 50 else 'green' }}
+        label: Fresh
+        tap_action:
+          action: more-info
+
+      # ── Grey Water ──
+      - type: custom:mushroom-template-badge
+        entity: sensor.a32_pro_grey_water_tank_level
+        icon: mdi:water-opacity
+        content: "{{ states('sensor.a32_pro_grey_water_tank_level') }}%"
+        color: >
+          {% set v = states('sensor.a32_pro_grey_water_tank_level') | float(0) %}
+          {{ 'red' if v > 80 else 'orange' if v > 60 else 'green' }}
+        label: Grey
+        tap_action:
+          action: more-info
+
+      # ── Propane ──
+      - type: custom:mushroom-template-badge
+        entity: sensor.propane_tank_percentage
+        icon: mdi:propane-tank
+        content: "{{ states('sensor.propane_tank_percentage') | round(0) }}%"
+        color: >
+          {% set v = states('sensor.propane_tank_percentage') | float(0) %}
+          {{ 'red' if v < 15 else 'orange' if v < 30 else 'green' }}
+        label: Propane
+        tap_action:
+          action: more-info
+
+      # ── Water System ──
+      - type: custom:mushroom-template-badge
+        entity: switch.a32_pro_water_system_master_switch
+        icon: >
+          {{ 'mdi:water-pump' if is_state('switch.a32_pro_water_system_master_switch', 'on') else 'mdi:water-pump-off' }}
+        content: >
+          {{ 'ON' if is_state('switch.a32_pro_water_system_master_switch', 'on') else 'OFF' }}
+        color: >
+          {{ 'green' if is_state('switch.a32_pro_water_system_master_switch', 'on') else 'grey' }}
+        label: Water
+        tap_action:
+          action: toggle
+          entity: switch.a32_pro_water_system_master_switch
+
+      # ── LPG Valve ──
+      - type: custom:mushroom-template-badge
+        entity: switch.a32_pro_switch16_lpg_valve
+        icon: >
+          {{ 'mdi:valve-open' if is_state('switch.a32_pro_switch16_lpg_valve', 'on') else 'mdi:valve-closed' }}
+        content: >
+          {{ 'Open' if is_state('switch.a32_pro_switch16_lpg_valve', 'on') else 'Closed' }}
+        color: >
+          {{ 'orange' if is_state('switch.a32_pro_switch16_lpg_valve', 'on') else 'grey' }}
+        label: LPG
+        tap_action:
+          action: toggle
+          entity: switch.a32_pro_switch16_lpg_valve
+
+    # ─────────────────────────────────────────────
+    #  SECTIONS
+    # ─────────────────────────────────────────────
+    sections:
+
+      # ═══════════════════════════════════════════
+      #  COLUMN 1: Water system
+      # ═══════════════════════════════════════════
+      - type: grid
+        column_span: 1
+        cards:
+          # ── Water tanks hero ──
+          - type: custom:button-card
+            show_name: false
+            show_state: false
+            show_icon: false
+            show_label: true
+            label: |
+              [[[
+                var fresh = parseFloat(states['sensor.a32_pro_fresh_water_tank_level'].state) || 0;
+                var grey = parseFloat(states['sensor.a32_pro_grey_water_tank_level'].state) || 0;
+
+                var freshColor = fresh < 20 ? 'var(--error-color)' : fresh < 50 ? 'var(--warning-color)' : 'var(--info-color)';
+                var greyColor = grey > 80 ? 'var(--error-color)' : grey > 60 ? 'var(--warning-color)' : 'var(--success-color)';
+
+                function tankBar(label, pct, color, icon, invert) {
+                  return `<div style="flex:1;">
+                    <div style="display:flex; align-items:center; gap:6px; margin-bottom:6px;">
+                      <ha-icon icon="${icon}" style="--mdc-icon-size:18px; color:${color};"></ha-icon>
+                      <span style="font-size:11px; font-weight:600; color:var(--secondary-text-color);">${label}</span>
+                      <span style="font-size:18px; font-weight:700; margin-left:auto; color:${color};">${pct.toFixed(0)}%</span>
+                    </div>
+                    <div style="width:100%; height:8px; background:var(--divider-color); border-radius:4px; overflow:hidden;">
+                      <div style="width:${pct}%; height:100%; background:${color}; border-radius:4px; transition:width 1s ease;"></div>
+                    </div>
+                  </div>`;
+                }
+
+                return `<div style="display:flex; flex-direction:column; gap:16px; padding:4px 0;">
+                  ${tankBar('Fresh Water', fresh, freshColor, 'mdi:water', false)}
+                  ${tankBar('Grey Water', grey, greyColor, 'mdi:water-opacity', true)}
+                </div>`;
+              ]]]
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 14px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+              label:
+                - font-size: 14px
+                - color: var(--primary-text-color)
+                - text-align: left
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Water system controls ──
+          - type: custom:button-card
+            show_name: false
+            show_state: false
+            show_icon: false
+            show_label: true
+            label: |
+              [[[
+                var master = states['switch.a32_pro_water_system_master_switch'].state === 'on';
+                var main = states['switch.a32_pro_water_system_state_main'].state === 'on';
+                var recirc = states['switch.a32_pro_water_system_state_recirculating_shower'].state === 'on';
+                var greyValve = states['switch.a32_pro_switch06_grey_water_tank_valve'].state === 'on';
+
+                var mode = main ? 'Main' : recirc ? 'Recirc Shower' : 'Off';
+                var modeColor = master ? 'var(--info-color)' : 'var(--secondary-text-color)';
+
+                return `<div style="padding:2px 0;">
+                  <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--secondary-text-color); margin-bottom:8px;">Water System</div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:10px;">
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px; text-align:center;">
+                      <ha-icon icon="${master ? 'mdi:water-pump' : 'mdi:water-pump-off'}" style="--mdc-icon-size:24px; color:${master ? 'var(--info-color)' : 'var(--secondary-text-color)'};"></ha-icon>
+                      <div style="font-size:14px; font-weight:600; margin-top:4px;">${master ? 'ON' : 'OFF'}</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Master</div>
+                    </div>
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px; text-align:center;">
+                      <ha-icon icon="mdi:${main ? 'faucet' : recirc ? 'shower' : 'water-off'}" style="--mdc-icon-size:24px; color:${modeColor};"></ha-icon>
+                      <div style="font-size:14px; font-weight:600; margin-top:4px;">${mode}</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Mode</div>
+                    </div>
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px; text-align:center;">
+                      <ha-icon icon="mdi:${greyValve ? 'valve-open' : 'valve-closed'}" style="--mdc-icon-size:24px; color:${greyValve ? 'var(--warning-color)' : 'var(--secondary-text-color)'};"></ha-icon>
+                      <div style="font-size:14px; font-weight:600; margin-top:4px;">${greyValve ? 'Open' : 'Closed'}</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Grey Valve</div>
+                    </div>
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px; text-align:center;">
+                      <ha-icon icon="mdi:shower-head" style="--mdc-icon-size:24px; color:${recirc ? 'var(--info-color)' : 'var(--secondary-text-color)'};"></ha-icon>
+                      <div style="font-size:14px; font-weight:600; margin-top:4px;">${recirc ? 'Active' : 'Off'}</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Recirc</div>
+                    </div>
+                  </div>
+                </div>`;
+              ]]]
+            tap_action:
+              action: more-info
+              entity: switch.a32_pro_water_system_master_switch
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 14px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+              label:
+                - font-size: 14px
+                - color: var(--primary-text-color)
+                - text-align: left
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Water tank history 24h ──
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              show_states: true
+              colorize_states: true
+              title: Tank Levels (24h)
+            graph_span: 24h
+            yaxis:
+              - min: 0
+                max: 100
+                decimals: 0
+            series:
+              - entity: sensor.a32_pro_fresh_water_tank_level
+                name: Fresh
+                type: area
+                color: '#3b82f6'
+                curve: stepline
+                stroke_width: 2
+                opacity: 0.15
+              - entity: sensor.a32_pro_grey_water_tank_level
+                name: Grey
+                type: area
+                color: '#6b7280'
+                curve: stepline
+                stroke_width: 2
+                opacity: 0.15
+            grid_options:
+              columns: full
+              rows: auto
+
+      # ═══════════════════════════════════════════
+      #  COLUMN 2: Propane + Safety
+      # ═══════════════════════════════════════════
+      - type: grid
+        column_span: 1
+        cards:
+          # ── Propane hero ──
+          - type: custom:button-card
+            entity: sensor.propane_tank_percentage
+            show_name: false
+            show_state: false
+            show_icon: false
+            show_label: true
+            label: |
+              [[[
+                var pct = parseFloat(states['sensor.propane_tank_percentage'].state) || 0;
+                var vol = parseFloat(states['sensor.propane_liquid_volume'].state) || 0;
+                var depth = parseFloat(states['sensor.propane_liquid_depth'].state) || 0;
+                var raw = parseFloat(states['sensor.propane_raw_distance'].state) || 0;
+                var lpgOpen = states['switch.a32_pro_switch16_lpg_valve'].state === 'on';
+
+                var pctColor = pct < 15 ? 'var(--error-color)' : pct < 30 ? 'var(--warning-color)' : 'var(--success-color)';
+
+                return `<div style="padding:2px 0;">
+                  <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--secondary-text-color); margin-bottom:8px;">Propane Tank</div>
+                  <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:6px;">
+                    <ha-icon icon="mdi:propane-tank" style="--mdc-icon-size:28px; color:${pctColor};"></ha-icon>
+                    <span style="font-size:32px; font-weight:700; letter-spacing:-1px; color:${pctColor};">${pct.toFixed(0)}%</span>
+                  </div>
+                  <div style="width:100%; height:6px; background:var(--divider-color); border-radius:3px; margin-bottom:10px; overflow:hidden;">
+                    <div style="width:${Math.min(pct, 100)}%; height:100%; background:${pctColor}; border-radius:3px; transition:width 1s ease;"></div>
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Volume</div>
+                      <div style="font-size:14px; font-weight:600;">${vol.toFixed(1)}L</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Depth</div>
+                      <div style="font-size:14px; font-weight:600;">${depth.toFixed(0)}mm</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Raw</div>
+                      <div style="font-size:14px; font-weight:600;">${raw.toFixed(0)}mm</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">LPG Valve</div>
+                      <div style="font-size:14px; font-weight:600; color:${lpgOpen ? 'var(--warning-color)' : 'var(--secondary-text-color)'};">${lpgOpen ? 'Open' : 'Closed'}</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Max Cap</div>
+                      <div style="font-size:14px; font-weight:600;">16.8L</div>
+                    </div>
+                    <div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Tank</div>
+                      <div style="font-size:14px; font-weight:600;">20lb</div>
+                    </div>
+                  </div>
+                </div>`;
+              ]]]
+            tap_action:
+              action: more-info
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 14px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+              label:
+                - font-size: 14px
+                - color: var(--primary-text-color)
+                - text-align: left
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Propane level chart 7d ──
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              show_states: true
+              colorize_states: true
+              title: Propane Level (7d)
+            graph_span: 7d
+            yaxis:
+              - min: 0
+                max: 100
+                decimals: 0
+            series:
+              - entity: sensor.propane_tank_percentage
+                name: Propane
+                type: area
+                color: '#f59e0b'
+                curve: smooth
+                stroke_width: 2
+                opacity: 0.15
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Propane raw distance chart ──
+          - type: custom:apexcharts-card
+            header:
+              show: true
+              show_states: true
+              colorize_states: true
+              title: Propane Raw Distance (7d)
+            graph_span: 7d
+            yaxis:
+              - decimals: 0
+            series:
+              - entity: sensor.propane_raw_distance
+                name: Distance
+                type: line
+                color: '#8b5cf6'
+                curve: smooth
+                stroke_width: 2
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Water tank temperatures ──
+          - type: custom:button-card
+            show_name: false
+            show_state: false
+            show_icon: false
+            show_label: true
+            label: |
+              [[[
+                var freshTemp = parseFloat(states['sensor.a32_pro_s5140_channel_38_temperature_ntc_fresh_water_tank'].state) || 0;
+                var greyTemp = parseFloat(states['sensor.a32_pro_s5140_channel_39_temperature_ntc_grey_water_tank'].state) || 0;
+                var showerTemp = parseFloat(states['sensor.a32_pro_s5140_channel_40_temperature_ntc_shower_water_tank'].state) || 0;
+
+                function tempItem(name, temp, icon) {
+                  var c = temp < 5 ? 'var(--info-color)' : temp > 40 ? 'var(--error-color)' : 'var(--primary-text-color)';
+                  return `<div style="text-align:center;">
+                    <ha-icon icon="${icon}" style="--mdc-icon-size:20px; color:${c};"></ha-icon>
+                    <div style="font-size:18px; font-weight:700; margin-top:2px; color:${c};">${temp.toFixed(1)}°</div>
+                    <div style="font-size:10px; color:var(--secondary-text-color);">${name}</div>
+                  </div>`;
+                }
+
+                return `<div style="padding:2px 0;">
+                  <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--secondary-text-color); margin-bottom:8px;">Tank Temperatures</div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+                    ${tempItem('Fresh', freshTemp, 'mdi:water-thermometer')}
+                    ${tempItem('Grey', greyTemp, 'mdi:water-opacity')}
+                    ${tempItem('Shower', showerTemp, 'mdi:shower-head')}
+                  </div>
+                </div>`;
+              ]]]
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 14px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+              label:
+                - font-size: 14px
+                - color: var(--primary-text-color)
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Shower mode + Cook mode shortcuts ──
+          - type: custom:button-card
+            show_name: false
+            show_state: false
+            show_icon: false
+            show_label: true
+            label: |
+              [[[
+                var shower = states['input_boolean.shower_mode'].state === 'on';
+                var showerColor = shower ? 'var(--info-color)' : 'var(--secondary-text-color)';
+
+                return `<div style="display:grid; grid-template-columns:1fr 1fr; gap:12px; text-align:center;">
+                  <div style="border:1px solid var(--divider-color); border-radius:8px; padding:12px; cursor:pointer;">
+                    <ha-icon icon="mdi:shower" style="--mdc-icon-size:28px; color:${showerColor};"></ha-icon>
+                    <div style="font-size:13px; font-weight:600; margin-top:4px;">${shower ? 'Active' : 'Off'}</div>
+                    <div style="font-size:10px; color:var(--secondary-text-color);">Shower Mode</div>
+                  </div>
+                  <div style="border:1px solid var(--divider-color); border-radius:8px; padding:12px; cursor:pointer;">
+                    <ha-icon icon="mdi:stove" style="--mdc-icon-size:28px; color:var(--secondary-text-color);"></ha-icon>
+                    <div style="font-size:13px; font-weight:600; margin-top:4px;">Cook</div>
+                    <div style="font-size:10px; color:var(--secondary-text-color);">Cook Mode</div>
+                  </div>
+                </div>`;
+              ]]]
+            tap_action:
+              action: call-service
+              service: script.shower_mode_on
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 12px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+              label:
+                - font-size: 14px
+                - color: var(--primary-text-color)
+            grid_options:
+              columns: full
+              rows: 1
+
+    cards: []

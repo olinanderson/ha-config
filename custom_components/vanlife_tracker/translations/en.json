@@ -59,5 +59,55 @@
         }
       }
     }
+  },
+  "services": {
+    "create_stop": {
+      "name": "Create Stop",
+      "description": "Create a new campsite/stop at the current location (or specified coordinates)."
+    },
+    "update_stop": {
+      "name": "Update Stop",
+      "description": "Update an existing stop's name, notes, rating, or category."
+    },
+    "delete_stop": {
+      "name": "Delete Stop",
+      "description": "Delete a stop by its ID."
+    },
+    "depart_current_stop": {
+      "name": "Depart Current Stop",
+      "description": "Mark the current stop as departed (sets departure time to now)."
+    },
+    "get_stops": {
+      "name": "Get Stops",
+      "description": "Retrieve recent stops. Results are fired as a vanlife_tracker_stops_response event."
+    },
+    "export_gpx": {
+      "name": "Export GPX",
+      "description": "Export all stops as a GPX file to /config/www/vanlife_stops.gpx."
+    },
+    "create_named_place": {
+      "name": "Create Named Place",
+      "description": "Create a named place so future stops at this location are automatically labeled."
+    },
+    "update_named_place": {
+      "name": "Update Named Place",
+      "description": "Update an existing named place."
+    },
+    "delete_named_place": {
+      "name": "Delete Named Place",
+      "description": "Delete a named place by its ID."
+    },
+    "get_named_places": {
+      "name": "Get Named Places",
+      "description": "Retrieve all named places. Results are fired as a vanlife_tracker_named_places_response event."
+    },
+    "backfill_stops": {
+      "name": "Backfill Stops from History",
+      "description": "Analyze historical GPS data and automatically create stop records for stationary periods."
+    },
+    "backfill_trips": {
+      "name": "Backfill Trips from GPS Track",
+      "description": "Process GPS track data into computed trips and auto-detected stops."
+    }
   }
 }

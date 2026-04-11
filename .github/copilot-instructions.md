@@ -49,6 +49,7 @@ entertainment, and safety subsystems for full-time van life.
 | **Olins Van BMS** | Battery management — SOC, voltage, current, temperature, cycles, stored energy | BLE via `bms_ble` custom component |
 | **Victron MPPT** (×2) | Solar charge controllers (MPPT1 & MPPT2) — PV power, output voltage/current, yield | BLE via `victron_ble` ESPHome component |
 | **Pro Check F317** | Propane tank ultrasonic level sensor | BLE |
+| **Lorex D231A41B** | 4-channel 1080p DVR (security cameras) — RTSP streams, H.265 main / H.264 sub | go2rtc (WebRTC) via generic camera |
 | **Kidde HomeSafe** | CO/smoke detection | `kidde_homesafe` custom component |
 | **Zigbee2MQTT** | Zigbee device gateway | MQTT bridge |
 | **VLC Telnet** | Media player for TTS and audio | Media player integration |
@@ -248,8 +249,16 @@ yaml_backups/                   # Full backups of all original YAML files
 # --- Other directories ---
 esphome/                        # ESPHome device configs
 custom_components/              # HACS / custom integrations (DO NOT hand-edit)
+  vanlife_tracker/              # Custom: stop detection, geocoding, Traccar
 themes/mushroom/                # Mushroom UI theme
-www/                            # Static web assets
+www/                            # Static web assets (NOT synced via Syncthing)
+  vanlife-panel/                # Vanlife tracker panel
+    index.html                  # Panel UI (~2700 lines, Leaflet map + trips + places)
+    osrm_proxy.py               # CORS proxy + API server (port 8765)
+    gps_filter.py               # GPS filter daemon (background, incremental mode)
+    backfill_gps.py             # One-shot historical GPS backfill
+    filtered_gps.db             # SQLite DB (segments, parking, named_places)
+    panel.js                    # Panel loader
 zigbee2mqtt/                    # Zigbee2MQTT config
 .storage/                       # HA storage (dashboards, registries, etc.)
 .github/
@@ -468,6 +477,14 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 | `sensor.coolant_temp_last` | Sticky last-good coolant temp |
 | `sensor.road_grade_percent_last` | Sticky last-good road grade % |
 | `sensor.trans_temp_last` | Sticky last-good transmission temp |
+
+### Security Cameras (Lorex DVR)
+| Entity | Description |
+|---|---|
+| `camera.channel_1` | DVR channel 1 (generic camera, RTSP via go2rtc) |
+| `camera.channel_2` | DVR channel 2 |
+| `camera.channel_3` | DVR channel 3 |
+| `camera.channel_4` | DVR channel 4 |
 
 ### Presence / Occupancy
 | Entity | Description |
@@ -829,3 +846,366 @@ The heating details card on the home dashboard shows contextual mode labels:
 | Heater ON + Climate ON + Hot Water OFF | "Heating air (+ water passthrough)" (orange) |
 | Heater ON (manual, no mode active) | "Heater on (manual)" (orange) |
 | Heater OFF | No label shown |
+
+---
+
+## Shore Power Charger — Auto-Cycle System
+
+The shore power charger (`switch.a32_pro_do8_switch04_shore_power_charger`) is the physical
+relay that powers the charger. However, the charger has a design flaw: **once the batteries
+reach 100% SOC, the charger stops and does not automatically restart** when the SOC drops.
+The only way to re-initialize it is to power-cycle the relay (turn off, wait, turn on).
+
+To handle this, the dashboard and automations use `input_boolean.shore_power_charger_enabled`
+instead of the raw switch. This input boolean drives an automation (`shore_charger_*`) that:
+
+1. When enabled: turns on the physical charger relay
+2. Monitors battery SOC — when SOC reaches 100% and then drops below the reset threshold
+   (`input_number.shore_charge_reset_threshold`), automatically power-cycles the relay
+3. When disabled: turns off the physical charger relay
+
+**Dashboard rule**: Always use `input_boolean.shore_power_charger_enabled` for the shore
+power toggle button, NOT `switch.a32_pro_do8_switch04_shore_power_charger`. The raw switch
+should only be used for direct hardware control in edge cases.
+
+| Entity | Purpose |
+|---|---|
+| `input_boolean.shore_power_charger_enabled` | User-facing toggle (auto-cycle enabled) |
+| `switch.a32_pro_do8_switch04_shore_power_charger` | Physical relay (hardware switch) |
+| `input_number.shore_charge_reset_threshold` | SOC % threshold for auto power-cycle reset |
+
+---
+
+## Inverter Detection — Indirect Feedback via Shelly EM Ping
+
+The inverter has **no direct on/off status entity**. It is controlled via a momentary toggle
+button (`button.a32_pro_inverter_on_off_toggle`) — pressing it once toggles the inverter on
+or off. There is no way to read the inverter's state directly.
+
+**Inverter status is inferred** by pinging a Shelly EM energy monitor (`192.168.10.174`)
+that is powered by the inverter's AC output. If the Shelly is reachable, the inverter is on.
+If not reachable, the inverter is off.
+
+### Detection Mechanism
+
+1. `binary_sensor.192_168_10_174` — HA Ping integration, updated every 1 second by the
+   "Shelly EM – one-second ping updater" automation
+2. `binary_sensor.shelly_em_reachable` — template binary sensor wrapping the ping state
+3. `sensor.shellyem_c4d8d500789a_channel_1_voltage` — AC voltage (only available when on)
+
+### Dashboard Inverter Button Behavior
+
+The React dashboard's `InverterButton` component handles the lack of direct feedback:
+
+1. **Resting state**: Shows "ON" (green glow) or "OFF" (muted) based on `binary_sensor.shelly_em_reachable`
+2. **After press**: Shows "Loading…" (yellow, pulsing icon) for up to 15 seconds
+3. **State change detected**: Clears loading immediately when the Shelly ping state changes
+4. **Timeout**: If no state change after 15 seconds, reverts to showing current state
+
+**Dashboard rule**: Use `button.a32_pro_inverter_on_off_toggle` for the toggle action,
+and `binary_sensor.shelly_em_reachable` for status display. Never bind the inverter button
+to a switch entity — it's a momentary press, not a toggle.
+
+| Entity | Purpose |
+|---|---|
+| `button.a32_pro_inverter_on_off_toggle` | Momentary press to toggle inverter on/off |
+| `binary_sensor.shelly_em_reachable` | Inverter on/off status (derived from Shelly EM ping) |
+| `binary_sensor.192_168_10_174` | Raw ping sensor for Shelly EM (1s refresh) |
+| `sensor.shellyem_c4d8d500789a_channel_1_voltage` | AC voltage (available when inverter on) |
+| `input_boolean.inverter_toggle_pending` | HA-side pending flag (cleared by automation) |
+
+---
+
+## Vanlife Tracker Panel (`www/vanlife-panel/`)
+
+A custom HA panel for GPS trip tracking, map visualization, and named places management.
+
+### Architecture
+
+| Component | File | Purpose |
+|---|---|---|
+| **Panel UI** | `www/vanlife-panel/index.html` | Single-file panel (~2700 lines): Leaflet map, trip sidebar, place management, date picker |
+| **CORS Proxy / API** | `www/vanlife-panel/osrm_proxy.py` | Python HTTP server (port 8765): filtered GPS endpoint, named places CRUD, Valhalla routing proxy, data-range endpoint |
+| **GPS Filter Daemon** | `www/vanlife-panel/gps_filter.py` | Background daemon: filters raw Starlink GPS → movement segments & parking spots, pre-routes via Valhalla, stores in SQLite |
+| **Backfill Script** | `www/vanlife-panel/backfill_gps.py` | One-shot script to process historical GPS data |
+| **Custom Component** | `custom_components/vanlife_tracker/` | HA integration: stop detection, geocoding, Traccar client |
+
+### GPS Filter Pipeline
+
+- **Source**: `device_tracker.starlink_device_location` (5–10s update interval from Starlink)
+- **Filter constants**: `MIN_PARK_DURATION_S=180`, `FILTER_RADIUS_M=15`, `CONFIRM_COUNT=3`, `MIN_SEGMENT_DISTANCE_M=300`
+- **Database**: `www/vanlife-panel/filtered_gps.db` (SQLite)
+- **Tables**: `gps_points`, `segments` (with pre-routed geometry), `named_places`
+- **Routing**: Valhalla `trace_route` with `search_radius=100`, `gps_accuracy=50`, `breakage_distance=20000`
+- **Data range**: 2025-03-03 to present (511+ routed segments as of April 2026)
+
+### API Endpoints (osrm_proxy.py, port 8765)
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/vanlife/filtered-gps?date=YYYY-MM-DD` | GET | Filtered GPS segments + parking for a date |
+| `/vanlife/data-range` | GET | Returns `{min_date, max_date}` for date picker bounds |
+| `/vanlife/named-places` | GET/POST | List all / create a named place |
+| `/vanlife/named-places/<id>` | PUT/DELETE | Update / delete a named place |
+| `/vanlife/route` | POST | Proxy to Valhalla trace_route |
+
+### Named Places System
+
+- **DB table**: `named_places` (id, name, category, lat, lon, radius_m, notes, created_at)
+- **Place radius**: Used for matching — parking dots within a place's radius are hidden on the map, and the place name is shown instead
+- **Place markers**: Purple with category emoji icon + name label; radius circle shown only on marker click (popup open), hidden on popup close
+- **Place creation**: Via floating overlay form on the map (not in the Places tab); accessible from sidebar "＋ Place" button or parking dot "Create Place Here" popup
+- **Place form**: Floating overlay at top-left of map pane (310px wide, purple border, z-index 9500); has live dotted radius preview circle + zoom-to-fit when location is set
+- **Categories**: campsite, gas_station, dump_station, water_fill, walmart, rest_area, trailhead, mechanic, other
+
+### Van/Place Marker Grouping
+
+When the van is parked near a named place, the markers would overlap. The panel uses **pixel-distance grouping**:
+- On each zoom change + van position update, checks pixel distance between van marker and all place markers
+- If within 60px on screen → hides the van marker and shows a small red 🚐 badge on the place marker icon
+- If further apart (zoomed in) → shows both markers separately
+- This is purely visual — the place radius controls stop-matching, the pixel threshold controls marker grouping
+
+### Panel UI Structure
+
+- **Tabs**: "Map & Trips" (default) | "Named Places"
+- **Map pane**: Leaflet map + route layer + sidebar (collapsible) + floating place form overlay
+- **Sidebar**: Date picker (min from data-range API), date mode buttons, trip list with stop durations + place names, "＋ Place" button
+- **Trip rendering**: Blue polylines for routed trips, grey parking dots for unmatched stops (parking dots inside named places are hidden)
+- **Van marker**: Red 🚐 icon with "Van" label, zIndexOffset 1000, updated every 10s via polling
+
+### Deployment
+
+Panel files are NOT synced via Syncthing (`www/` is in `.stignore`). Deploy manually:
+```bash
+cat index.html | ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 "cat > /tmp/index.html && sudo cp /tmp/index.html /config/www/vanlife-panel/index.html"
+```
+Same pattern for `osrm_proxy.py` and `gps_filter.py`. Hard-refresh the browser after deploy.
+
+### Running Services on HA
+
+- **Proxy**: `cd /config/www/vanlife-panel && python3 osrm_proxy.py &` (port 8765)
+- **Daemon**: `cd /config/www/vanlife-panel && python3 gps_filter.py --mode incremental &`
+- **Auth token**: Stored at `/config/.gps_filter_token`
+
+---
+
+## React Dashboard Panel (`react-dashboard/`)
+
+Custom HA sidebar panel built with **React 19 + Vite 6 + TypeScript + Tailwind CSS 3 + shadcn/ui**.
+Registered via `panel_custom` as a single `<van-dashboard>` custom element with hash-based tab routing.
+
+### Architecture
+
+| Layer | Technology |
+|---|---|
+| **Build** | Vite 6 (library mode, ES format) → `dist/van-dashboard.{js,css}` |
+| **UI** | React 19, Tailwind CSS 3, shadcn/ui components, lucide-react icons |
+| **HA bridge** | `panel-loader.js` registers custom element, passes `hass` → `window.__HASS__` → React context |
+| **State** | `HassStore` class (per-entity subscriptions via `useSyncExternalStore`) |
+| **Routing** | Hash-based (`#home`, `#power`, `#climate`, `#water`, `#van`, `#system`) with bottom navbar |
+
+### File Structure
+
+```
+react-dashboard/
+  panel-loader.js          # Custom element registration + cache busting (CACHE_VER)
+  configuration.yaml       # panel_custom config snippet (module_url with ?v=N)
+  vite.config.ts           # Library mode build config
+  package.json             # Dependencies
+  src/
+    App.tsx                # Root: HassProvider → hash router → navbar + pages
+    index.css              # Tailwind directives + dark theme variables
+    main.tsx               # Dev-mode entry (WebSocket connector for local dev)
+    context/
+      HomeAssistantContext.tsx  # HassStore + HassProvider (bridges hass → React)
+    types/
+      hass.ts              # HomeAssistant, HassEntity, HassConnection types
+    hooks/
+      useEntity.ts         # useEntity, useEntityNumeric, useEntities
+      useHistory.ts        # Fetch entity history from HA REST API
+      useService.ts        # useToggle, useButtonPress (callService wrappers)
+      useWeatherForecast.ts # WS subscription for weather/subscribe_forecast
+    lib/
+      utils.ts             # fmt(), cn(), batteryEstimate()
+    pages/
+      Home.tsx             # BadgeBar, QuickControls, ModeToggles, cards
+      Power.tsx            # Battery, solar, power breakdown
+      Climate.tsx          # Thermostat, heating controls, fan, temperatures
+      Water.tsx            # Tank levels, propane, water controls
+      Van.tsx              # Fuel, tire pressure, OBD data, GPS
+      Cameras.tsx          # 4-camera WebRTC grid (always mounted, see note below)
+      System.tsx           # Connectivity, device status, system info
+    components/
+      BatteryCard.tsx      # SOC gauge, power flow, charge estimate
+      SolarCard.tsx        # PV power, MPPT details, daily yield
+      WeatherCard.tsx      # Current conditions + 7-day forecast (WS subscription)
+      TemperatureCard.tsx  # BME280 readings (4 zones)
+      TankLevel.tsx        # Reusable tank bar (fresh/grey water)
+      HeatingControls.tsx  # PID thermostat + heater status
+      ThermostatControl.tsx # Temperature set-point control
+      FanControl.tsx       # Roof fan speed/direction/lid
+      PowerBreakdown.tsx   # Per-circuit power consumption
+      ToggleButton.tsx     # Animated toggle with glow/pulse when active
+      PresenceBar.tsx      # Occupancy indicator
+      Chart.tsx            # Sparkline + HistoryChart (SVG, hover tooltip)
+      EntityHistoryDialog.tsx # Modal: entity history graph with time range
+      ClickableValue.tsx   # Tappable value → opens history dialog
+      EntityValue.tsx      # Live entity display
+      StatValue.tsx        # Labeled stat with optional sparkline
+      StatusDot.tsx        # Colored status indicator
+      layout/
+        PageContainer.tsx  # Page wrapper with consistent padding
+      ui/                  # shadcn/ui primitives (card, button, etc.)
+```
+
+### Key Patterns
+
+**Entity subscription** — Components subscribe to individual entities for minimal re-renders:
+```tsx
+const entity = useEntity('sensor.olins_van_bms_battery');
+const { value, entity } = useEntityNumeric('sensor.total_mppt_pv_power');
+// value is number | null (null when unknown/unavailable)
+```
+
+**Null-safe display** — `fmt()` returns "—" for null/undefined values:
+```tsx
+fmt(value, 0)  // "42" or "—"
+```
+
+**History dialog** — Any tappable value can open a history chart:
+```tsx
+const { open } = useHistoryDialog();
+<span onClick={() => open('sensor.id', 'Display Name', 'W')}>...</span>
+```
+
+**Weather forecast** — Modern HA (2023.x+) requires WS subscription (not entity attributes):
+```tsx
+const forecast = useWeatherForecast('weather.pirateweather', 'daily');
+```
+
+**Toggle button animation** — Active state shows colored glow shadow, scaled icon, and pulsing dot.
+
+### Cache Busting
+
+Two-layer cache busting system:
+1. `panel-loader.js` has `CACHE_VER = 'vN'` — appended to JS/CSS imports
+2. `configuration.yaml` has `module_url: .../panel-loader.js?v=N` — forces HA to reload the loader
+
+**Both must be bumped** when deploying changes. After bumping `configuration.yaml`, HA must be restarted.
+
+### Deploy Workflow
+
+```bash
+# 1. Build
+cd react-dashboard && npm run build
+
+# 2. Deploy JS + CSS
+cat dist/van-dashboard.js | ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 \
+  "cat > /tmp/vd.js && sudo cp /tmp/vd.js /config/www/react-dashboard/van-dashboard.js"
+cat dist/van-dashboard.css | ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 \
+  "cat > /tmp/vd.css && sudo cp /tmp/vd.css /config/www/react-dashboard/van-dashboard.css"
+
+# 3. If panel-loader.js changed (CACHE_VER bump):
+cat panel-loader.js | ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 \
+  "cat > /tmp/pl.js && sudo cp /tmp/pl.js /config/www/react-dashboard/panel-loader.js"
+
+# 4. If configuration.yaml changed (?v=N bump):
+#    Wait for Syncthing (~10s), then restart HA via REST API:
+TOKEN=$(ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 "cat /config/.gps_filter_token")
+curl -X POST "http://100.80.15.86:8123/api/services/homeassistant/restart" \
+  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json"
+```
+
+### Current Versions
+
+| File | Version |
+|---|---|
+| `panel-loader.js` CACHE_VER | `v10` |
+| `configuration.yaml` ?v= | `9` |
+
+### CSS Scoping
+
+The dashboard runs inside a custom element (no shadow DOM). CSS is injected as a `<style>` tag
+inside the element. The root `.van-dash-root` div has `position: relative` so that
+absolute-positioned overlays (like the history dialog modal) stay within the panel's scope.
+`fixed` positioning escapes the custom element — always use `absolute` with a positioned ancestor.
+
+### Always-Mounted Components
+
+The `Cameras` page is **always mounted** regardless of which tab is active. When the user
+navigates away from the Cameras tab, it renders with `className="hidden"` instead of
+unmounting. This preserves the 4 WebRTC peer connections across tab switches.
+
+In `App.tsx`:
+```tsx
+{/* Cameras always mounted — hidden when not active to preserve WebRTC */}
+<div className={page === 'cameras' ? '' : 'hidden'}>
+  <Cameras />
+</div>
+{page !== 'cameras' && <Page />}
+```
+
+Within `Cameras.tsx`, all 4 camera cells are always rendered. When a single camera is
+expanded, the other 3 use `className="hidden"` — they are never unmounted. This prevents
+WebRTC renegotiation when switching between grid and single-camera views.
+
+**Rule**: If you add another component that holds long-lived connections (WebSocket streams,
+WebRTC, etc.), follow the same pattern — keep it mounted and use CSS `hidden` to toggle
+visibility instead of conditional rendering.
+
+---
+
+## Security Cameras — Lorex DVR + go2rtc WebRTC
+
+The van has a **Lorex D231A41B** 4-channel 1080p DVR connected via ethernet to the MoFi
+router. Live video is streamed to the React dashboard via **go2rtc's WebRTC** bridge.
+
+### DVR Details
+
+| Setting | Value |
+|---|---|
+| **Model** | Lorex D231A41B (4-channel, 1TB HDD) |
+| **IP** | `192.168.10.156` |
+| **RTSP port** | 554 |
+| **Credentials** | `admin` / `***REDACTED***` |
+| **Main stream** (`subtype=0`) | H.265 (HEVC), 960×480 — **NOT WebRTC compatible** |
+| **Sub stream** (`subtype=1`) | H.264, 704×480 — **used for WebRTC** |
+| **RTSP URL format** | `rtsp://admin:PASSWORD@192.168.10.156:554/cam/realmonitor?channel=N&subtype=1` |
+
+### go2rtc Integration
+
+`go2rtc:` must be present in `configuration.yaml` (or `default_config:` must be used).
+Without it, the go2rtc binary runs but the HA Python integration that registers it as a
+WebRTC provider never loads — cameras will only report HLS support.
+
+| File | Purpose |
+|---|---|
+| `configuration.yaml` → `go2rtc:` | Triggers HA to load the go2rtc integration |
+| `/config/go2rtc.yaml` | go2rtc stream definitions (4 channels, `subtype=1`) |
+| go2rtc API | `http://localhost:1984/api/streams` (on HA host) |
+
+### How WebRTC Streaming Works
+
+1. **Browser** (React `WebRTCFeed` component) creates an `RTCPeerConnection`
+2. Sends SDP offer via HA WebSocket: `camera/webrtc/offer`
+3. **HA go2rtc integration** receives the offer, lazily registers the stream in go2rtc
+   (stream name = `camera.entity_id`, URL from camera entity's `stream_source`)
+4. For generic cameras, HA prepends `ffmpeg:` to the RTSP URL before registering
+5. **go2rtc** connects to DVR via RTSP, transcodes/remuxes to WebRTC
+6. SDP answer + ICE candidates flow back through HA WebSocket
+7. Browser receives near-zero-latency video via WebRTC
+
+### Critical Notes
+
+- **H.265 causes black video** in WebRTC — browsers only support H.264. Always use
+  `subtype=1` (sub stream) for the camera entities and go2rtc.yaml.
+- **Lazy stream registration**: go2rtc streams are created on-demand when a camera is
+  first accessed via WebRTC. The go2rtc.yaml streams are separate from what HA registers.
+- **Camera entity stream_source** (in `.storage/core.config_entries` under `options`)
+  must match the go2rtc.yaml `subtype=1` URLs.
+- **Generic camera config entries** for channels 2-4 previously had extra `username`/
+  `password` fields and URL-encoded `%21` — these were cleaned up. All 4 should use
+  identical URL patterns with unencoded `!` and no separate auth fields.
+- **go2rtc config entry** is auto-created with `source: "system"` after restart when
+  `go2rtc:` is in configuration.yaml.

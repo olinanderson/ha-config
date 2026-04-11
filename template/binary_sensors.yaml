@@ -11,7 +11,7 @@
         {% set speed = states('sensor.wican_speed') | float(0) %}
         {% set speed_threshold = states('input_number.vehicle_stopped_threshold') | float(2) %}
         {% set wican_available = is_state('binary_sensor.engine_is_running', 'on') %}
-        {{ wican_available and speed > speed_threshold }}
+        {{ wican_available and speed > speed_threshold and speed < 255 }}
       icon: >
         {% if is_state('binary_sensor.vehicle_is_moving', 'on') %}
           mdi:car
@@ -38,13 +38,12 @@
       unique_id: engine_is_running
       device_class: running
       state: >
-        {% set speed_updated = states.sensor.wican_speed.last_updated %}
-        {% set fuel_updated = states.sensor.wican_fuel.last_updated %}
-        {% set now_time = now() %}
-        {% set speed_fresh = (now_time - speed_updated).total_seconds() < 120 %}
-        {% set fuel_fresh = (now_time - fuel_updated).total_seconds() < 120 %}
-        {% set speed_nonzero = states('sensor.wican_speed') | float(0) >= 0 %}
-        {{ (speed_fresh or fuel_fresh) and speed_nonzero }}
+        {% set rpm_state = states('sensor.wican_rpm') %}
+        {% if rpm_state in ['unknown', 'unavailable'] %}
+          false
+        {% else %}
+          {{ rpm_state | float(0) > 0 }}
+        {% endif %}
       icon: >
         {% if is_state('binary_sensor.engine_is_running', 'on') %}
           mdi:engine
@@ -55,8 +54,10 @@
 # ─── Inverter reachability ───
 - binary_sensor:
     - name: "Inverter On"
+      unique_id: inverter_on
       device_class: power
-      state: "{{ is_state('binary_sensor.shelly_em_reachable','on') }}"
+      state: >
+        {{ states('sensor.shellyem_c4d8d500789a_channel_1_voltage') | float(0) > 0 }}
 
 # ─── TPMS low pressure alert ───
 - binary_sensor:
@@ -65,18 +66,18 @@
       device_class: problem
       icon: mdi:car-tire-alert
       state: >
-        {% set fl = states('sensor.wican_tire_pressure_fl') | float(0) %}
-        {% set fr = states('sensor.wican_tire_pressure_fr') | float(0) %}
-        {% set rl = states('sensor.wican_tire_pressure_rl') | float(0) %}
-        {% set rr = states('sensor.wican_tire_pressure_rr') | float(0) %}
+        {% set fl = states('sensor.wican_wican_tire_pressure_fl') | float(0) %}
+        {% set fr = states('sensor.wican_wican_tire_pressure_fr') | float(0) %}
+        {% set rl = states('sensor.wican_wican_tire_pressure_rl') | float(0) %}
+        {% set rr = states('sensor.wican_wican_tire_pressure_rr') | float(0) %}
         {% set threshold = 35 %}
-        {% set pressures = [fl, fr, rl, rr] | select('gt', 0) | list %}
+        {% set pressures = [fl, fr, rl, rr] | select('gt', 0) | reject('gt', 120) | list %}
         {{ pressures | select('lt', threshold) | list | length > 0 if pressures | length > 0 else false }}
       attributes:
-        fl_psi: "{{ states('sensor.wican_tire_pressure_fl') }}"
-        fr_psi: "{{ states('sensor.wican_tire_pressure_fr') }}"
-        rl_psi: "{{ states('sensor.wican_tire_pressure_rl') }}"
-        rr_psi: "{{ states('sensor.wican_tire_pressure_rr') }}"
+        fl_psi: "{{ states('sensor.wican_wican_tire_pressure_fl') }}"
+        fr_psi: "{{ states('sensor.wican_wican_tire_pressure_fr') }}"
+        rl_psi: "{{ states('sensor.wican_wican_tire_pressure_rl') }}"
+        rr_psi: "{{ states('sensor.wican_wican_tire_pressure_rr') }}"
 
 # ─── Check Engine Light (MIL from PID 0x01) ───
 - binary_sensor:
@@ -85,6 +86,6 @@
       device_class: problem
       icon: mdi:engine
       state: >
-        {{ states('sensor.wican_monitor_status_raw') | int(0) >= 128 }}
+        {{ states('sensor.wican_wican_monitor_status_raw') | int(0) >= 128 }}
       attributes:
         dtc_count: "{{ states('sensor.dtc_count') }}"

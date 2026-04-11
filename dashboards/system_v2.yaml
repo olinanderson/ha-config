@@ -1,12 +1,9 @@
 title: System & Diagnostics
 views:
-  - title: System & Diagnostics
+  - title: System
     path: system
-    icon: mdi:wrench
+    icon: mdi:cog
 
-    # ─────────────────────────────────────────────
-    #  BADGE BAR — system health at a glance
-    # ─────────────────────────────────────────────
     badges:
       # ── Starlink ──
       - type: custom:mushroom-template-badge
@@ -14,8 +11,8 @@ views:
         icon: mdi:satellite-uplink
         content: "{{ states('sensor.starlink_downlink_throughput_mbps') | float(0) | round(1) }} Mbps"
         color: >
-          {% set v = states('sensor.starlink_downlink_throughput_mbps') | float(0) %}
-          {{ 'red' if v < 5 else 'orange' if v < 20 else 'green' }}
+          {% set d = states('sensor.starlink_downlink_throughput_mbps') | float(0) %}
+          {{ 'green' if d > 10 else 'orange' if d > 2 else 'red' }}
         label: Starlink
         tap_action:
           action: more-info
@@ -24,7 +21,7 @@ views:
       - type: custom:mushroom-template-badge
         entity: binary_sensor.apollo_msr_2_1731d8_radar_target
         icon: >
-          {{ 'mdi:account' if is_state('binary_sensor.apollo_msr_2_1731d8_radar_target', 'on') else 'mdi:account-off' }}
+          {{ 'mdi:home-account' if is_state('binary_sensor.apollo_msr_2_1731d8_radar_target', 'on') else 'mdi:home-outline' }}
         content: >
           {{ 'Occupied' if is_state('binary_sensor.apollo_msr_2_1731d8_radar_target', 'on') else 'Empty' }}
         color: >
@@ -36,8 +33,7 @@ views:
       # ── WiCAN ──
       - type: custom:mushroom-template-badge
         entity: binary_sensor.wican_connected
-        icon: >
-          {{ 'mdi:car-connected' if is_state('binary_sensor.wican_connected', 'on') else 'mdi:car-off' }}
+        icon: mdi:car-connected
         content: >
           {{ 'Online' if is_state('binary_sensor.wican_connected', 'on') else 'Offline' }}
         color: >
@@ -49,8 +45,7 @@ views:
       # ── Power Saving ──
       - type: custom:mushroom-template-badge
         entity: input_boolean.power_saving_mode
-        icon: >
-          {{ 'mdi:leaf' if is_state('input_boolean.power_saving_mode', 'on') else 'mdi:leaf-off' }}
+        icon: mdi:leaf
         content: >
           {{ 'ON' if is_state('input_boolean.power_saving_mode', 'on') else 'OFF' }}
         color: >
@@ -62,28 +57,44 @@ views:
       # ── Sleep ──
       - type: custom:mushroom-template-badge
         entity: input_boolean.sleep_mode
-        icon: >
-          {{ 'mdi:sleep' if is_state('input_boolean.sleep_mode', 'on') else 'mdi:sleep-off' }}
+        icon: mdi:sleep
         content: >
           {{ 'ON' if is_state('input_boolean.sleep_mode', 'on') else 'OFF' }}
         color: >
-          {{ 'purple' if is_state('input_boolean.sleep_mode', 'on') else 'grey' }}
+          {{ 'indigo' if is_state('input_boolean.sleep_mode', 'on') else 'grey' }}
         label: Sleep
         tap_action:
           action: toggle
 
-    # ─────────────────────────────────────────────
-    #  SECTIONS
-    # ─────────────────────────────────────────────
-    sections:
+      # ── Lights (from home page) ──
+      - type: custom:mushroom-template-badge
+        entity: light.led_controller_cct_1
+        icon: >
+          {{ 'mdi:lightbulb-on' if is_state('light.led_controller_cct_1', 'on') else 'mdi:lightbulb-outline' }}
+        content: >
+          {% set on_count = [is_state('light.led_controller_cct_1','on'),
+                             is_state('light.led_controller_cct_2','on'),
+                             is_state('light.led_controller_sc_1','on'),
+                             is_state('light.led_controller_sc_2','on')] | select | list | count %}
+          {{ on_count }}/4
+        color: >
+          {% set any_on = is_state('light.led_controller_cct_1','on') or
+                          is_state('light.led_controller_cct_2','on') or
+                          is_state('light.led_controller_sc_1','on') or
+                          is_state('light.led_controller_sc_2','on') %}
+          {{ 'amber' if any_on else 'grey' }}
+        label: Lights
+        tap_action:
+          action: more-info
 
+    sections:
       # ═══════════════════════════════════════════
-      #  COLUMN 1: Connectivity + Modes
+      #  COLUMN 1 — Connectivity & Modes
       # ═══════════════════════════════════════════
       - type: grid
         column_span: 1
         cards:
-          # ── Internet / Starlink hero ──
+          # ── Starlink hero ──
           - type: custom:button-card
             show_name: false
             show_state: false
@@ -91,57 +102,44 @@ views:
             show_label: true
             label: |
               [[[
-                var dl = parseFloat(states['sensor.starlink_downlink_throughput_mbps'].state) || 0;
-                var ul = parseFloat(states['sensor.starlink_uplink_throughput_mbps'].state) || 0;
-                var stDl = states['sensor.speedtest_download'] ? parseFloat(states['sensor.speedtest_download'].state) || 0 : 0;
-                var stUl = states['sensor.speedtest_upload'] ? parseFloat(states['sensor.speedtest_upload'].state) || 0 : 0;
-                var stPing = states['sensor.speedtest_ping'] ? parseFloat(states['sensor.speedtest_ping'].state) || 0 : 0;
-
-                var dlColor = dl > 20 ? 'var(--success-color)' : dl > 5 ? 'var(--warning-color)' : 'var(--error-color)';
-
-                return `<div style="padding:2px 0;">
-                  <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--secondary-text-color); margin-bottom:8px;">
-                    <ha-icon icon="mdi:satellite-uplink" style="--mdc-icon-size:16px;"></ha-icon> Starlink
+                function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
+                var dl=s('sensor.starlink_downlink_throughput_mbps'), ul=s('sensor.starlink_uplink_throughput_mbps');
+                var stDl=s('sensor.speedtest_download'), stUl=s('sensor.speedtest_upload'), stPing=s('sensor.speedtest_ping');
+                var dlColor=isNaN(dl)||dl<2?'#ef4444':dl<10?'#f59e0b':'#22c55e';
+                return `<div style="padding:4px 0;">
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
+                    <div style="width:6px;height:6px;border-radius:50%;background:${dlColor};"></div>
+                    <span style="font-size:13px; font-weight:600;">Starlink</span>
                   </div>
-                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:6px; margin-bottom:12px;">
+                  <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:14px;">
+                    <ha-icon icon="mdi:download" style="--mdc-icon-size:20px; color:${dlColor};"></ha-icon>
+                    <span style="font-variant-numeric:tabular-nums; font-size:30px; font-weight:700; letter-spacing:-0.025em;">${isNaN(dl)?'—':dl.toFixed(1)}</span>
+                    <span style="font-size:13px; color:var(--secondary-text-color);">Mbps</span>
+                    <span style="font-size:13px; color:var(--secondary-text-color); margin-left:auto;">↑ ${isNaN(ul)?'—':ul.toFixed(1)} Mbps</span>
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px; padding-top:12px; border-top:1px solid var(--divider-color);">
                     <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">↓ Download</div>
-                      <div style="font-size:20px; font-weight:700; color:${dlColor};">${dl.toFixed(1)} <span style="font-size:12px; font-weight:400;">Mbps</span></div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Speedtest ↓</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:15px; font-weight:600; margin-top:2px;">${isNaN(stDl)?'—':stDl.toFixed(1)} Mbps</div>
                     </div>
                     <div>
-                      <div style="font-size:10px; color:var(--secondary-text-color);">↑ Upload</div>
-                      <div style="font-size:20px; font-weight:700;">${ul.toFixed(1)} <span style="font-size:12px; font-weight:400;">Mbps</span></div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Speedtest ↑</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:15px; font-weight:600; margin-top:2px;">${isNaN(stUl)?'—':stUl.toFixed(1)} Mbps</div>
                     </div>
-                  </div>
-                  <div style="border-top:1px solid var(--divider-color); padding-top:8px;">
-                    <div style="font-size:10px; color:var(--secondary-text-color); margin-bottom:4px;">Last Speedtest</div>
-                    <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
-                      <div>
-                        <div style="font-size:10px; color:var(--secondary-text-color);">Down</div>
-                        <div style="font-size:14px; font-weight:600;">${stDl.toFixed(1)}</div>
-                      </div>
-                      <div>
-                        <div style="font-size:10px; color:var(--secondary-text-color);">Up</div>
-                        <div style="font-size:14px; font-weight:600;">${stUl.toFixed(1)}</div>
-                      </div>
-                      <div>
-                        <div style="font-size:10px; color:var(--secondary-text-color);">Ping</div>
-                        <div style="font-size:14px; font-weight:600;">${stPing.toFixed(0)}ms</div>
-                      </div>
+                    <div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Ping</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:15px; font-weight:600; margin-top:2px;">${isNaN(stPing)?'—':stPing.toFixed(0)} ms</div>
                     </div>
                   </div>
                 </div>`;
               ]]]
-            tap_action:
-              action: call-service
-              service: script.speedtest
             styles:
               card:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 14px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 20px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
@@ -150,14 +148,14 @@ views:
               columns: full
               rows: auto
 
-          # ── Starlink throughput chart ──
+          # ── Throughput chart ──
           - type: custom:apexcharts-card
             header:
               show: true
               show_states: true
               colorize_states: true
-              title: Starlink Throughput (6h)
-            graph_span: 6h
+              title: Throughput (1h)
+            graph_span: 1h
             yaxis:
               - min: 0
                 decimals: 1
@@ -165,14 +163,14 @@ views:
               - entity: sensor.starlink_downlink_throughput_mbps
                 name: Download
                 type: area
-                color: '#3b82f6'
+                color: '#22c55e'
                 curve: smooth
                 stroke_width: 2
                 opacity: 0.1
               - entity: sensor.starlink_uplink_throughput_mbps
                 name: Upload
                 type: area
-                color: '#22c55e'
+                color: '#3b82f6'
                 curve: smooth
                 stroke_width: 2
                 opacity: 0.1
@@ -180,7 +178,7 @@ views:
               columns: full
               rows: auto
 
-          # ── Modes & Routines ──
+          # ── Modes & routines ──
           - type: custom:button-card
             show_name: false
             show_state: false
@@ -188,25 +186,26 @@ views:
             show_label: true
             label: |
               [[[
-                var powerSaving = states['input_boolean.power_saving_mode'].state === 'on';
-                var sleep = states['input_boolean.sleep_mode'].state === 'on';
-                var shower = states['input_boolean.shower_mode'].state === 'on';
-
-                function modeBtn(name, active, icon, color) {
-                  var c = active ? color : 'var(--secondary-text-color)';
-                  return `<div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px; text-align:center;">
-                    <ha-icon icon="${icon}" style="--mdc-icon-size:24px; color:${c};"></ha-icon>
-                    <div style="font-size:12px; font-weight:600; margin-top:4px; color:${c};">${active ? 'ON' : 'Off'}</div>
-                    <div style="font-size:10px; color:var(--secondary-text-color);">${name}</div>
+                var powerSave=states['input_boolean.power_saving_mode'].state==='on';
+                var sleep=states['input_boolean.sleep_mode'].state==='on';
+                var shower=states['input_boolean.shower_mode'].state==='on';
+                function ring(label,icon,active,color){
+                  var bg=active?color+'0d':'transparent';
+                  var bc=active?color+'66':'var(--divider-color)';
+                  var tc=active?color:'var(--secondary-text-color)';
+                  var shadow=active?`box-shadow:0 0 0 3px ${color}14;`:'';
+                  return `<div style="border:1.5px solid ${bc}; background:${bg}; border-radius:10px; padding:12px; text-align:center; ${shadow} transition:all 0.15s ease;">
+                    <ha-icon icon="${icon}" style="--mdc-icon-size:22px; color:${tc};"></ha-icon>
+                    <div style="font-size:11px; font-weight:600; color:${tc}; margin-top:4px;">${label}</div>
+                    <div style="font-size:10px; color:var(--secondary-text-color); margin-top:2px;">${active?'Active':'Off'}</div>
                   </div>`;
                 }
-
-                return `<div style="padding:2px 0;">
-                  <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--secondary-text-color); margin-bottom:8px;">Active Modes</div>
-                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
-                    ${modeBtn('Power Save', powerSaving, powerSaving ? 'mdi:leaf' : 'mdi:leaf-off', 'var(--success-color)')}
-                    ${modeBtn('Sleep', sleep, sleep ? 'mdi:sleep' : 'mdi:sleep-off', 'var(--info-color)')}
-                    ${modeBtn('Shower', shower, 'mdi:shower', 'var(--info-color)')}
+                return `<div style="padding:4px 0;">
+                  <div style="font-size:13px; font-weight:600; margin-bottom:12px;">Modes</div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:10px;">
+                    ${ring('Eco','mdi:leaf',powerSave,'#22c55e')}
+                    ${ring('Sleep','mdi:sleep',sleep,'#6366f1')}
+                    ${ring('Shower','mdi:shower-head',shower,'#06b6d4')}
                   </div>
                 </div>`;
               ]]]
@@ -215,8 +214,8 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 14px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 16px 20px
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
@@ -224,19 +223,52 @@ views:
               columns: full
               rows: auto
 
-          # ── Location / GPS ──
-          - type: map
-            entities:
-              - entity: device_tracker.filtered_starlink_location
-            default_zoom: 14
-            dark_mode: true
-            hours_to_show: 24
+          # ── Quick actions ──
+          - type: custom:button-card
+            show_name: false
+            show_state: false
+            show_icon: false
+            show_label: true
+            label: |
+              [[[
+                return `<div style="padding:2px 0;">
+                  <div style="font-size:13px; font-weight:600; margin-bottom:12px;">Quick Actions</div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px; text-align:center; cursor:pointer;">
+                      <ha-icon icon="mdi:weather-night" style="--mdc-icon-size:20px; color:#6366f1;"></ha-icon>
+                      <div style="font-size:11px; font-weight:500; margin-top:4px;">Bedtime</div>
+                    </div>
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px; text-align:center; cursor:pointer;">
+                      <ha-icon icon="mdi:white-balance-sunny" style="--mdc-icon-size:20px; color:#f59e0b;"></ha-icon>
+                      <div style="font-size:11px; font-weight:500; margin-top:4px;">Wake Up</div>
+                    </div>
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px; text-align:center; cursor:pointer;">
+                      <ha-icon icon="mdi:speedometer" style="--mdc-icon-size:20px; color:#3b82f6;"></ha-icon>
+                      <div style="font-size:11px; font-weight:500; margin-top:4px;">Speedtest</div>
+                    </div>
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px; text-align:center; cursor:pointer;">
+                      <ha-icon icon="mdi:stove" style="--mdc-icon-size:20px; color:#f97316;"></ha-icon>
+                      <div style="font-size:11px; font-weight:500; margin-top:4px;">Cook Mode</div>
+                    </div>
+                  </div>
+                </div>`;
+              ]]]
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 16px 20px
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
+              label:
+                - font-size: 14px
+                - color: var(--primary-text-color)
             grid_options:
               columns: full
               rows: auto
 
       # ═══════════════════════════════════════════
-      #  COLUMN 2: Switches + Devices
+      #  COLUMN 2 — Lighting & Switches
       # ═══════════════════════════════════════════
       - type: grid
         column_span: 1
@@ -249,47 +281,84 @@ views:
             show_label: true
             label: |
               [[[
-                var lights = [
-                  { name: 'Main', entity: 'light.led_controller_cct_1' },
-                  { name: 'Cabinet', entity: 'light.led_controller_cct_2' },
-                  { name: 'Shower', entity: 'light.led_controller_sc_1' },
-                  { name: 'Accent', entity: 'light.led_controller_sc_2' }
+                function lightInfo(id,name){
+                  var e=states[id]; if(!e) return {name:name,on:false,bri:0};
+                  return {name:name,on:e.state==='on',bri:e.attributes.brightness?Math.round(e.attributes.brightness/255*100):0};
+                }
+                var lights=[
+                  lightInfo('light.led_controller_cct_1','Main'),
+                  lightInfo('light.led_controller_cct_2','Under-cab'),
+                  lightInfo('light.led_controller_sc_1','Shower'),
+                  lightInfo('light.led_controller_sc_2','Accent')
                 ];
-
-                var html = lights.map(function(l) {
-                  var on = states[l.entity].state === 'on';
-                  var bri = parseInt(states[l.entity].attributes.brightness || 0);
-                  var pct = Math.round(bri / 255 * 100);
-                  var color = on ? 'var(--warning-color)' : 'var(--secondary-text-color)';
-
-                  return `<div style="display:flex; justify-content:space-between; align-items:center; padding:4px 0;">
-                    <div style="display:flex; align-items:center; gap:8px;">
-                      <ha-icon icon="${on ? 'mdi:lightbulb-on' : 'mdi:lightbulb-off'}" style="--mdc-icon-size:18px; color:${color};"></ha-icon>
-                      <span style="font-size:13px; font-weight:500;">${l.name}</span>
-                    </div>
-                    <span style="font-size:13px; font-weight:600; color:${color};">${on ? pct + '%' : 'Off'}</span>
+                var rows=lights.map(function(l){
+                  var dot=l.on?'#f59e0b':'#6b7280';
+                  return `<div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--divider-color);">
+                    <div style="width:6px;height:6px;border-radius:50%;background:${dot}; flex-shrink:0;"></div>
+                    <span style="font-size:13px; font-weight:500; flex:1;">${l.name}</span>
+                    <span style="font-variant-numeric:tabular-nums; font-size:13px; font-weight:600; color:${l.on?'#f59e0b':'var(--secondary-text-color)'};">${l.on?l.bri+'%':'Off'}</span>
                   </div>`;
                 }).join('');
-
-                return `<div style="padding:2px 0;">
-                  <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--secondary-text-color); margin-bottom:6px;">Lighting</div>
-                  ${html}
+                var onCount=lights.filter(function(l){return l.on;}).length;
+                return `<div style="padding:4px 0;">
+                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+                    <div style="width:6px;height:6px;border-radius:50%;background:${onCount>0?'#f59e0b':'#6b7280'};"></div>
+                    <span style="font-size:13px; font-weight:600;">Lighting</span>
+                    <span style="font-size:12px; color:var(--secondary-text-color);">${onCount}/4 on</span>
+                  </div>
+                  ${rows}
                 </div>`;
               ]]]
-            tap_action:
-              action: call-service
-              service: script.all_lights_toggle
             styles:
               card:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 14px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 16px 20px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
                 - text-align: left
+            grid_options:
+              columns: full
+              rows: auto
+
+          # ── Light dimmers ──
+          - type: custom:mushroom-light-card
+            entity: light.led_controller_cct_1
+            name: Main
+            show_brightness_control: true
+            show_color_temp_control: true
+            collapsible_controls: false
+            grid_options:
+              columns: full
+              rows: auto
+
+          - type: custom:mushroom-light-card
+            entity: light.led_controller_cct_2
+            name: Under-cabinet
+            show_brightness_control: true
+            show_color_temp_control: true
+            collapsible_controls: false
+            grid_options:
+              columns: full
+              rows: auto
+
+          - type: custom:mushroom-light-card
+            entity: light.led_controller_sc_1
+            name: Shower
+            show_brightness_control: true
+            collapsible_controls: false
+            grid_options:
+              columns: full
+              rows: auto
+
+          - type: custom:mushroom-light-card
+            entity: light.led_controller_sc_2
+            name: Accent
+            show_brightness_control: true
+            collapsible_controls: false
             grid_options:
               columns: full
               rows: auto
@@ -302,33 +371,25 @@ views:
             show_label: true
             label: |
               [[[
-                var switches = [
-                  { name: 'Top Monitor', entity: 'switch.a32_pro_do8_switch06_top_monitor', icon: 'mdi:monitor' },
-                  { name: 'Bottom Monitor', entity: 'switch.a32_pro_do8_switch07_bottom_monitor', icon: 'mdi:monitor' },
-                  { name: 'Starlink', entity: 'switch.a32_pro_switch25_starlink_power', icon: 'mdi:satellite-uplink' },
-                  { name: 'Bed Power', entity: 'switch.a32_pro_switch27_bed_power_supply', icon: 'mdi:bed' },
-                  { name: 'Outdoor L', entity: 'switch.a32_pro_switch18_outdoor_lights_left', icon: 'mdi:outdoor-lamp' },
-                  { name: 'Outdoor R', entity: 'switch.a32_pro_switch19_outdoor_lights_right', icon: 'mdi:outdoor-lamp' },
-                  { name: 'Rear Light', entity: 'switch.a32_pro_switch20_outdoor_lights_rear', icon: 'mdi:car-parking-lights' },
-                  { name: 'Light Bar', entity: 'switch.a32_pro_switch21_lightbar', icon: 'mdi:car-light-high' }
+                var switches=[
+                  {id:'switch.a32_pro_do8_switch06_top_monitor',name:'Top Monitor',icon:'mdi:monitor'},
+                  {id:'switch.a32_pro_do8_switch07_bottom_monitor',name:'Bottom Monitor',icon:'mdi:monitor'},
+                  {id:'switch.a32_pro_switch27_bed_power_supply',name:'Bed Power',icon:'mdi:bed'},
+                  {id:'switch.a32_pro_switch16_lpg_valve',name:'LPG Valve',icon:'mdi:propane-tank'},
                 ];
-
-                var html = switches.map(function(s) {
-                  var on = states[s.entity] && states[s.entity].state === 'on';
-                  var color = on ? 'var(--success-color)' : 'var(--secondary-text-color)';
-
-                  return `<div style="display:flex; justify-content:space-between; align-items:center; padding:3px 0;">
-                    <div style="display:flex; align-items:center; gap:8px;">
-                      <ha-icon icon="${s.icon}" style="--mdc-icon-size:16px; color:${color};"></ha-icon>
-                      <span style="font-size:12px;">${s.name}</span>
-                    </div>
-                    <span style="font-size:11px; font-weight:600; color:${color};">${on ? 'ON' : 'Off'}</span>
+                var rows=switches.map(function(sw){
+                  var on=states[sw.id]&&states[sw.id].state==='on';
+                  var dot=on?'#22c55e':'#6b7280';
+                  return `<div style="display:flex; align-items:center; gap:10px; padding:8px 0; border-bottom:1px solid var(--divider-color);">
+                    <div style="width:6px;height:6px;border-radius:50%;background:${dot}; flex-shrink:0;"></div>
+                    <ha-icon icon="${sw.icon}" style="--mdc-icon-size:16px; color:${on?'var(--primary-text-color)':'var(--secondary-text-color)'};"></ha-icon>
+                    <span style="font-size:13px; font-weight:500; flex:1;">${sw.name}</span>
+                    <span style="font-size:12px; font-weight:600; color:${on?'#22c55e':'var(--secondary-text-color)'};">${on?'On':'Off'}</span>
                   </div>`;
                 }).join('');
-
-                return `<div style="padding:2px 0;">
-                  <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--secondary-text-color); margin-bottom:6px;">Switches</div>
-                  ${html}
+                return `<div style="padding:4px 0;">
+                  <div style="font-size:13px; font-weight:600; margin-bottom:10px;">Switches</div>
+                  ${rows}
                 </div>`;
               ]]]
             styles:
@@ -336,8 +397,8 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 14px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 16px 20px
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
@@ -347,92 +408,26 @@ views:
               rows: auto
 
           # ── Starlink sleep schedule ──
-          - type: custom:button-card
-            show_name: false
-            show_state: false
-            show_icon: false
-            show_label: true
-            label: |
-              [[[
-                var start = states['time.starlink_sleep_start'] ? states['time.starlink_sleep_start'].state : '--:--';
-                var end = states['time.starlink_sleep_end'] ? states['time.starlink_sleep_end'].state : '--:--';
-
-                return `<div style="display:flex; justify-content:space-between; align-items:center;">
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <ha-icon icon="mdi:power-sleep" style="--mdc-icon-size:22px; color:var(--info-color);"></ha-icon>
-                    <div>
-                      <div style="font-size:13px; font-weight:600;">Starlink Sleep</div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">Auto power schedule</div>
-                    </div>
-                  </div>
-                  <div style="text-align:right;">
-                    <div style="font-size:14px; font-weight:600;">${start} → ${end}</div>
-                  </div>
-                </div>`;
-              ]]]
-            tap_action:
-              action: more-info
-              entity: time.starlink_sleep_start
-            styles:
-              card:
-                - background: var(--card-background-color)
-                - border: 1px solid var(--divider-color)
-                - border-radius: 12px
-                - padding: 12px 16px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
-              label:
-                - font-size: 14px
-                - color: var(--primary-text-color)
-            grid_options:
-              columns: full
-              rows: 1
-
-          # ── Routines (quick-fire scripts) ──
-          - type: custom:button-card
-            show_name: false
-            show_state: false
-            show_icon: false
-            show_label: true
-            label: |
-              [[[
-                return `<div style="padding:2px 0;">
-                  <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--secondary-text-color); margin-bottom:8px;">Quick Actions</div>
-                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:8px;">
-                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px; text-align:center; cursor:pointer;">
-                      <ha-icon icon="mdi:weather-night" style="--mdc-icon-size:24px; color:var(--info-color);"></ha-icon>
-                      <div style="font-size:12px; font-weight:600; margin-top:4px;">Bedtime</div>
-                    </div>
-                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px; text-align:center; cursor:pointer;">
-                      <ha-icon icon="mdi:weather-sunny" style="--mdc-icon-size:24px; color:var(--warning-color);"></ha-icon>
-                      <div style="font-size:12px; font-weight:600; margin-top:4px;">Wake Up</div>
-                    </div>
-                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px; text-align:center; cursor:pointer;">
-                      <ha-icon icon="mdi:stove" style="--mdc-icon-size:24px; color:var(--error-color);"></ha-icon>
-                      <div style="font-size:12px; font-weight:600; margin-top:4px;">Cook Mode</div>
-                    </div>
-                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px; text-align:center; cursor:pointer;">
-                      <ha-icon icon="mdi:speedometer" style="--mdc-icon-size:24px; color:var(--success-color);"></ha-icon>
-                      <div style="font-size:12px; font-weight:600; margin-top:4px;">Speedtest</div>
-                    </div>
-                  </div>
-                </div>`;
-              ]]]
-            tap_action:
-              action: call-service
-              service: script.bedtime_routine
-            styles:
-              card:
-                - background: var(--card-background-color)
-                - border: 1px solid var(--divider-color)
-                - border-radius: 12px
-                - padding: 14px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
-              label:
-                - font-size: 14px
-                - color: var(--primary-text-color)
+          - type: entities
+            title: Starlink Sleep
+            entities:
+              - entity: time.starlink_sleep_start
+                name: Sleep Start
+              - entity: time.starlink_sleep_end
+                name: Sleep End
             grid_options:
               columns: full
               rows: auto
+
+          # ── Location ──
+          - type: map
+            entities:
+              - entity: device_tracker.filtered_starlink_location
+            default_zoom: 14
+            hours_to_show: 24
+            grid_options:
+              columns: full
+              rows: 3
 
           # ── Audio controls ──
           - type: custom:button-card
@@ -442,18 +437,19 @@ views:
             show_label: true
             label: |
               [[[
-                var audioStream = states['input_boolean.windows_audio_stream'].state === 'on';
-                var audioColor = audioStream ? 'var(--info-color)' : 'var(--secondary-text-color)';
-
-                return `<div style="display:flex; justify-content:space-between; align-items:center;">
-                  <div style="display:flex; align-items:center; gap:8px;">
-                    <ha-icon icon="${audioStream ? 'mdi:volume-high' : 'mdi:volume-off'}" style="--mdc-icon-size:22px; color:${audioColor};"></ha-icon>
-                    <div>
-                      <div style="font-size:13px; font-weight:600;">Windows Audio</div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">Scream receiver</div>
+                var winAudio=states['input_boolean.windows_audio_stream'].state==='on';
+                var bg=winAudio?'#8b5cf60d':'transparent';
+                var bc=winAudio?'#8b5cf666':'var(--divider-color)';
+                var tc=winAudio?'#8b5cf6':'var(--secondary-text-color)';
+                return `<div style="padding:2px 0;">
+                  <div style="font-size:13px; font-weight:600; margin-bottom:12px;">Audio</div>
+                  <div style="border:1.5px solid ${bc}; background:${bg}; border-radius:8px; padding:10px; display:flex; align-items:center; gap:10px; transition:all 0.15s;">
+                    <ha-icon icon="mdi:speaker" style="--mdc-icon-size:20px; color:${tc};"></ha-icon>
+                    <div style="flex:1;">
+                      <div style="font-size:12px; font-weight:600; color:${tc};">Windows Audio</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">${winAudio?'Streaming':'Off'}</div>
                     </div>
                   </div>
-                  <span style="font-size:13px; font-weight:600; color:${audioColor};">${audioStream ? 'Streaming' : 'Off'}</span>
                 </div>`;
               ]]]
             tap_action:
@@ -464,13 +460,13 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 12px 16px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 16px 20px
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
             grid_options:
               columns: full
-              rows: 1
+              rows: auto
 
     cards: []

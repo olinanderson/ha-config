@@ -42,7 +42,7 @@ views:
         entity: sensor.a32_pro_fresh_water_tank_level
         icon: >
           {{ 'mdi:water-off' if states('sensor.a32_pro_fresh_water_tank_level') | float(0) < 20 else 'mdi:water' }}
-        content: "{{ states('sensor.a32_pro_fresh_water_tank_level') }}%"
+        content: "{{ states('sensor.a32_pro_fresh_water_tank_level') | float(0) | round(0) }}%"
         color: >
           {% set v = states('sensor.a32_pro_fresh_water_tank_level') | float(0) %}
           {{ 'red' if v < 20 else 'orange' if v < 50 else 'green' }}
@@ -54,7 +54,7 @@ views:
       - type: custom:mushroom-template-badge
         entity: sensor.a32_pro_grey_water_tank_level
         icon: mdi:water-opacity
-        content: "{{ states('sensor.a32_pro_grey_water_tank_level') }}%"
+        content: "{{ states('sensor.a32_pro_grey_water_tank_level') | float(0) | round(0) }}%"
         color: >
           {% set v = states('sensor.a32_pro_grey_water_tank_level') | float(0) %}
           {{ 'red' if v > 80 else 'orange' if v > 60 else 'green' }}
@@ -66,7 +66,7 @@ views:
       - type: custom:mushroom-template-badge
         entity: sensor.stable_fuel_level
         icon: mdi:gas-station
-        content: "{{ states('sensor.stable_fuel_level') }}%"
+        content: "{{ states('sensor.stable_fuel_level') | float(0) | round(0) }}%"
         color: >
           {% set v = states('sensor.stable_fuel_level') | float(0) %}
           {{ 'red' if v < 15 else 'orange' if v < 30 else 'green' }}
@@ -128,12 +128,12 @@ views:
     sections:
 
       # ═══════════════════════════════════════════
-      #  SECTION 1: Climate & Heating
+      #  COLUMN 1 — Climate & Heating
       # ═══════════════════════════════════════════
       - type: grid
         column_span: 1
         cards:
-          # ── Temperature overview ──
+          # ── Temperature hero ──
           - type: custom:button-card
             show_state: false
             show_icon: false
@@ -141,28 +141,32 @@ views:
             show_label: true
             label: |
               [[[
-                function s(id){ var v=states[id]; if(!v || v.state === 'unknown' || v.state === 'unavailable' || v.state == null) return NaN; var n = Number(v.state); return isNaN(n)?NaN:n; }
-                function fmt(n,dec){ return isNaN(n) ? '—' : n.toFixed(dec); }
-
-                var t1 = s('sensor.a32_pro_bme280_1_temperature');
-                var t2 = s('sensor.a32_pro_bme280_2_temperature');
-                var t4 = s('sensor.a32_pro_bme280_4_temperature');
-                var h1 = s('sensor.a32_pro_bme280_1_relative_humidity');
-
-                return `<div style="display:flex; gap:24px; justify-content:center; align-items:center; padding:2px 0;">
-                  <div style="text-align:center;">
-                    <div style="font-size:26px; font-weight:600; letter-spacing:-0.5px; color:var(--primary-text-color);">${fmt(t1,1)}°</div>
-                    <div style="font-size:11px; color:var(--secondary-text-color); margin-top:1px;">Inside · ${fmt(h1,0)}%</div>
+                function s(id){ var v=states[id]; if(!v||v.state==='unknown'||v.state==='unavailable') return NaN; return Number(v.state); }
+                function fmt(n,d){ return isNaN(n)?'—':n.toFixed(d); }
+                var t1=s('sensor.a32_pro_bme280_1_temperature'), t2=s('sensor.a32_pro_bme280_2_temperature'),
+                    t4=s('sensor.a32_pro_bme280_4_temperature'), h1=s('sensor.a32_pro_bme280_1_relative_humidity');
+                var tColor = isNaN(t1) ? 'var(--secondary-text-color)' : t1<15?'#3b82f6':t1>28?'#ef4444':'var(--primary-text-color)';
+                return `<div style="padding:4px 0;">
+                  <div style="display:flex; align-items:center; gap:6px; margin-bottom:16px;">
+                    <div style="width:6px;height:6px;border-radius:50%;background:${tColor};flex-shrink:0;"></div>
+                    <span style="font-size:13px; font-weight:600; color:var(--primary-text-color);">Climate</span>
+                    <span style="font-size:12px; color:var(--secondary-text-color);">Indoor environment</span>
                   </div>
-                  <div style="width:1px; height:32px; background:var(--divider-color);"></div>
-                  <div style="text-align:center;">
-                    <div style="font-size:26px; font-weight:600; letter-spacing:-0.5px; color:var(--primary-text-color);">${fmt(t2,1)}°</div>
-                    <div style="font-size:11px; color:var(--secondary-text-color); margin-top:1px;">Cab</div>
-                  </div>
-                  <div style="width:1px; height:32px; background:var(--divider-color);"></div>
-                  <div style="text-align:center;">
-                    <div style="font-size:26px; font-weight:600; letter-spacing:-0.5px; color:var(--primary-text-color);">${fmt(t4,1)}°</div>
-                    <div style="font-size:11px; color:var(--secondary-text-color); margin-top:1px;">Outside</div>
+                  <div style="display:flex; gap:20px; justify-content:center; align-items:center;">
+                    <div style="text-align:center;">
+                      <div style="font-variant-numeric:tabular-nums; font-size:28px; font-weight:700; letter-spacing:-0.025em; color:${tColor};">${fmt(t1,1)}°</div>
+                      <div style="font-size:11px; color:var(--secondary-text-color); margin-top:2px;">Inside · ${fmt(h1,0)}%</div>
+                    </div>
+                    <div style="width:1px; height:36px; background:var(--divider-color);"></div>
+                    <div style="text-align:center;">
+                      <div style="font-variant-numeric:tabular-nums; font-size:28px; font-weight:700; letter-spacing:-0.025em;">${fmt(t2,1)}°</div>
+                      <div style="font-size:11px; color:var(--secondary-text-color); margin-top:2px;">Cab</div>
+                    </div>
+                    <div style="width:1px; height:36px; background:var(--divider-color);"></div>
+                    <div style="text-align:center;">
+                      <div style="font-variant-numeric:tabular-nums; font-size:28px; font-weight:700; letter-spacing:-0.025em;">${fmt(t4,1)}°</div>
+                      <div style="font-size:11px; color:var(--secondary-text-color); margin-top:2px;">Outside</div>
+                    </div>
                   </div>
                 </div>`;
               ]]]
@@ -171,8 +175,8 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 8px 16px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 16px 20px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
@@ -180,73 +184,55 @@ views:
               columns: full
               rows: 2
 
-          # ── Thermostat ──
-          - type: vertical-stack
-            cards:
-              - type: custom:button-card
-                entity: climate.a32_pro_van_hydronic_heating_pid
-                show_icon: false
-                show_state: false
-                show_name: false
-                show_label: true
-                label: |
-                  [[[
-                    var cl = states['climate.a32_pro_van_hydronic_heating_pid'];
-                    var cur = NaN;
-                    if (cl && cl.attributes && cl.attributes.current_temperature != null) {
-                      cur = parseFloat(cl.attributes.current_temperature);
-                    } else if (states['sensor.a32_pro_bme280_1_temperature'] && states['sensor.a32_pro_bme280_1_temperature'].state && !isNaN(parseFloat(states['sensor.a32_pro_bme280_1_temperature'].state))) {
-                      cur = parseFloat(states['sensor.a32_pro_bme280_1_temperature'].state);
-                    }
-                    var setTemp = (cl && cl.attributes && (cl.attributes.temperature || cl.attributes.target_temp || cl.attributes.target_temperature)) ? (cl.attributes.temperature || cl.attributes.target_temp || cl.attributes.target_temperature) : null;
+          # ── PID Thermostat ──
+          - type: custom:better-thermostat-ui-card
+            entity: climate.a32_pro_van_hydronic_heating_pid
+            grid_options:
+              columns: full
+              rows: auto
 
-                    return `<div style="text-align:center; padding:8px 0;">
-                      <div style="font-size:36px; font-weight:700;">${isNaN(cur) ? '—' : cur.toFixed(1)}°</div>
-                      <div style="font-size:13px; color:var(--secondary-text-color); margin-top:4px;">Set ${setTemp == null ? '—' : parseFloat(setTemp).toFixed(1) + '°'}</div>
-                    </div>`;
-                  ]]]
-                tap_action:
-                  action: more-info
-              - type: custom:better-thermostat-ui-card
-                entity: climate.a32_pro_van_hydronic_heating_pid
-                grid_options:
-                  columns: full
-                  rows: auto
-
-          # ── Climate controls row (3-up) ──
+          # ── Climate controls — ring-style toggles ──
           - type: custom:button-card
             entity: light.a32_pro_a32_pro_dac_0
-            name: Blower Fan
+            name: Blower
             icon: mdi:fan
             show_state: true
             state_display: |
               [[[
-                if (entity.state === 'on') {
-                  return Math.round((entity.attributes.brightness / 255) * 100) + '%';
-                }
+                if (entity.state === 'on') return Math.round((entity.attributes.brightness / 255) * 100) + '%';
                 return 'Off';
               ]]]
             tap_action:
               action: more-info
+            state:
+              - value: 'on'
+                styles:
+                  card:
+                    - background: rgba(59, 130, 246, 0.05)
+                    - border: 1.5px solid rgba(59, 130, 246, 0.4)
+                    - box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08), 0 1px 2px 0 rgba(0,0,0,0.05)
+                  icon:
+                    - color: '#3b82f6'
+              - value: 'off'
+                styles:
+                  icon:
+                    - color: var(--disabled-text-color)
             styles:
               card:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
                 - padding: 12px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
+                - transition: all 0.15s ease
               icon:
-                - color: |
-                    [[[
-                      return entity.state === 'on' ? 'var(--info-color)' : 'var(--disabled-text-color)';
-                    ]]]
-                - width: 24px
+                - width: 22px
               name:
-                - font-size: 13px
+                - font-size: 12px
                 - font-weight: 500
                 - color: var(--primary-text-color)
               state:
-                - font-size: 12px
+                - font-size: 11px
                 - color: var(--secondary-text-color)
             grid_options:
               columns: 4
@@ -262,8 +248,12 @@ views:
             state:
               - value: 'on'
                 styles:
+                  card:
+                    - background: rgba(249, 115, 22, 0.05)
+                    - border: 1.5px solid rgba(249, 115, 22, 0.4)
+                    - box-shadow: 0 0 0 3px rgba(249, 115, 22, 0.08), 0 1px 2px 0 rgba(0,0,0,0.05)
                   icon:
-                    - color: var(--warning-color)
+                    - color: '#f97316'
               - value: 'off'
                 styles:
                   icon:
@@ -274,11 +264,12 @@ views:
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
                 - padding: 12px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
+                - transition: all 0.15s ease
               icon:
-                - width: 24px
+                - width: 22px
               name:
-                - font-size: 13px
+                - font-size: 12px
                 - font-weight: 500
                 - color: var(--primary-text-color)
             grid_options:
@@ -295,8 +286,12 @@ views:
             state:
               - value: 'on'
                 styles:
+                  card:
+                    - background: rgba(6, 182, 212, 0.05)
+                    - border: 1.5px solid rgba(6, 182, 212, 0.4)
+                    - box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.08), 0 1px 2px 0 rgba(0,0,0,0.05)
                   icon:
-                    - color: var(--warning-color)
+                    - color: '#06b6d4'
               - value: 'off'
                 styles:
                   icon:
@@ -307,18 +302,19 @@ views:
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
                 - padding: 12px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
+                - transition: all 0.15s ease
               icon:
-                - width: 24px
+                - width: 22px
               name:
-                - font-size: 13px
+                - font-size: 12px
                 - font-weight: 500
                 - color: var(--primary-text-color)
             grid_options:
               columns: 4
               rows: 2
 
-          # ── Heating details (compact inline card) ──
+          # ── Heating details ──
           - type: custom:button-card
             show_name: false
             show_state: false
@@ -331,54 +327,32 @@ views:
                 var heater = states['switch.a32_pro_switch24_hydronic_heater'];
                 var hotWater = states['input_boolean.hot_water_mode'];
                 var climate = states['climate.a32_pro_van_hydronic_heating_pid'];
-
                 var coolVal = coolant ? parseFloat(coolant.state).toFixed(1) : '—';
                 var blowerVal = blowerAir ? parseFloat(blowerAir.state).toFixed(1) : '—';
-
                 var heaterOn = heater && heater.state === 'on';
                 var hwMode = hotWater && hotWater.state === 'on';
                 var climateOn = climate && climate.state !== 'off';
-
-                // Determine mode label
-                var modeIcon = '';
-                var modeText = '';
-                var modeColor = 'var(--secondary-text-color)';
-                if (heaterOn && climateOn && hwMode) {
-                  modeIcon = 'mdi:water-boiler';
-                  modeText = 'Heating air + water';
-                  modeColor = 'var(--warning-color)';
-                } else if (heaterOn && hwMode && !climateOn) {
-                  modeIcon = 'mdi:water-boiler';
-                  modeText = 'Hot water only';
-                  modeColor = 'var(--info-color)';
-                } else if (heaterOn && climateOn) {
-                  modeIcon = 'mdi:air-filter';
-                  modeText = 'Heating air (+ water passthrough)';
-                  modeColor = 'var(--warning-color)';
-                } else if (heaterOn) {
-                  modeIcon = 'mdi:radiator';
-                  modeText = 'Heater on (manual)';
-                  modeColor = 'var(--warning-color)';
-                }
-
+                var modeText = '', modeColor = 'var(--secondary-text-color)';
+                if (heaterOn && climateOn && hwMode) { modeText='Heating air + water'; modeColor='#f97316'; }
+                else if (heaterOn && hwMode && !climateOn) { modeText='Hot water only'; modeColor='#06b6d4'; }
+                else if (heaterOn && climateOn) { modeText='Heating air (+ water passthrough)'; modeColor='#f97316'; }
+                else if (heaterOn) { modeText='Heater on (manual)'; modeColor='#f97316'; }
                 var temps = `<div style="display:flex; gap:24px; justify-content:center; align-items:center;">
                   <div style="display:flex; align-items:center; gap:6px;">
-                    <ha-icon icon="mdi:coolant-temperature" style="--mdc-icon-size:16px; color:var(--info-color);"></ha-icon>
-                    <span style="font-size:12px;">Coolant ${coolVal}°C</span>
+                    <ha-icon icon="mdi:coolant-temperature" style="--mdc-icon-size:16px; color:#3b82f6;"></ha-icon>
+                    <span style="font-size:12px; font-variant-numeric:tabular-nums;">Coolant ${coolVal}°C</span>
                   </div>
                   <div style="display:flex; align-items:center; gap:6px;">
-                    <ha-icon icon="mdi:air-filter" style="--mdc-icon-size:16px; color:var(--info-color);"></ha-icon>
-                    <span style="font-size:12px;">Blower Air ${blowerVal}°C</span>
+                    <ha-icon icon="mdi:air-filter" style="--mdc-icon-size:16px; color:#f59e0b;"></ha-icon>
+                    <span style="font-size:12px; font-variant-numeric:tabular-nums;">Blower Air ${blowerVal}°C</span>
                   </div>
                 </div>`;
-
                 if (modeText) {
-                  temps += `<div style="display:flex; align-items:center; gap:6px; justify-content:center; margin-top:6px;">
-                    <ha-icon icon="${modeIcon}" style="--mdc-icon-size:14px; color:${modeColor};"></ha-icon>
-                    <span style="font-size:11px; color:${modeColor};">${modeText}</span>
+                  temps += `<div style="display:flex; align-items:center; gap:6px; justify-content:center; margin-top:8px;">
+                    <div style="width:6px;height:6px;border-radius:50%;background:${modeColor};"></div>
+                    <span style="font-size:12px; font-weight:500; color:${modeColor};">${modeText}</span>
                   </div>`;
                 }
-
                 return temps;
               ]]]
             styles:
@@ -386,8 +360,8 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 10px 16px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 12px 16px
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
               label:
                 - font-size: 12px
                 - color: var(--primary-text-color)
@@ -395,44 +369,26 @@ views:
               columns: full
               rows: 1
 
-          # ── Heater status message ──
+          # ── Heater status (hides when idle) ──
           - type: custom:button-card
             entity: sensor.a32_pro_hydronic_heater_status
             show_name: false
             show_state: false
             show_icon: false
             show_label: true
-            show_entity_picture: false
             label: |
               [[[
                 var status = entity ? entity.state : 'Unknown';
                 if (status === 'Idle.' || status === 'unavailable' || status === 'unknown') return '';
-
-                var icon = 'mdi:radiator';
                 var color = 'var(--secondary-text-color)';
-                if (status.includes('Low fuel lockout')) {
-                  icon = 'mdi:fuel-cell';
-                  color = 'var(--error-color)';
-                } else if (status.includes('Retrying')) {
-                  icon = 'mdi:restart';
-                  color = 'var(--warning-color)';
-                } else if (status.includes('failed')) {
-                  icon = 'mdi:radiator-off';
-                  color = 'var(--error-color)';
-                } else if (status.includes('warming') || status.includes('running')) {
-                  icon = 'mdi:radiator';
-                  color = 'var(--success-color)';
-                } else if (status.includes('Waiting')) {
-                  icon = 'mdi:timer-sand';
-                  color = 'var(--info-color)';
-                } else if (status.includes('Cooldown')) {
-                  icon = 'mdi:timer-sand';
-                  color = 'var(--warning-color)';
-                }
-
+                if (status.includes('Low fuel lockout')) color = '#ef4444';
+                else if (status.includes('Retrying') || status.includes('Cooldown')) color = '#f59e0b';
+                else if (status.includes('failed')) color = '#ef4444';
+                else if (status.includes('warming') || status.includes('running')) color = '#22c55e';
+                else if (status.includes('Waiting')) color = '#3b82f6';
                 return `<div style="display:flex; align-items:center; gap:8px; justify-content:center;">
-                  <ha-icon icon="${icon}" style="--mdc-icon-size:16px; color:${color};"></ha-icon>
-                  <span style="font-size:12px; color:${color};">${status}</span>
+                  <div style="width:6px;height:6px;border-radius:50%;background:${color};flex-shrink:0;"></div>
+                  <span style="font-size:12px; font-weight:500; color:${color};">${status}</span>
                 </div>`;
               ]]]
             styles:
@@ -440,12 +396,12 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 8px 16px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 10px 16px
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
                 - display: |
                     [[[
-                      var status = entity ? entity.state : '';
-                      return (status === 'Idle.' || status === 'unavailable' || status === 'unknown' || status === '') ? 'none' : 'block';
+                      var s = entity ? entity.state : '';
+                      return (s==='Idle.'||s==='unavailable'||s==='unknown'||s==='') ? 'none' : 'block';
                     ]]]
               label:
                 - font-size: 12px
@@ -454,7 +410,7 @@ views:
               columns: full
               rows: 1
 
-          # ── Low fuel lockout override button (only visible when locked out) ──
+          # ── Low fuel lockout override (conditional) ──
           - type: custom:button-card
             entity: input_boolean.heater_low_fuel_lockout
             name: Override Fuel Lockout
@@ -469,22 +425,22 @@ views:
                 text: "Override fuel lockout and allow heater to start?"
             styles:
               card:
-                - background: var(--card-background-color)
-                - border: 2px solid var(--error-color)
+                - background: rgba(239, 68, 68, 0.04)
+                - border: 1.5px solid rgba(239, 68, 68, 0.4)
                 - border-radius: 12px
                 - padding: 10px 16px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.08)
                 - display: |
                     [[[
                       return entity.state === 'on' ? 'block' : 'none';
                     ]]]
               icon:
-                - color: var(--error-color)
+                - color: '#ef4444'
                 - width: 20px
               name:
-                - font-size: 13px
-                - font-weight: 500
-                - color: var(--error-color)
+                - font-size: 12px
+                - font-weight: 600
+                - color: '#ef4444'
             grid_options:
               columns: full
               rows: 1
@@ -498,12 +454,12 @@ views:
               rows: auto
 
       # ═══════════════════════════════════════════
-      #  SECTION 2: Battery & Power
+      #  COLUMN 2 — Power & Energy
       # ═══════════════════════════════════════════
       - type: grid
         column_span: 1
         cards:
-          # ── Battery status hero card ──
+          # ── Battery hero ──
           - type: custom:button-card
             entity: sensor.olins_van_bms_battery
             show_name: false
@@ -512,74 +468,60 @@ views:
             show_label: true
             label: |
               [[[
-                function s(id){ var v=states[id]; if(!v || v.state === 'unknown' || v.state === 'unavailable' || v.state == null) return NaN; var n = Number(v.state); return isNaN(n)?NaN:n; }
-                function fmt(n,dec){ return isNaN(n) ? '—' : n.toFixed(dec); }
-
-                var soc = s('sensor.olins_van_bms_battery');
-                var current = s('sensor.olins_van_bms_current');
-                var voltage = s('sensor.olins_van_bms_voltage');
-                var power = s('sensor.olins_van_bms_power');
-                var stored = s('sensor.olins_van_bms_stored_energy');
-                var temp = s('sensor.olins_van_bms_temperature');
-
-                var socNum = isNaN(soc) ? 0 : soc;
-                var socColor = socNum < 30 ? 'var(--error-color)' : socNum < 65 ? 'var(--warning-color)' : 'var(--success-color)';
-                var status = (current > 0.5) ? 'Charging' : (current < -0.5) ? 'Discharging' : 'Idle';
-                var statusColor = (current > 0.5) ? 'var(--success-color)' : (current < -0.5) ? 'var(--warning-color)' : 'var(--secondary-text-color)';
-
-                // Time estimate
-                var timeStr = '';
-                if (current > 0.5 && !isNaN(power) && !isNaN(stored)) {
-                  var whRemaining = 8700 - stored;
-                  var hours = Math.abs(power) > 0 ? whRemaining / Math.abs(power) : NaN;
-                  if (!isNaN(hours) && hours < 48) {
-                    var h = Math.floor(hours);
-                    var m = Math.round((hours - h) * 60);
-                    timeStr = h + 'h ' + m + 'm to full';
-                  }
-                } else if (current < -0.5 && !isNaN(power) && !isNaN(stored)) {
-                  var hours = Math.abs(power) > 0 ? stored / Math.abs(power) : NaN;
-                  if (!isNaN(hours) && hours < 48) {
-                    var h = Math.floor(hours);
-                    var m = Math.round((hours - h) * 60);
-                    timeStr = h + 'h ' + m + 'm remaining';
-                  }
+                function s(id){ var v=states[id]; if(!v||v.state==='unknown'||v.state==='unavailable') return NaN; return Number(v.state); }
+                function fmt(n,d){ return isNaN(n)?'—':n.toFixed(d); }
+                var soc=s('sensor.olins_van_bms_battery'), current=s('sensor.olins_van_bms_current'),
+                    voltage=s('sensor.olins_van_bms_voltage'), power=s('sensor.olins_van_bms_power'),
+                    stored=s('sensor.olins_van_bms_stored_energy'), temp=s('sensor.olins_van_bms_temperature');
+                var socNum=isNaN(soc)?0:soc;
+                var socColor=socNum<30?'#ef4444':socNum<65?'#f59e0b':'#22c55e';
+                var status=(current>0.5)?'Charging':(current<-0.5)?'Discharging':'Idle';
+                var statusColor=(current>0.5)?'#22c55e':(current<-0.5)?'#f59e0b':'var(--secondary-text-color)';
+                var timeStr='';
+                if(current>0.5&&!isNaN(power)&&!isNaN(stored)){
+                  var h=Math.abs(power)>0?(8700-stored)/Math.abs(power):NaN;
+                  if(!isNaN(h)&&h<48){timeStr=Math.floor(h)+'h '+Math.round((h-Math.floor(h))*60)+'m to full';}
+                }else if(current<-0.5&&!isNaN(power)&&!isNaN(stored)){
+                  var h=Math.abs(power)>0?stored/Math.abs(power):NaN;
+                  if(!isNaN(h)&&h<48){timeStr=Math.floor(h)+'h '+Math.round((h-Math.floor(h))*60)+'m left';}
                 }
-
-                var dispSoc = isNaN(soc) ? '—' : Math.round(soc) + '%';
-
-                return `<div style="padding:4px 0;">
-                  <div style="display:flex; align-items:baseline; gap:8px; margin-bottom:8px;">
-                    <span style="font-size:36px; font-weight:700; letter-spacing:-1px; color:${socColor};">${dispSoc}</span>
+                return `<div style="padding:2px 0;">
+                  <div style="display:flex; align-items:center; gap:6px; margin-bottom:16px;">
+                    <div style="width:6px;height:6px;border-radius:50%;background:${socColor};flex-shrink:0;"></div>
+                    <span style="font-size:13px; font-weight:600; color:var(--primary-text-color);">Battery</span>
+                    <span style="font-size:12px; color:var(--secondary-text-color);">24V LiFePO₄</span>
+                  </div>
+                  <div style="display:flex; align-items:baseline; gap:10px; margin-bottom:8px;">
+                    <span style="font-variant-numeric:tabular-nums; font-size:36px; font-weight:700; letter-spacing:-0.025em; line-height:1; color:${socColor};">${isNaN(soc)?'—':Math.round(soc)+'%'}</span>
                     <span style="font-size:13px; font-weight:500; color:${statusColor};">${status}</span>
                   </div>
-                  <div style="width:100%; height:6px; background:var(--divider-color); border-radius:3px; margin-bottom:12px; overflow:hidden;">
-                    <div style="width:${isNaN(soc) ? 0 : soc}%; height:100%; background:${socColor}; border-radius:3px; transition:width 1s ease;"></div>
+                  <div style="width:100%; height:8px; background:var(--divider-color); border-radius:4px; margin-bottom:14px; overflow:hidden;">
+                    <div style="width:${isNaN(soc)?0:soc}%; height:100%; background:linear-gradient(90deg, ${socColor}, ${socColor}dd); border-radius:4px; transition:width 1s ease;"></div>
                   </div>
-                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px;">
                     <div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">Voltage</div>
-                      <div style="font-size:15px; font-weight:600;">${fmt(voltage,1)}V</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Voltage</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${fmt(voltage,1)}V</div>
                     </div>
                     <div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">Current</div>
-                      <div style="font-size:15px; font-weight:600;">${fmt(current,1)}A</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Current</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${fmt(current,1)}A</div>
                     </div>
                     <div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">Power</div>
-                      <div style="font-size:15px; font-weight:600;">${isNaN(power) ? '—' : Math.abs(power).toFixed(0)}W</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Power</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${isNaN(power)?'—':Math.abs(power).toFixed(0)+'W'}</div>
                     </div>
                     <div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">Stored</div>
-                      <div style="font-size:15px; font-weight:600;">${isNaN(stored) ? '—' : (stored/1000).toFixed(1)} kWh</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Stored</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${isNaN(stored)?'—':(stored/1000).toFixed(1)+' kWh'}</div>
                     </div>
                     <div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">Temp</div>
-                      <div style="font-size:15px; font-weight:600;">${fmt(temp,1)}°C</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Temp</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${fmt(temp,1)}°C</div>
                     </div>
                     <div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">Estimate</div>
-                      <div style="font-size:15px; font-weight:600;">${timeStr || '—'}</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Estimate</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${timeStr||'—'}</div>
                     </div>
                   </div>
                 </div>`;
@@ -591,8 +533,8 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 16px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 20px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
@@ -601,7 +543,7 @@ views:
               columns: full
               rows: auto
 
-          # ── Solar status card ──
+          # ── Solar status ──
           - type: custom:button-card
             entity: sensor.total_mppt_pv_power
             show_name: false
@@ -610,35 +552,29 @@ views:
             show_label: true
             label: |
               [[[
-                function s(id, d){ return (states[id] && states[id].state && states[id].state !== 'unknown' && states[id].state !== 'unavailable') ? parseFloat(states[id].state) : d; }
-                var pv = s('sensor.total_mppt_pv_power', 0);
-                var yield1 = s('sensor.a32_pro_mppt1_yield_today', 0);
-                var yield2 = s('sensor.a32_pro_mppt2_yield_today', 0);
-                var totalYield = ((yield1 + yield2) * 1000).toFixed(0);
-                var pv1 = s('sensor.a32_pro_mppt1_pv_power', 0);
-                var pv2 = s('sensor.a32_pro_mppt2_pv_power', 0);
-                var pvColor = pv > 50 ? 'var(--success-color)' : 'var(--secondary-text-color)';
-
-                return `<div style="padding:4px 0;">
-                  <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
-                    <ha-icon icon="mdi:solar-power-variant" style="--mdc-icon-size:22px; color:${pvColor};"></ha-icon>
-                    <div>
-                      <div style="font-size:22px; font-weight:700; letter-spacing:-0.5px;">${pv}W</div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">Solar Production</div>
-                    </div>
+                function s(id,d){ return (states[id]&&states[id].state&&states[id].state!=='unknown'&&states[id].state!=='unavailable') ? parseFloat(states[id].state) : d; }
+                var pv=s('sensor.total_mppt_pv_power',0), pv1=s('sensor.a32_pro_mppt1_pv_power',0), pv2=s('sensor.a32_pro_mppt2_pv_power',0);
+                var yield1=s('sensor.a32_pro_mppt1_yield_today',0), yield2=s('sensor.a32_pro_mppt2_yield_today',0);
+                var totalYield=((yield1+yield2)*1000).toFixed(0);
+                var pvColor=pv>50?'#22c55e':'var(--secondary-text-color)';
+                return `<div style="padding:2px 0;">
+                  <div style="display:flex; align-items:center; gap:6px; margin-bottom:14px;">
+                    <div style="width:6px;height:6px;border-radius:50%;background:${pvColor};flex-shrink:0;"></div>
+                    <span style="font-size:13px; font-weight:600;">Solar</span>
+                    <span style="font-size:12px; color:var(--secondary-text-color);">${totalYield} Wh today</span>
                   </div>
-                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:8px;">
-                    <div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">MPPT 1</div>
-                      <div style="font-size:14px; font-weight:600;">${pv1}W</div>
+                  <div style="display:flex; align-items:center; gap:12px; margin-bottom:12px;">
+                    <ha-icon icon="mdi:solar-power-variant" style="--mdc-icon-size:24px; color:${pvColor};"></ha-icon>
+                    <span style="font-variant-numeric:tabular-nums; font-size:28px; font-weight:700; letter-spacing:-0.025em;">${pv}W</span>
+                  </div>
+                  <div style="display:grid; grid-template-columns:1fr 1fr; gap:12px;">
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px;">
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">MPPT 1</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:18px; font-weight:700; margin-top:4px;">${pv1}W</div>
                     </div>
-                    <div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">MPPT 2</div>
-                      <div style="font-size:14px; font-weight:600;">${pv2}W</div>
-                    </div>
-                    <div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">Today</div>
-                      <div style="font-size:14px; font-weight:600;">${totalYield} Wh</div>
+                    <div style="border:1px solid var(--divider-color); border-radius:8px; padding:10px;">
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">MPPT 2</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:18px; font-weight:700; margin-top:4px;">${pv2}W</div>
                     </div>
                   </div>
                 </div>`;
@@ -650,8 +586,8 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 16px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 20px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
@@ -660,10 +596,10 @@ views:
               columns: full
               rows: auto
 
-          # ── Quick toggles row ──
+          # ── Quick toggles ──
           - type: custom:button-card
             entity: input_boolean.shore_power_charger_enabled
-            name: Auto Shore Charger
+            name: Shore Charger
             icon: mdi:ev-plug-type1
             show_state: false
             tap_action:
@@ -671,10 +607,12 @@ views:
             state:
               - value: 'on'
                 styles:
-                  icon:
-                    - color: var(--success-color)
                   card:
-                    - border-color: var(--success-color)
+                    - background: rgba(34, 197, 94, 0.05)
+                    - border: 1.5px solid rgba(34, 197, 94, 0.4)
+                    - box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.08), 0 1px 2px 0 rgba(0,0,0,0.05)
+                  icon:
+                    - color: '#22c55e'
               - value: 'off'
                 styles:
                   icon:
@@ -685,15 +623,16 @@ views:
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
                 - padding: 12px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
+                - transition: all 0.15s ease
               icon:
-                - width: 24px
+                - width: 22px
               name:
-                - font-size: 12px
+                - font-size: 11px
                 - font-weight: 500
                 - color: var(--primary-text-color)
             grid_options:
-              columns: 6
+              columns: 4
               rows: 1
 
           - type: custom:button-card
@@ -706,10 +645,12 @@ views:
             state:
               - value: 'on'
                 styles:
-                  icon:
-                    - color: var(--info-color)
                   card:
-                    - border-color: var(--info-color)
+                    - background: rgba(59, 130, 246, 0.05)
+                    - border: 1.5px solid rgba(59, 130, 246, 0.4)
+                    - box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.08), 0 1px 2px 0 rgba(0,0,0,0.05)
+                  icon:
+                    - color: '#3b82f6'
               - value: 'off'
                 styles:
                   icon:
@@ -720,29 +661,70 @@ views:
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
                 - padding: 12px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
+                - transition: all 0.15s ease
               icon:
-                - width: 24px
+                - width: 22px
               name:
-                - font-size: 12px
+                - font-size: 11px
                 - font-weight: 500
                 - color: var(--primary-text-color)
             grid_options:
-              columns: 6
+              columns: 4
               rows: 1
 
-          # ── (Power flow moved to Power & Energy page) ──
+          # ── Inverter toggle ──
+          - type: custom:button-card
+            entity: binary_sensor.shelly_em_reachable
+            name: Inverter
+            icon: mdi:power-plug
+            show_state: false
+            tap_action:
+              action: call-service
+              service: button.press
+              target:
+                entity_id: button.a32_pro_inverter_on_off_toggle
+            state:
+              - value: 'on'
+                styles:
+                  card:
+                    - background: rgba(139, 92, 246, 0.05)
+                    - border: 1.5px solid rgba(139, 92, 246, 0.4)
+                    - box-shadow: 0 0 0 3px rgba(139, 92, 246, 0.08), 0 1px 2px 0 rgba(0,0,0,0.05)
+                  icon:
+                    - color: '#8b5cf6'
+              - value: 'off'
+                styles:
+                  icon:
+                    - color: var(--disabled-text-color)
+            styles:
+              card:
+                - background: var(--card-background-color)
+                - border: 1px solid var(--divider-color)
+                - border-radius: 12px
+                - padding: 12px
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
+                - transition: all 0.15s ease
+              icon:
+                - width: 22px
+              name:
+                - font-size: 11px
+                - font-weight: 500
+                - color: var(--primary-text-color)
+            grid_options:
+              columns: 4
+              rows: 1
 
       # ═══════════════════════════════════════════
-      #  SECTION 3: Status, Weather & Controls
+      #  COLUMN 3 — Status, Weather & Controls
       # ═══════════════════════════════════════════
       - type: grid
-        column_span: 2
+        column_span: 1
         cards:
-          # ── Mode toggles (fixed height row) ──
+          # ── Mode toggles — ring style ──
           - type: custom:button-card
             entity: input_boolean.power_saving_mode
-            name: Power Saving
+            name: Power Save
             icon: mdi:battery-heart-variant
             show_state: false
             tap_action:
@@ -751,12 +733,13 @@ views:
               - value: 'on'
                 styles:
                   card:
-                    - background: var(--success-color)
-                    - border-color: var(--success-color)
+                    - background: rgba(34, 197, 94, 0.05)
+                    - border: 1.5px solid rgba(34, 197, 94, 0.4)
+                    - box-shadow: 0 0 0 3px rgba(34, 197, 94, 0.08), 0 1px 2px 0 rgba(0,0,0,0.05)
                   icon:
-                    - color: white
+                    - color: '#22c55e'
                   name:
-                    - color: white
+                    - color: '#22c55e'
               - value: 'off'
                 styles:
                   icon:
@@ -772,13 +755,13 @@ views:
                 - flex-direction: column
                 - align-items: center
                 - justify-content: center
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
-                - transition: all 0.2s ease
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
+                - transition: all 0.15s ease
               icon:
-                - width: 24px
+                - width: 22px
                 - margin-bottom: 4px
               name:
-                - font-size: 12px
+                - font-size: 11px
                 - font-weight: 500
             grid_options:
               columns: 4
@@ -795,12 +778,13 @@ views:
               - value: 'on'
                 styles:
                   card:
-                    - background: var(--info-color)
-                    - border-color: var(--info-color)
+                    - background: rgba(99, 102, 241, 0.05)
+                    - border: 1.5px solid rgba(99, 102, 241, 0.4)
+                    - box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.08), 0 1px 2px 0 rgba(0,0,0,0.05)
                   icon:
-                    - color: white
+                    - color: '#6366f1'
                   name:
-                    - color: white
+                    - color: '#6366f1'
               - value: 'off'
                 styles:
                   icon:
@@ -816,13 +800,13 @@ views:
                 - flex-direction: column
                 - align-items: center
                 - justify-content: center
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
-                - transition: all 0.2s ease
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
+                - transition: all 0.15s ease
               icon:
-                - width: 24px
+                - width: 22px
                 - margin-bottom: 4px
               name:
-                - font-size: 12px
+                - font-size: 11px
                 - font-weight: 500
             grid_options:
               columns: 4
@@ -839,12 +823,13 @@ views:
               - value: 'on'
                 styles:
                   card:
-                    - background: var(--info-color)
-                    - border-color: var(--info-color)
+                    - background: rgba(6, 182, 212, 0.05)
+                    - border: 1.5px solid rgba(6, 182, 212, 0.4)
+                    - box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.08), 0 1px 2px 0 rgba(0,0,0,0.05)
                   icon:
-                    - color: white
+                    - color: '#06b6d4'
                   name:
-                    - color: white
+                    - color: '#06b6d4'
               - value: 'off'
                 styles:
                   icon:
@@ -860,19 +845,19 @@ views:
                 - flex-direction: column
                 - align-items: center
                 - justify-content: center
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
-                - transition: all 0.2s ease
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
+                - transition: all 0.15s ease
               icon:
-                - width: 24px
+                - width: 22px
                 - margin-bottom: 4px
               name:
-                - font-size: 12px
+                - font-size: 11px
                 - font-weight: 500
             grid_options:
               columns: 4
               rows: 1
 
-          # ── Presence & connectivity status (matching height) ──
+          # ── Presence & connectivity ──
           - type: custom:button-card
             entity: device_tracker.olin_andersons_iphone_16_pro_max
             show_name: false
@@ -881,109 +866,55 @@ views:
             show_label: true
             label: |
               [[[
-                function s(id){ var v=states[id]; return v ? v : null; }
-                var tracker = s('device_tracker.olin_andersons_iphone_16_pro_max');
+                var tracker = states['device_tracker.olin_andersons_iphone_16_pro_max'];
                 var isHome = tracker && tracker.state === 'home';
                 var timeStr = 'Unknown';
                 if (tracker && tracker.last_changed) {
                   var dur = (Date.now() / 1000) - Date.parse(tracker.last_changed) / 1000;
                   var m = Math.floor(dur / 60);
-                  var d = Math.floor(m / 1440);
-                  var h = Math.floor((m % 1440) / 60);
-                  var mm = m % 60;
-                  timeStr = (d > 0 ? d + 'd ' : '') + (h > 0 ? h + 'h ' : '') + mm + 'm';
+                  var d = Math.floor(m / 1440), h = Math.floor((m % 1440) / 60), mm = m % 60;
+                  timeStr = (d>0?d+'d ':'') + (h>0?h+'h ':'') + mm + 'm';
                 }
-
-                var starlink = states['binary_sensor.starlink_ethernet_speeds'];
-                var slOk = starlink && starlink.state === 'off';
-                var radar = states['binary_sensor.apollo_msr_2_1731d8_radar_target'];
-                var occupied = radar && radar.state === 'on';
-
-                return `<div style="display:flex; gap:16px; align-items:center; justify-content:center; height:100%;">
-                  <div style="display:flex; align-items:center; gap:5px;">
-                    <ha-icon icon="${isHome ? 'mdi:home-account' : 'mdi:home-outline'}" style="--mdc-icon-size:18px; color:${isHome ? 'var(--success-color)' : 'var(--warning-color)'};"></ha-icon>
-                    <span style="font-size:13px; font-weight:500;">${isHome ? 'Home' : 'Away'} ${timeStr}</span>
-                  </div>
-                  <div style="width:1px; height:18px; background:var(--divider-color);"></div>
-                  <div style="display:flex; align-items:center; gap:5px;">
-                    <ha-icon icon="mdi:motion-sensor" style="--mdc-icon-size:18px; color:${occupied ? 'var(--success-color)' : 'var(--secondary-text-color)'};"></ha-icon>
-                    <span style="font-size:13px;">${occupied ? 'Occupied' : 'Empty'}</span>
-                  </div>
-                  <div style="width:1px; height:18px; background:var(--divider-color);"></div>
-                  <div style="display:flex; align-items:center; gap:5px;">
-                    <ha-icon icon="mdi:satellite-variant" style="--mdc-icon-size:18px; color:${slOk ? 'var(--success-color)' : 'var(--error-color)'};"></ha-icon>
-                    <span style="font-size:13px;">Starlink</span>
-                  </div>
-                </div>`;
-              ]]]
-            styles:
-              card:
-                - background: var(--card-background-color)
-                - border: 1px solid var(--divider-color)
-                - border-radius: 12px
-                - padding: 0 16px
-                - height: 68px
-                - display: flex
-                - align-items: center
-                - justify-content: center
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
-              label:
-                - font-size: 13px
-                - color: var(--primary-text-color)
-                - width: 100%
-            grid_options:
-              columns: 9
-              rows: 1
-
-          # ── Speedtest badge (matching height) ──
-          - type: custom:button-card
-            entity: input_boolean.speedtest_running
-            show_name: false
-            show_state: false
-            show_icon: false
-            show_label: true
-            label: |
-              [[[
-                var running = entity.state === 'on';
+                var slOk = states['binary_sensor.starlink_ethernet_speeds'] && states['binary_sensor.starlink_ethernet_speeds'].state === 'off';
+                var occupied = states['binary_sensor.apollo_msr_2_1731d8_radar_target'] && states['binary_sensor.apollo_msr_2_1731d8_radar_target'].state === 'on';
                 var dl = states['sensor.speedtest_download'] ? states['sensor.speedtest_download'].state : '—';
                 var ul = states['sensor.speedtest_upload'] ? states['sensor.speedtest_upload'].state : '—';
-
-                if (running) {
-                  return `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%;">
-                    <ha-icon icon="mdi:progress-clock" style="--mdc-icon-size:20px; color:var(--warning-color); margin-bottom:4px;"></ha-icon>
-                    <span style="font-size:11px;">Testing…</span>
-                  </div>`;
-                }
-                return `<div style="display:flex; flex-direction:column; align-items:center; justify-content:center; height:100%;">
-                  <span style="font-size:13px; font-weight:600; letter-spacing:-0.3px;">↓${dl}</span>
-                  <span style="font-size:13px; font-weight:600; letter-spacing:-0.3px;">↑${ul}</span>
+                return `<div style="display:flex; flex-wrap:wrap; gap:12px 16px; align-items:center;">
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <div style="width:6px;height:6px;border-radius:50%;background:${isHome?'#22c55e':'#f59e0b'};"></div>
+                    <span style="font-size:12px; font-weight:500;">${isHome?'Home':'Away'}</span>
+                    <span style="font-size:11px; color:var(--secondary-text-color);">${timeStr}</span>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <div style="width:6px;height:6px;border-radius:50%;background:${occupied?'#22c55e':'var(--secondary-text-color)'};"></div>
+                    <span style="font-size:12px;">${occupied?'Occupied':'Empty'}</span>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:6px;">
+                    <div style="width:6px;height:6px;border-radius:50%;background:${slOk?'#22c55e':'#ef4444'};"></div>
+                    <span style="font-size:12px;">Starlink</span>
+                  </div>
+                  <div style="display:flex; align-items:center; gap:4px; margin-left:auto;">
+                    <span style="font-variant-numeric:tabular-nums; font-size:11px; font-weight:600;">↓${dl}</span>
+                    <span style="font-variant-numeric:tabular-nums; font-size:11px; font-weight:600;">↑${ul}</span>
+                  </div>
                 </div>`;
               ]]]
-            tap_action:
-              action: call-service
-              service: script.turn_on
-              service_data:
-                entity_id: script.update_speedtest
             styles:
               card:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 0
-                - height: 68px
-                - display: flex
-                - align-items: center
-                - justify-content: center
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 10px 16px
+                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
               label:
                 - font-size: 13px
                 - color: var(--primary-text-color)
                 - width: 100%
             grid_options:
-              columns: 3
+              columns: full
               rows: 1
 
-          # ── Location & Weather ──
+          # ── Weather hero ──
           - type: custom:button-card
             entity: weather.pirateweather
             show_name: false
@@ -992,106 +923,57 @@ views:
             show_label: true
             label: |
               [[[
-                function sAttr(obj, key){ if(!obj) return NaN; var v = obj[key]; var n = Number(v); return isNaN(n) ? NaN : n; }
-                function fmt(n,dec){ return isNaN(n) ? '—' : n.toFixed(dec); }
-
+                function sAttr(obj,key){ if(!obj) return NaN; var n=Number(obj[key]); return isNaN(n)?NaN:n; }
                 var w = states['weather.pirateweather'];
                 if (!w || w.state === 'unavailable') return 'Weather unavailable';
-
                 var a = w.attributes || {};
                 var temp = sAttr(a,'temperature');
-                var feelsLike = (a.apparent_temperature != null) ? sAttr(a,'apparent_temperature') : NaN;
+                var feelsLike = a.apparent_temperature != null ? sAttr(a,'apparent_temperature') : NaN;
                 var humidity = a.humidity != null ? a.humidity : '—';
-                var windSpd = a.wind_speed ? (Number(a.wind_speed) * 1.60934) : NaN;
+                var windSpd = a.wind_speed ? (Number(a.wind_speed)*1.60934).toFixed(0) : '—';
                 var windBearing = a.wind_bearing != null ? sAttr(a,'wind_bearing') : NaN;
-                var pressure = a.pressure ? Number(a.pressure) : NaN;
                 var cond = w.state;
-
-                // Wind direction from bearing
                 var windDir = '';
-                if (windBearing !== null) {
-                  var dirs = ['N','NE','E','SE','S','SW','W','NW'];
-                  windDir = dirs[Math.round(windBearing / 45) % 8] + ' ';
-                }
-
-                // Condition display name
-                var condNames = {
-                  'clear-night':'Clear','cloudy':'Cloudy','fog':'Foggy','hail':'Hail',
-                  'lightning':'Lightning','lightning-rainy':'Thunderstorm',
-                  'partlycloudy':'Partly Cloudy','pouring':'Heavy Rain','rainy':'Rain',
-                  'snowy':'Snow','snowy-rainy':'Sleet','sunny':'Sunny',
-                  'windy':'Windy','windy-variant':'Windy','exceptional':'Severe'
-                };
+                if (!isNaN(windBearing)) { var dirs=['N','NE','E','SE','S','SW','W','NW']; windDir=dirs[Math.round(windBearing/45)%8]+' '; }
+                var condNames = {'clear-night':'Clear','cloudy':'Cloudy','fog':'Foggy','hail':'Hail','lightning':'Lightning','lightning-rainy':'Thunderstorm','partlycloudy':'Partly Cloudy','pouring':'Heavy Rain','rainy':'Rain','snowy':'Snow','snowy-rainy':'Sleet','sunny':'Sunny','windy':'Windy','windy-variant':'Windy','exceptional':'Severe'};
                 var condName = condNames[cond] || cond;
-
-                // Weather icon
-                var iconMap = {
-                  'clear-night':'mdi:weather-night','cloudy':'mdi:weather-cloudy',
-                  'fog':'mdi:weather-fog','hail':'mdi:weather-hail',
-                  'lightning':'mdi:weather-lightning','lightning-rainy':'mdi:weather-lightning-rainy',
-                  'partlycloudy':'mdi:weather-partly-cloudy','pouring':'mdi:weather-pouring',
-                  'rainy':'mdi:weather-rainy','snowy':'mdi:weather-snowy',
-                  'snowy-rainy':'mdi:weather-snowy-rainy','sunny':'mdi:weather-sunny',
-                  'windy':'mdi:weather-windy','windy-variant':'mdi:weather-windy-variant',
-                  'exceptional':'mdi:weather-hurricane'
-                };
+                var iconMap = {'clear-night':'mdi:weather-night','cloudy':'mdi:weather-cloudy','fog':'mdi:weather-fog','hail':'mdi:weather-hail','lightning':'mdi:weather-lightning','lightning-rainy':'mdi:weather-lightning-rainy','partlycloudy':'mdi:weather-partly-cloudy','pouring':'mdi:weather-pouring','rainy':'mdi:weather-rainy','snowy':'mdi:weather-snowy','snowy-rainy':'mdi:weather-snowy-rainy','sunny':'mdi:weather-sunny','windy':'mdi:weather-windy','windy-variant':'mdi:weather-windy-variant','exceptional':'mdi:weather-hurricane'};
                 var icon = iconMap[cond] || 'mdi:weather-cloudy';
-
-                // Natural language summary
-                var tempWord = temp <= -10 ? 'frigid' : temp <= 0 ? 'freezing' : temp <= 8 ? 'cold' : temp <= 15 ? 'cool' : temp <= 22 ? 'mild' : temp <= 28 ? 'warm' : 'hot';
+                var tempWord = temp<=-10?'frigid':temp<=0?'freezing':temp<=8?'cold':temp<=15?'cool':temp<=22?'mild':temp<=28?'warm':'hot';
                 var summary = condName + ' and ' + tempWord;
-
-                // Location
                 var geo = states['sensor.olin_andersons_iphone_geocoded_location'];
                 var loc = '';
                 if (geo && geo.state && geo.state !== 'unknown' && geo.state !== 'unavailable') {
                   var ga = geo.attributes || {};
-                  var city = ga['Locality'] || ga['locality'] || '';
-                  var region = ga['AdministrativeArea'] || ga['administrative_area'] || '';
-                  loc = city && region ? city + ', ' + region : city || region || geo.state;
+                  var city = ga['Locality']||ga['locality']||'';
+                  var region = ga['AdministrativeArea']||ga['administrative_area']||'';
+                  loc = city&&region ? city+', '+region : city||region||geo.state;
                 }
                 if (!loc) loc = 'Location unavailable';
-
-                // Last updated
-                var lastChanged = new Date(w.last_updated || w.last_changed);
-                var now = new Date();
-                var diffMin = Math.round((now - lastChanged) / 60000);
-                var updatedStr = diffMin < 1 ? 'just now' : diffMin < 60 ? diffMin + ' min ago' : Math.floor(diffMin/60) + 'h ' + (diffMin%60) + 'm ago';
-
-                // Feels like string
                 var feelsStr = !isNaN(feelsLike) ? 'Feels like ' + Math.round(feelsLike) + '°' : '';
-
                 return `<div style="padding:2px 0;">
-                  <div style="display:flex; align-items:center; gap:5px; margin-bottom:10px;">
-                    <ha-icon icon="mdi:map-marker" style="--mdc-icon-size:15px; color:var(--primary-text-color);"></ha-icon>
-                    <span style="font-size:15px; font-weight:600; color:var(--primary-text-color);">${loc}</span>
+                  <div style="display:flex; align-items:center; gap:6px; margin-bottom:14px;">
+                    <ha-icon icon="mdi:map-marker" style="--mdc-icon-size:16px; color:var(--primary-text-color);"></ha-icon>
+                    <span style="font-size:14px; font-weight:600; color:var(--primary-text-color);">${loc}</span>
                   </div>
-
-                  <div style="display:flex; align-items:center; justify-content:space-between; margin-bottom:4px;">
-                    <div style="display:flex; align-items:center; gap:12px;">
-                      <ha-icon icon="${icon}" style="--mdc-icon-size:48px; color:var(--info-color); opacity:0.7;"></ha-icon>
-                      <div>
-                        <div style="font-size:38px; font-weight:700; letter-spacing:-2px; line-height:1;">${isNaN(temp) ? '—' : Math.round(temp) + '°'}<span style="font-size:16px; font-weight:400; letter-spacing:0; color:var(--secondary-text-color);">C</span></div>
-                        ${feelsStr ? '<div style="font-size:12px; color:var(--secondary-text-color); margin-top:2px;">' + feelsStr + '</div>' : ''}
-                      </div>
+                  <div style="display:flex; align-items:center; gap:16px; margin-bottom:12px;">
+                    <ha-icon icon="${icon}" style="--mdc-icon-size:44px; color:#3b82f6; opacity:0.8;"></ha-icon>
+                    <div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:40px; font-weight:700; letter-spacing:-0.03em; line-height:1;">${isNaN(temp)?'—':Math.round(temp)+'°'}<span style="font-size:16px; font-weight:400; color:var(--secondary-text-color);">C</span></div>
+                      ${feelsStr?'<div style="font-size:12px; color:var(--secondary-text-color); margin-top:4px;">'+feelsStr+'</div>':''}
                     </div>
                   </div>
-
-                  <div style="font-size:14px; font-weight:500; color:var(--primary-text-color); margin:8px 0 10px 0;">${summary}</div>
-
-                  <div style="display:flex; gap:16px; flex-wrap:wrap;">
+                  <div style="font-size:14px; font-weight:500; margin-bottom:12px;">${summary}</div>
+                  <div style="display:flex; gap:16px;">
                     <div style="display:flex; align-items:center; gap:4px;">
-                      <ha-icon icon="mdi:water-percent" style="--mdc-icon-size:15px; color:var(--secondary-text-color);"></ha-icon>
+                      <ha-icon icon="mdi:water-percent" style="--mdc-icon-size:14px; color:var(--secondary-text-color);"></ha-icon>
                       <span style="font-size:12px; color:var(--secondary-text-color);">${humidity}%</span>
                     </div>
                     <div style="display:flex; align-items:center; gap:4px;">
-                      <ha-icon icon="mdi:weather-windy" style="--mdc-icon-size:15px; color:var(--secondary-text-color);"></ha-icon>
+                      <ha-icon icon="mdi:weather-windy" style="--mdc-icon-size:14px; color:var(--secondary-text-color);"></ha-icon>
                       <span style="font-size:12px; color:var(--secondary-text-color);">${windDir}${windSpd} km/h</span>
                     </div>
-                    ${pressure ? '<div style="display:flex; align-items:center; gap:4px;"><ha-icon icon="mdi:gauge" style="--mdc-icon-size:15px; color:var(--secondary-text-color);"></ha-icon><span style="font-size:12px; color:var(--secondary-text-color);">' + pressure + ' hPa</span></div>' : ''}
                   </div>
-
-                  <div style="font-size:11px; color:var(--disabled-text-color); margin-top:10px;">Updated ${updatedStr}</div>
                 </div>`;
               ]]]
             tap_action:
@@ -1101,8 +983,8 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 16px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
+                - padding: 20px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
@@ -1111,7 +993,7 @@ views:
               columns: full
               rows: auto
 
-          # ── Weather daily forecast ──
+          # ── Daily forecast ──
           - type: custom:weather-chart-card
             entity: weather.pirateweather
             show_main: false
@@ -1155,7 +1037,7 @@ views:
               columns: full
               rows: auto
 
-          # ── Weather hourly forecast ──
+          # ── Hourly forecast ──
           - type: custom:weather-chart-card
             entity: weather.pirateweather
             show_main: false
@@ -1197,219 +1079,3 @@ views:
             grid_options:
               columns: full
               rows: auto
-
-          # ── Lighting section header ──
-          - type: custom:button-card
-            show_name: false
-            show_state: false
-            show_icon: false
-            show_label: true
-            label: |
-              [[[
-                return '<div style="font-size:13px; font-weight:600; margin-bottom:2px;">Lighting</div>';
-              ]]]
-            styles:
-              card:
-                - background: none
-                - border: none
-                - box-shadow: none
-                - padding: 8px 4px 0 4px
-              label:
-                - color: var(--primary-text-color)
-            grid_options:
-              columns: full
-              rows: 1
-
-          # ── Light controls ──
-          - type: custom:mushroom-light-card
-            entity: light.led_controller_cct_1
-            name: Main
-            show_brightness_control: true
-            show_color_temp_control: true
-            collapsible_controls: true
-            grid_options:
-              columns: 6
-              rows: 1
-
-          - type: custom:mushroom-light-card
-            entity: light.led_controller_cct_2
-            name: Under Cabinet
-            show_brightness_control: true
-            show_color_temp_control: true
-            collapsible_controls: true
-            grid_options:
-              columns: 6
-              rows: 1
-
-          - type: custom:mushroom-light-card
-            entity: light.led_controller_sc_1
-            name: Shower
-            show_brightness_control: true
-            collapsible_controls: true
-            grid_options:
-              columns: 6
-              rows: 1
-
-          - type: custom:mushroom-light-card
-            entity: light.led_controller_sc_2
-            name: Accent
-            show_brightness_control: true
-            collapsible_controls: true
-            grid_options:
-              columns: 6
-              rows: 1
-
-          # ── Roof Fan ──
-          - type: custom:button-card
-            entity: fan.ag_pro_roof_fan
-            show_name: false
-            show_state: false
-            show_icon: false
-            show_label: true
-            label: |
-              [[[
-                var fan = states['fan.ag_pro_roof_fan'];
-                var lid = states['cover.ag_pro_roof_fan_lid'];
-                var isOn = fan && fan.state === 'on';
-                var speed = isOn ? fan.attributes.percentage || 0 : 0;
-                var dir = states['sensor.roof_fan_direction'] ? states['sensor.roof_fan_direction'].state : 'Unknown';
-                var lidState = lid ? lid.state : 'unknown';
-
-                return `<div style="display:flex; justify-content:space-between; align-items:center;">
-                  <div style="display:flex; align-items:center; gap:10px;">
-                    <ha-icon icon="mdi:fan" style="--mdc-icon-size:22px; color:${isOn ? 'var(--info-color)' : 'var(--disabled-text-color)'};"></ha-icon>
-                    <div>
-                      <div style="font-size:14px; font-weight:600;">Roof Fan</div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">${isOn ? speed + '% · ' + dir : 'Off'} · Lid ${lidState}</div>
-                    </div>
-                  </div>
-                </div>`;
-              ]]]
-            tap_action:
-              action: more-info
-              entity: fan.ag_pro_roof_fan
-            styles:
-              card:
-                - background: var(--card-background-color)
-                - border: 1px solid var(--divider-color)
-                - border-radius: 12px
-                - padding: 14px 16px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
-              label:
-                - font-size: 14px
-                - color: var(--primary-text-color)
-                - text-align: left
-            grid_options:
-              columns: full
-              rows: 1
-
-          # ── Water system ──
-          - type: custom:button-card
-            entity: switch.a32_pro_water_system_master_switch
-            show_name: false
-            show_state: false
-            show_icon: false
-            show_label: true
-            label: |
-              [[[
-                var master = entity.state === 'on';
-                var fresh = states['sensor.a32_pro_fresh_water_tank_level'] ? states['sensor.a32_pro_fresh_water_tank_level'].state : '—';
-                var grey = states['sensor.a32_pro_grey_water_tank_level'] ? states['sensor.a32_pro_grey_water_tank_level'].state : '—';
-
-                return `<div style="display:flex; justify-content:space-between; align-items:center;">
-                  <div style="display:flex; align-items:center; gap:10px;">
-                    <ha-icon icon="${master ? 'mdi:water' : 'mdi:water-off'}" style="--mdc-icon-size:22px; color:${master ? 'var(--info-color)' : 'var(--disabled-text-color)'};"></ha-icon>
-                    <div>
-                      <div style="font-size:14px; font-weight:600;">Water ${master ? 'On' : 'Off'}</div>
-                      <div style="font-size:11px; color:var(--secondary-text-color);">Fresh ${fresh}% · Grey ${grey}%</div>
-                    </div>
-                  </div>
-                </div>`;
-              ]]]
-            tap_action:
-              action: toggle
-            styles:
-              card:
-                - background: var(--card-background-color)
-                - border: 1px solid var(--divider-color)
-                - border-radius: 12px
-                - padding: 14px 16px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
-              label:
-                - font-size: 14px
-                - color: var(--primary-text-color)
-                - text-align: left
-            grid_options:
-              columns: full
-              rows: 1
-
-          # ── Monitors ──
-          - type: custom:button-card
-            entity: switch.a32_pro_do8_switch06_top_monitor
-            name: Top Monitor
-            icon: mdi:monitor
-            show_state: false
-            tap_action:
-              action: toggle
-            state:
-              - value: 'on'
-                styles:
-                  icon:
-                    - color: var(--info-color)
-                  card:
-                    - border-color: var(--info-color)
-              - value: 'off'
-                styles:
-                  icon:
-                    - color: var(--disabled-text-color)
-            styles:
-              card:
-                - background: var(--card-background-color)
-                - border: 1px solid var(--divider-color)
-                - border-radius: 12px
-                - padding: 12px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
-              icon:
-                - width: 24px
-              name:
-                - font-size: 12px
-                - font-weight: 500
-            grid_options:
-              columns: 6
-              rows: 1
-
-          - type: custom:button-card
-            entity: switch.a32_pro_do8_switch07_bottom_monitor
-            name: Bottom Monitor
-            icon: mdi:monitor
-            show_state: false
-            tap_action:
-              action: toggle
-            state:
-              - value: 'on'
-                styles:
-                  icon:
-                    - color: var(--info-color)
-                  card:
-                    - border-color: var(--info-color)
-              - value: 'off'
-                styles:
-                  icon:
-                    - color: var(--disabled-text-color)
-            styles:
-              card:
-                - background: var(--card-background-color)
-                - border: 1px solid var(--divider-color)
-                - border-radius: 12px
-                - padding: 12px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
-              icon:
-                - width: 24px
-              name:
-                - font-size: 12px
-                - font-weight: 500
-            grid_options:
-              columns: 6
-              rows: 1
-
-    cards: []

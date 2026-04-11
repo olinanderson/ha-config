@@ -15,7 +15,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.event import async_track_time_interval
 from datetime import timedelta
 
-from .const import DOMAIN
+from .const import DOMAIN, VERSION
 from .coordinator import VanlifeCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -60,7 +60,7 @@ class VanlifeMovingSensor(BinarySensorEntity):
             "name": "Vanlife Tracker",
             "manufacturer": "Vanlife Tracker",
             "model": "Travel & Campsite Logger",
-            "sw_version": "0.1.0",
+            "sw_version": VERSION,
         }
 
     async def async_added_to_hass(self) -> None:

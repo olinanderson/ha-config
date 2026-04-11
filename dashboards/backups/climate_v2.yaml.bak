@@ -4,6 +4,9 @@ views:
     path: climate
     icon: mdi:thermostat
 
+    # ─────────────────────────────────────────────
+    #  BADGE BAR — climate at a glance
+    # ─────────────────────────────────────────────
     badges:
       # ── Inside Temp ──
       - type: custom:mushroom-template-badge
@@ -71,21 +74,13 @@ views:
         tap_action:
           action: more-info
 
-      # ── Propane (heater fuel) ──
-      - type: custom:mushroom-template-badge
-        entity: sensor.propane_tank_percentage
-        icon: mdi:propane-tank
-        content: "{{ states('sensor.propane_tank_percentage') | round(0) }}%"
-        color: >
-          {% set v = states('sensor.propane_tank_percentage') | float(0) %}
-          {{ 'red' if v < 15 else 'orange' if v < 30 else 'green' }}
-        label: Propane
-        tap_action:
-          action: more-info
-
+    # ─────────────────────────────────────────────
+    #  SECTIONS
+    # ─────────────────────────────────────────────
     sections:
+
       # ═══════════════════════════════════════════
-      #  COLUMN 1 — Thermostat + Heater
+      #  COLUMN 1: Thermostat + Heater details
       # ═══════════════════════════════════════════
       - type: grid
         column_span: 1
@@ -97,7 +92,7 @@ views:
               columns: full
               rows: auto
 
-          # ── Hydronic heater details ──
+          # ── Hydronic heater details hero ──
           - type: custom:button-card
             show_name: false
             show_state: false
@@ -105,46 +100,50 @@ views:
             show_label: true
             label: |
               [[[
-                function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
-                function fmt(n,d){ return isNaN(n)?'—':n.toFixed(d); }
                 var heaterOn = states['switch.a32_pro_switch24_hydronic_heater'].state === 'on';
-                var pidOutput = s('sensor.a32_pro_coolant_blower_heating_pid_climate_result');
-                var coolant = s('sensor.a32_pro_s5140_channel_34_temperature_blower_coolant');
-                var blowerAir = s('sensor.a32_pro_s5140_channel_35_temperature_blower_air');
-                var runTime = s('sensor.hydronic_heater_total_on_time');
+                var lockout = states['sensor.a32_pro_hydronic_heater_power_supply_lockout_status'].state;
+                var pidOutput = parseFloat(states['sensor.a32_pro_coolant_blower_heating_pid_climate_result'].state) || 0;
+                var coolantTemp = parseFloat(states['sensor.a32_pro_s5140_channel_34_temperature_blower_coolant'].state) || 0;
+                var blowerAirTemp = parseFloat(states['sensor.a32_pro_s5140_channel_35_temperature_blower_air'].state) || 0;
+                var runTime = states['sensor.hydronic_heater_total_on_time'].state || '0';
                 var fanOverride = states['switch.a32_pro_fan_override_manual_on_off'].state === 'on';
-                var blowerPct = Math.round((parseFloat(states['light.a32_pro_a32_pro_dac_0'].attributes.brightness||0)/255)*100);
-                var hColor = heaterOn ? '#f97316' : 'var(--secondary-text-color)';
-                return `<div style="padding:4px 0;">
-                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">
-                    <div style="width:6px;height:6px;border-radius:50%;background:${hColor};flex-shrink:0;"></div>
-                    <span style="font-size:13px; font-weight:600;">Hydronic Heater</span>
-                    <span style="font-size:12px; font-weight:500; color:${hColor}; margin-left:auto;">${heaterOn?'Running':'Off'}</span>
+
+                var heaterColor = heaterOn ? 'var(--warning-color)' : 'var(--secondary-text-color)';
+                var lockoutColor = lockout === 'Normal' || lockout === 'normal' ? 'var(--success-color)' : 'var(--error-color)';
+
+                return `<div style="padding:2px 0;">
+                  <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--secondary-text-color); margin-bottom:8px;">Hydronic Heater</div>
+                  <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px;">
+                    <ha-icon icon="${heaterOn ? 'mdi:radiator' : 'mdi:radiator-off'}" style="--mdc-icon-size:28px; color:${heaterColor};"></ha-icon>
+                    <div>
+                      <div style="font-size:18px; font-weight:700; color:${heaterColor};">${heaterOn ? 'Running' : 'Off'}</div>
+                      <div style="font-size:11px; color:${lockoutColor};">Lockout: ${lockout}</div>
+                    </div>
                   </div>
-                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:14px;">
+                  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:6px;">
                     <div>
-                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">PID Output</div>
-                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${isNaN(pidOutput)?'—':(pidOutput*100).toFixed(0)+'%'}</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">PID Output</div>
+                      <div style="font-size:14px; font-weight:600;">${(pidOutput * 100).toFixed(0)}%</div>
                     </div>
                     <div>
-                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Coolant</div>
-                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${fmt(coolant,1)}°C</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Coolant</div>
+                      <div style="font-size:14px; font-weight:600;">${coolantTemp.toFixed(1)}°C</div>
                     </div>
                     <div>
-                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Blower Air</div>
-                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${fmt(blowerAir,1)}°C</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Blower Air</div>
+                      <div style="font-size:14px; font-weight:600;">${blowerAirTemp.toFixed(1)}°C</div>
                     </div>
                     <div>
-                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Run Time</div>
-                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${isNaN(runTime)?'—':runTime.toFixed(0)+'h'}</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Run Time</div>
+                      <div style="font-size:14px; font-weight:600;">${parseFloat(runTime).toFixed(0)}h</div>
                     </div>
                     <div>
-                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Fan Override</div>
-                      <div style="font-size:16px; font-weight:600; margin-top:2px; color:${fanOverride?'#3b82f6':'var(--secondary-text-color)'};">${fanOverride?'ON':'Off'}</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Fan Override</div>
+                      <div style="font-size:14px; font-weight:600; color:${fanOverride ? 'var(--info-color)' : 'var(--secondary-text-color)'};">${fanOverride ? 'ON' : 'Off'}</div>
                     </div>
                     <div>
-                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Blower</div>
-                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${blowerPct}%</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Blower</div>
+                      <div style="font-size:14px; font-weight:600;">${(parseFloat(states['light.a32_pro_a32_pro_dac_0'].attributes.brightness || 0) / 255 * 100).toFixed(0)}%</div>
                     </div>
                   </div>
                 </div>`;
@@ -157,8 +156,8 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 16px 20px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)
+                - padding: 14px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
@@ -167,7 +166,7 @@ views:
               columns: full
               rows: auto
 
-          # ── Scheduler ──
+          # ── Heater scheduler ──
           - type: custom:scheduler-card
             include:
               - climate.a32_pro_van_hydronic_heating_pid
@@ -176,7 +175,7 @@ views:
               columns: full
               rows: auto
 
-          # ── Roof Fan ──
+          # ── Roof Fan control ──
           - type: custom:button-card
             show_name: false
             show_state: false
@@ -189,32 +188,30 @@ views:
                 var direction = states['sensor.roof_fan_direction'].state || 'Unknown';
                 var lidOpen = states['cover.ag_pro_roof_fan_lid'].state === 'open';
                 var fanPower = parseFloat(states['sensor.roof_fan_power_12v'].state) || 0;
-                var fanColor = fanOn ? '#06b6d4' : 'var(--secondary-text-color)';
-                var dirIcon = direction==='Exhaust'?'mdi:arrow-up':direction==='Intake'?'mdi:arrow-down':'mdi:minus';
+
+                var fanColor = fanOn ? 'var(--info-color)' : 'var(--secondary-text-color)';
+                var dirIcon = direction === 'Exhaust' ? 'mdi:arrow-up' : direction === 'Intake' ? 'mdi:arrow-down' : 'mdi:minus';
+
                 return `<div style="padding:2px 0;">
-                  <div style="display:flex; align-items:center; gap:8px; margin-bottom:14px;">
-                    <div style="width:6px;height:6px;border-radius:50%;background:${fanColor};flex-shrink:0;"></div>
-                    <span style="font-size:13px; font-weight:600;">Roof Fan</span>
-                    <span style="font-size:12px; font-weight:500; color:${fanColor}; margin-left:auto;">${fanOn?speed+'%':'Off'}</span>
-                  </div>
+                  <div style="font-size:11px; font-weight:600; text-transform:uppercase; letter-spacing:0.5px; color:var(--secondary-text-color); margin-bottom:8px;">Roof Fan</div>
                   <div style="display:flex; justify-content:space-between; align-items:center;">
                     <div style="display:flex; align-items:center; gap:10px;">
-                      <ha-icon icon="${fanOn?'mdi:fan':'mdi:fan-off'}" style="--mdc-icon-size:28px; color:${fanColor};"></ha-icon>
+                      <ha-icon icon="${fanOn ? 'mdi:fan' : 'mdi:fan-off'}" style="--mdc-icon-size:28px; color:${fanColor};"></ha-icon>
                       <div>
-                        <div style="display:flex; align-items:center; gap:4px;">
-                          <ha-icon icon="${dirIcon}" style="--mdc-icon-size:14px;"></ha-icon>
-                          <span style="font-size:13px;">${direction}</span>
+                        <div style="font-size:18px; font-weight:700; color:${fanColor};">${fanOn ? speed + '%' : 'Off'}</div>
+                        <div style="font-size:11px; color:var(--secondary-text-color);">
+                          <ha-icon icon="${dirIcon}" style="--mdc-icon-size:14px;"></ha-icon> ${direction}
                         </div>
                       </div>
                     </div>
-                    <div style="display:flex; gap:20px; text-align:center;">
+                    <div style="display:flex; gap:16px; text-align:center;">
                       <div>
-                        <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Lid</div>
-                        <div style="font-size:14px; font-weight:600;">${lidOpen?'Open':'Closed'}</div>
+                        <div style="font-size:10px; color:var(--secondary-text-color);">Lid</div>
+                        <div style="font-size:13px; font-weight:600;">${lidOpen ? 'Open' : 'Closed'}</div>
                       </div>
                       <div>
-                        <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Power</div>
-                        <div style="font-variant-numeric:tabular-nums; font-size:14px; font-weight:600;">${fanPower.toFixed(1)}W</div>
+                        <div style="font-size:10px; color:var(--secondary-text-color);">Power</div>
+                        <div style="font-size:13px; font-weight:600;">${fanPower.toFixed(1)}W</div>
                       </div>
                     </div>
                   </div>
@@ -228,8 +225,8 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 16px 20px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)
+                - padding: 14px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
@@ -239,12 +236,12 @@ views:
               rows: auto
 
       # ═══════════════════════════════════════════
-      #  COLUMN 2 — Temperatures + Charts
+      #  COLUMN 2: Temperature + Humidity charts
       # ═══════════════════════════════════════════
       - type: grid
         column_span: 1
         cards:
-          # ── All zones overview ──
+          # ── All temperatures at a glance ──
           - type: custom:button-card
             show_name: false
             show_state: false
@@ -252,25 +249,30 @@ views:
             show_label: true
             label: |
               [[[
-                function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
-                var t1=s('sensor.a32_pro_bme280_1_temperature'), h1=s('sensor.a32_pro_bme280_1_relative_humidity');
-                var t2=s('sensor.a32_pro_bme280_2_temperature'), h2=s('sensor.a32_pro_bme280_2_relative_humidity');
-                var t3=s('sensor.a32_pro_bme280_3_temperature'), h3=s('sensor.a32_pro_bme280_3_relative_humidity');
-                var t4=s('sensor.a32_pro_bme280_4_temperature'), h4=s('sensor.a32_pro_bme280_4_relative_humidity');
-                function zone(name,temp,hum,icon){
-                  var tColor=isNaN(temp)?'var(--secondary-text-color)':temp<15?'#3b82f6':temp>28?'#ef4444':'var(--primary-text-color)';
+                var t1 = parseFloat(states['sensor.a32_pro_bme280_1_temperature'].state);
+                var h1 = parseFloat(states['sensor.a32_pro_bme280_1_relative_humidity'].state);
+                var t2 = parseFloat(states['sensor.a32_pro_bme280_2_temperature'].state);
+                var h2 = parseFloat(states['sensor.a32_pro_bme280_2_relative_humidity'].state);
+                var t3 = parseFloat(states['sensor.a32_pro_bme280_3_temperature'].state);
+                var h3 = parseFloat(states['sensor.a32_pro_bme280_3_relative_humidity'].state);
+                var t4 = parseFloat(states['sensor.a32_pro_bme280_4_temperature'].state);
+                var h4 = parseFloat(states['sensor.a32_pro_bme280_4_relative_humidity'].state);
+
+                function zone(name, temp, hum, icon) {
+                  var tColor = temp < 15 ? 'var(--info-color)' : temp > 28 ? 'var(--error-color)' : 'var(--primary-text-color)';
                   return `<div style="text-align:center;">
                     <ha-icon icon="${icon}" style="--mdc-icon-size:20px; color:${tColor};"></ha-icon>
-                    <div style="font-variant-numeric:tabular-nums; font-size:22px; font-weight:700; margin-top:4px; color:${tColor};">${isNaN(temp)?'—':temp.toFixed(1)}°</div>
-                    <div style="font-size:11px; color:var(--secondary-text-color); margin-top:2px;">${isNaN(hum)?'—':hum.toFixed(0)}%</div>
-                    <div style="font-size:10px; font-weight:500; color:var(--secondary-text-color); margin-top:2px;">${name}</div>
+                    <div style="font-size:20px; font-weight:700; margin-top:2px; color:${tColor};">${temp.toFixed(1)}°</div>
+                    <div style="font-size:11px; color:var(--secondary-text-color);">${hum.toFixed(0)}%</div>
+                    <div style="font-size:10px; color:var(--secondary-text-color);">${name}</div>
                   </div>`;
                 }
-                return `<div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:12px; padding:6px 0;">
-                  ${zone('Living',t1,h1,'mdi:sofa')}
-                  ${zone('Cab',t2,h2,'mdi:car-seat')}
-                  ${zone('Shower',t3,h3,'mdi:shower')}
-                  ${zone('Outside',t4,h4,'mdi:weather-partly-cloudy')}
+
+                return `<div style="display:grid; grid-template-columns:1fr 1fr 1fr 1fr; gap:8px; padding:4px 0;">
+                  ${zone('Living', t1, h1, 'mdi:sofa')}
+                  ${zone('Cab', t2, h2, 'mdi:car-seat')}
+                  ${zone('Shower', t3, h3, 'mdi:shower')}
+                  ${zone('Outside', t4, h4, 'mdi:weather-partly-cloudy')}
                 </div>`;
               ]]]
             styles:
@@ -278,8 +280,8 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 16px 20px
-                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.1), 0 1px 2px -1px rgba(0,0,0,0.1)
+                - padding: 14px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
@@ -287,7 +289,7 @@ views:
               columns: full
               rows: auto
 
-          # ── Temperature chart 12h ──
+          # ── Temperature history 12h ──
           - type: custom:apexcharts-card
             header:
               show: true
@@ -326,7 +328,7 @@ views:
               columns: full
               rows: auto
 
-          # ── Humidity chart 12h ──
+          # ── Humidity history 12h ──
           - type: custom:apexcharts-card
             header:
               show: true
@@ -379,23 +381,25 @@ views:
                 var battHeaterPower = parseFloat(states['sensor.battery_heater_power_12v'].state) || 0;
                 var battHeaterOn = battHeaterPower > 5;
                 var plateTemp = parseFloat(states['sensor.a32_pro_s5140_channel_36_temperature_ntc_battery_plate'].state) || 0;
-                var tempColor = battTemp<5?'#3b82f6':battTemp>40?'#ef4444':'#22c55e';
+
+                var tempColor = battTemp < 5 ? 'var(--info-color)' : battTemp > 40 ? 'var(--error-color)' : 'var(--success-color)';
+
                 return `<div style="display:flex; justify-content:space-between; align-items:center;">
                   <div style="display:flex; align-items:center; gap:10px;">
-                    <ha-icon icon="${battHeaterOn?'mdi:heat-wave':'mdi:snowflake'}" style="--mdc-icon-size:24px; color:${battHeaterOn?'#f97316':'#3b82f6'};"></ha-icon>
+                    <ha-icon icon="${battHeaterOn ? 'mdi:heat-wave' : 'mdi:snowflake'}" style="--mdc-icon-size:24px; color:${battHeaterOn ? 'var(--warning-color)' : 'var(--info-color)'};"></ha-icon>
                     <div>
-                      <div style="font-size:13px; font-weight:600;">Battery Heater</div>
-                      <div style="font-size:12px; color:var(--secondary-text-color);">${battHeaterOn?'Heating':'Standby'} · ${battHeaterPower.toFixed(1)}W</div>
+                      <div style="font-size:14px; font-weight:600;">Battery Heater</div>
+                      <div style="font-size:11px; color:var(--secondary-text-color);">${battHeaterOn ? 'Heating' : 'Standby'} · ${battHeaterPower.toFixed(1)}W</div>
                     </div>
                   </div>
-                  <div style="display:flex; gap:20px; text-align:center;">
+                  <div style="display:flex; gap:16px; text-align:center;">
                     <div>
-                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">BMS</div>
-                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:700; color:${tempColor};">${battTemp.toFixed(1)}°</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">BMS</div>
+                      <div style="font-size:16px; font-weight:700; color:${tempColor};">${battTemp.toFixed(1)}°</div>
                     </div>
                     <div>
-                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Plate</div>
-                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:700;">${plateTemp.toFixed(1)}°</div>
+                      <div style="font-size:10px; color:var(--secondary-text-color);">Plate</div>
+                      <div style="font-size:16px; font-weight:700;">${plateTemp.toFixed(1)}°</div>
                     </div>
                   </div>
                 </div>`;
@@ -408,8 +412,8 @@ views:
                 - background: var(--card-background-color)
                 - border: 1px solid var(--divider-color)
                 - border-radius: 12px
-                - padding: 14px 20px
-                - box-shadow: 0 1px 2px 0 rgba(0,0,0,0.05)
+                - padding: 12px 16px
+                - box-shadow: 0 1px 3px 0 rgba(0,0,0,0.06), 0 1px 2px -1px rgba(0,0,0,0.06)
               label:
                 - font-size: 14px
                 - color: var(--primary-text-color)
@@ -417,7 +421,7 @@ views:
               columns: full
               rows: 1
 
-          # ── Heater temps chart 6h ──
+          # ── Heater coolant + blower temps chart ──
           - type: custom:apexcharts-card
             header:
               show: true

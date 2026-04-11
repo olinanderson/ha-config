@@ -19,6 +19,7 @@ from datetime import timedelta
 
 from .const import (
     DOMAIN,
+    VERSION,
     ATTR_STOP_ID,
     ATTR_STOP_NAME,
     ATTR_LATITUDE,
@@ -247,5 +248,5 @@ def _device_info(config_entry: ConfigEntry) -> dict[str, Any]:
         "name": "Vanlife Tracker",
         "manufacturer": "Vanlife Tracker",
         "model": "Travel & Campsite Logger",
-        "sw_version": "0.1.0",
+        "sw_version": VERSION,
     }

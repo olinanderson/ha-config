@@ -125,15 +125,28 @@ function FuelCard() {
 }
 
 function TirePressureCard() {
-  const { value: fl } = useEntityNumeric('sensor.wican_wican_tire_pressure_fl');
-  const { value: fr } = useEntityNumeric('sensor.wican_wican_tire_pressure_fr');
-  const { value: rl } = useEntityNumeric('sensor.wican_wican_tire_pressure_rl');
-  const { value: rr } = useEntityNumeric('sensor.wican_wican_tire_pressure_rr');
+  const { value: flRaw, entity: flEntity } = useEntityNumeric('sensor.wican_wican_tire_pressure_fl');
+  const { value: frRaw, entity: frEntity } = useEntityNumeric('sensor.wican_wican_tire_pressure_fr');
+  const { value: rlRaw, entity: rlEntity } = useEntityNumeric('sensor.wican_wican_tire_pressure_rl');
+  const { value: rrRaw, entity: rrEntity } = useEntityNumeric('sensor.wican_wican_tire_pressure_rr');
   const lowTire = useEntity('binary_sensor.low_tire_pressure');
   const isLow = lowTire?.state === 'on';
 
+  // HA auto-converts psi→kPa in entity registry; convert back if needed
+  const toPsi = (val: number | null, entity: typeof flEntity) => {
+    if (val == null) return null;
+    const unit = entity?.attributes?.unit_of_measurement;
+    if (unit === 'kPa') return val * 0.145038;
+    return val;
+  };
+  const fl = toPsi(flRaw, flEntity);
+  const fr = toPsi(frRaw, frEntity);
+  const rl = toPsi(rlRaw, rlEntity);
+  const rr = toPsi(rrRaw, rrEntity);
+
+  // Transit T-350 HD: front ~65 psi, rear ~80 psi recommended
   const tireColor = (psi: number | null) =>
-    (psi ?? 0) < 35 ? 'text-red-500' : (psi ?? 0) < 40 ? 'text-orange-500' : 'text-green-500';
+    (psi ?? 0) < 50 ? 'text-red-500' : (psi ?? 0) < 55 ? 'text-orange-500' : 'text-green-500';
 
   return (
     <Card>

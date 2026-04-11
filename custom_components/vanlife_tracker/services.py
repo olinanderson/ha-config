@@ -186,10 +186,14 @@ async def async_register_services(hass: HomeAssistant) -> None:
         coordinator = _get_coordinator(hass)
         gpx_content = await coordinator.async_export_gpx()
         export_path = hass.config.path("www", "vanlife_stops.gpx")
-        import os
-        os.makedirs(os.path.dirname(export_path), exist_ok=True)
-        with open(export_path, "w") as f:
-            f.write(gpx_content)
+
+        def _write_gpx():
+            import os
+            os.makedirs(os.path.dirname(export_path), exist_ok=True)
+            with open(export_path, "w") as f:
+                f.write(gpx_content)
+
+        await hass.async_add_executor_job(_write_gpx)
         _LOGGER.info("GPX exported to %s", export_path)
         hass.bus.async_fire(
             f"{DOMAIN}_gpx_exported",

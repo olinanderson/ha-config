@@ -3,12 +3,12 @@
 # ===========================
 
 # ───────────────────────────────────────────────
-#  BMS BLE – reload after boot to fix race condition
+#  BMS BLE – reload after boot with retry
 # ───────────────────────────────────────────────
 # The bms_ble integration checks for the BLE device at setup.
 # If the ESP32 BLE proxy hasn't reconnected yet, setup fails
-# with ConfigEntryNotReady. This automation reloads the
-# integration 45s after boot when the proxy is reliably online.
+# or gets cancelled. This automation retries the reload
+# every 30s (up to 30 attempts = ~15 min window) until BMS comes online.
 
 - id: bms_ble_reload_after_boot
   alias: "BMS BLE - reload integration after boot"
@@ -18,10 +18,49 @@
       event: start
   action:
     - delay:
-        seconds: 45
-    - action: homeassistant.reload_config_entry
-      data:
-        entry_id: "{{ config_entry_id('sensor.olins_van_bms_battery') }}"
+        seconds: 20
+    - repeat:
+        while:
+          - condition: state
+            entity_id: sensor.olins_van_bms_battery
+            state: "unavailable"
+          - "{{ repeat.index <= 30 }}"
+        sequence:
+          - action: homeassistant.reload_config_entry
+            data:
+              entry_id: "{{ config_entry_id('sensor.olins_van_bms_battery') }}"
+          - delay:
+              seconds: 30
+
+# ───────────────────────────────────────────────
+#  BMS BLE – runtime recovery when unavailable
+# ───────────────────────────────────────────────
+# If BMS goes unavailable outside of boot (BLE proxy dropout,
+# connection slot exhaustion, etc.), wait 60s then reload.
+# Max 5 retries, resets after BMS comes back.
+
+- id: bms_ble_runtime_recovery
+  alias: "BMS BLE - reload when unavailable (runtime)"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: sensor.olins_van_bms_battery
+      to: "unavailable"
+      for:
+        seconds: 60
+  action:
+    - repeat:
+        while:
+          - condition: state
+            entity_id: sensor.olins_van_bms_battery
+            state: "unavailable"
+          - "{{ repeat.index <= 5 }}"
+        sequence:
+          - action: homeassistant.reload_config_entry
+            data:
+              entry_id: "{{ config_entry_id('sensor.olins_van_bms_battery') }}"
+          - delay:
+              seconds: 60
 
 # ───────────────────────────────────────────────
 #  Starlink-filtered tracker – MQTT update logic
@@ -834,4 +873,173 @@
   action:
     - delay: "00:00:45"
     - action: shell_command.start_gps_filter
+
+# ───────────────────────────────────────────────
+#  Shelly EM – reconnect when inverter turns on
+# ───────────────────────────────────────────────
+# The Shelly EM is powered by the inverter's AC output.
+# When the inverter is off, the Shelly is unreachable and
+# HA puts the integration into a retry backoff. When the
+# ping sensor detects the Shelly is back, force a config
+# entry reload so entities become available immediately.
+- id: shelly_em_reconnect_on_inverter
+  alias: "Shelly EM • Reconnect when inverter turns on"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: binary_sensor.192_168_10_174
+      from: "off"
+      to: "on"
+      for: "00:00:05"
+  action:
+    - action: homeassistant.reload_config_entry
+      data:
+        entry_id: 01JZ9P031ZD8WK711KS3ER124D
+
+# ───────────────────────────────────────────────
+#  Inverter state tracking (input_boolean.inverter_state)
+# ───────────────────────────────────────────────
+# Uses the fast ping sensor (1s updates) to maintain a
+# stored on/off state for the inverter. The frontend reads
+# this instead of the slow Shelly voltage sensor (~40s lag).
+- id: inverter_state_track_on
+  alias: "Inverter State • Track ON"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: binary_sensor.192_168_10_174
+      from: "off"
+      to: "on"
+      for: "00:00:03"
+  action:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.inverter_state
+
+- id: inverter_state_track_off
+  alias: "Inverter State • Track OFF"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: binary_sensor.192_168_10_174
+      from: "on"
+      to: "off"
+      for: "00:00:03"
+  action:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.inverter_state
+
+# ────────────────────────────────────────────────────────────────
+# WiCAN OBD — Raw PID Logging on Engine Start
+# ────────────────────────────────────────────────────────────────
+# Logs all raw WiCAN MQTT sensor values when the engine starts,
+# then periodically during the drive. Useful for diagnosing
+# tire pressure expression issues and other PID problems.
+# All values are saved to persistent_notification and system_log
+# so they survive HA restarts and can be reviewed after the drive.
+
+- id: wican_drive_start_log
+  alias: "WiCAN • Log raw PIDs on engine start"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: binary_sensor.engine_is_running
+      from: "off"
+      to: "on"
+      for: "00:00:10"
+  action:
+    # Initial snapshot
+    - action: system_log.write
+      data:
+        level: info
+        logger: automation.wican_drive_log
+        message: >
+          === DRIVE START — Raw PID Snapshot ===
+          Time: {{ now().isoformat() }}
+          --- Standard PIDs ---
+          Speed: {{ states('sensor.wican_speed') }} km/h | RAW: {{ states('sensor.wican_raw_vehicle_speed') }}
+          RPM: {{ states('sensor.wican_rpm') }} | Fuel: {{ states('sensor.wican_fuel') }}% | RAW Fuel: {{ states('sensor.wican_raw_fuel_tank_level') }}
+          Coolant: {{ states('sensor.wican_coolant_temperature') }}°C | Throttle: {{ states('sensor.wican_throttle_position') }}%
+          Engine Load: {{ states('sensor.wican_engine_load') }}% | ECU Volt: {{ states('sensor.wican_control_module_voltage') }} V
+          Ambient: {{ states('sensor.wican_ambient_air_temperature') }}°C
+          --- Mode 22 / Ford PIDs ---
+          Tire FL: {{ states('sensor.wican_tire_pressure_fl') }} psi | RAW: {{ states('sensor.wican_raw_tire_pressure_fl') }}
+          Tire FR: {{ states('sensor.wican_tire_pressure_fr') }} psi | RAW: {{ states('sensor.wican_raw_tire_pressure_fr') }}
+          Tire RL: {{ states('sensor.wican_tire_pressure_rl') }} psi | RAW: {{ states('sensor.wican_raw_tire_pressure_rl') }}
+          Tire RR: {{ states('sensor.wican_tire_pressure_rr') }} psi | RAW: {{ states('sensor.wican_raw_tire_pressure_rr') }}
+          Trans Temp: {{ states('sensor.wican_transmission_temperature') }}°C | RAW: {{ states('sensor.wican_raw_transmission_temp') }}
+          Gear: {{ states('sensor.wican_current_gear') }} | RAW: {{ states('sensor.wican_raw_current_gear') }}
+          Oil Life: {{ states('sensor.wican_oil_life') }}% | Fuel Rate: {{ states('sensor.wican_fuel_rate') }} g/s
+          Wastegate: {{ states('sensor.wican_wastegate') }}% | Intake Air: {{ states('sensor.wican_intake_air_temperature') }}°C
+          Fuel Pressure: {{ states('sensor.wican_fuel_pressure') }} kPa | Alt Duty: {{ states('sensor.wican_alternator_duty') }}%
+          Monitor Status: {{ states('sensor.wican_monitor_status_raw') }} | DTC Count: {{ states('sensor.dtc_count') }}
+          CEL: {{ states('binary_sensor.check_engine_light') }}
+    - action: persistent_notification.create
+      data:
+        title: "Drive Start — OBD Snapshot {{ now().strftime('%H:%M') }}"
+        message: >
+          **Standard PIDs:**
+          Speed: {{ states('sensor.wican_speed') }} km/h | RPM: {{ states('sensor.wican_rpm') }}
+          Fuel: {{ states('sensor.wican_fuel') }}% | Coolant: {{ states('sensor.wican_coolant_temperature') }}°C
+          Throttle: {{ states('sensor.wican_throttle_position') }}% | Load: {{ states('sensor.wican_engine_load') }}%
+          
+          **Mode 22 / Ford:**
+          Tires FL/FR/RL/RR: {{ states('sensor.wican_tire_pressure_fl') }}/{{ states('sensor.wican_tire_pressure_fr') }}/{{ states('sensor.wican_tire_pressure_rl') }}/{{ states('sensor.wican_tire_pressure_rr') }} psi
+          Trans: {{ states('sensor.wican_transmission_temperature') }}°C | Gear: {{ states('sensor.wican_current_gear') }}
+          Oil: {{ states('sensor.wican_oil_life') }}% | Wastegate: {{ states('sensor.wican_wastegate') }}%
+          
+          **Raw tire JSON:** {{ states('sensor.wican_raw_tire_pressure_fl') }}
+          
+          **DTC:** Count={{ states('sensor.dtc_count') }} CEL={{ states('binary_sensor.check_engine_light') }}
+        notification_id: wican_drive_log
+    # Also fire the raw tire pressure script for raw CAN byte capture
+    - action: script.wican_raw_tire_pressure
+
+# Periodic raw PID log every 5 minutes during a drive
+- id: wican_drive_periodic_log
+  alias: "WiCAN • Periodic raw PID log while driving"
+  mode: single
+  trigger:
+    - trigger: time_pattern
+      minutes: "/5"
+  condition:
+    - condition: state
+      entity_id: binary_sensor.engine_is_running
+      state: "on"
+  action:
+    - action: system_log.write
+      data:
+        level: info
+        logger: automation.wican_drive_log
+        message: >
+          === PERIODIC PID LOG ===
+          Time: {{ now().isoformat() }}
+          Speed: {{ states('sensor.wican_speed') }} | RPM: {{ states('sensor.wican_rpm') }} | Fuel: {{ states('sensor.wican_fuel') }}%
+          Coolant: {{ states('sensor.wican_coolant_temperature') }}°C | Throttle: {{ states('sensor.wican_throttle_position') }}%
+          Tire FL: {{ states('sensor.wican_tire_pressure_fl') }} | FR: {{ states('sensor.wican_tire_pressure_fr') }} | RL: {{ states('sensor.wican_tire_pressure_rl') }} | RR: {{ states('sensor.wican_tire_pressure_rr') }} psi
+          RAW FL: {{ states('sensor.wican_raw_tire_pressure_fl') }}
+          Trans: {{ states('sensor.wican_transmission_temperature') }}°C | Gear: {{ states('sensor.wican_current_gear') }}
+          Fuel Rate: {{ states('sensor.wican_fuel_rate') }} g/s | Wastegate: {{ states('sensor.wican_wastegate') }}%
+          Alt Duty: {{ states('sensor.wican_alternator_duty') }}%
+
+# Log raw CAN frame responses to system log for post-drive analysis
+- id: wican_tx_frame_logger
+  alias: "WiCAN • Log raw CAN frames from wican/tx"
+  mode: queued
+  max: 20
+  trigger:
+    - trigger: state
+      entity_id: sensor.wican_tx_raw_frame
+  condition:
+    # Only log when engine is running to avoid noise
+    - condition: state
+      entity_id: binary_sensor.engine_is_running
+      state: "on"
+  action:
+    - action: system_log.write
+      data:
+        level: debug
+        logger: automation.wican_tx_logger
+        message: "CAN TX: {{ states('sensor.wican_tx_raw_frame') }}"
 

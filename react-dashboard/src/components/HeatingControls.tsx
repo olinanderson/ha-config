@@ -102,7 +102,7 @@ export function HeatingControls() {
         <div className="border-t pt-3 space-y-1">
           <SparklineStat entityId="sensor.a32_pro_s5140_channel_34_temperature_blower_coolant" label="Coolant Temp" value={fmt(coolantTemp, 1)} unit="°C" color="#ef4444" />
           <SparklineStat entityId="sensor.a32_pro_s5140_channel_35_temperature_blower_air" label="Blower Air" value={fmt(blowerAirTemp, 1)} unit="°C" color="#f97316" />
-          <SparklineStat entityId="sensor.a32_pro_coolant_blower_heating_pid_climate_result" label="PID Output" value={fmt(pidOutput != null ? pidOutput * 100 : null, 0)} unit="%" color="#6366f1" />
+          <SparklineStat entityId="sensor.a32_pro_coolant_blower_heating_pid_climate_result" label="PID Output" value={fmt(pidOutput, 0)} unit="%" color="#6366f1" />
           {statusText && statusText !== 'Idle.' && statusText !== '0' && (
             <p className="text-xs text-orange-500 mt-1">{statusText}</p>
           )}

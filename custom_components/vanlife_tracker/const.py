@@ -1,6 +1,14 @@
 """Constants for Vanlife Tracker."""
 
+import json
+import os
+
 DOMAIN = "vanlife_tracker"
+
+# Read version from manifest.json so it stays in sync everywhere
+_MANIFEST = os.path.join(os.path.dirname(__file__), "manifest.json")
+with open(_MANIFEST) as _f:
+    VERSION = json.load(_f)["version"]
 PLATFORMS = ["sensor", "binary_sensor", "device_tracker", "geo_location"]
 
 # --- Config keys ---

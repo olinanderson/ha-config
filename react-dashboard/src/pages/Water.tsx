@@ -7,16 +7,73 @@ import { Switch } from '@/components/ui/switch';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useToggle } from '@/hooks/useService';
 import { fmt, cn } from '@/lib/utils';
-import { Droplets, Waves, ShowerHead, Flame, Trash2 } from 'lucide-react';
+import { Droplets, Waves, ShowerHead, Flame, Trash2, CircleDot, Thermometer } from 'lucide-react';
+
+const valves = [
+  { entityId: 'switch.a32_pro_switch01_water_system_valve_1', name: 'Valve 1' },
+  { entityId: 'switch.a32_pro_switch02_water_system_valve_2', name: 'Valve 2' },
+  { entityId: 'switch.a32_pro_switch03_water_system_valve_3', name: 'Valve 3' },
+  { entityId: 'switch.a32_pro_switch06_grey_water_tank_valve', name: 'Grey Dump Valve' },
+];
+
+const pumps = [
+  { entityId: 'switch.a32_pro_switch30_main_system_water_pump', name: 'Main Pump' },
+  { entityId: 'switch.a32_pro_switch29_shower_system_water_pump', name: 'Shower Pump' },
+  { entityId: 'switch.a32_pro_switch14_uv_filter', name: 'UV Filter' },
+];
+
+function StatusRow({ entityId, name, onLabel = 'Open', offLabel = 'Closed' }: { entityId: string; name: string; onLabel?: string; offLabel?: string }) {
+  const entity = useEntity(entityId);
+  const isOn = entity?.state === 'on';
+  return (
+    <div className="flex items-center justify-between py-0.5">
+      <span className="text-sm">{name}</span>
+      <span
+        className={cn(
+          'text-xs font-medium px-2 py-0.5 rounded-full',
+          isOn
+            ? 'bg-green-500/15 text-green-500'
+            : 'bg-muted text-muted-foreground',
+        )}
+      >
+        {isOn ? onLabel : offLabel}
+      </span>
+    </div>
+  );
+}
+
+function ValveStatus() {
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <CircleDot className="h-4 w-4" />
+          Valves & Pumps
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-1">
+        {valves.map((v) => (
+          <StatusRow key={v.entityId} entityId={v.entityId} name={v.name} />
+        ))}
+        <div className="border-t my-1.5" />
+        {pumps.map((p) => (
+          <StatusRow key={p.entityId} entityId={p.entityId} name={p.name} onLabel="Running" offLabel="Off" />
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
 
 function WaterControls() {
   const master = useEntity('switch.a32_pro_water_system_master_switch');
   const main = useEntity('switch.a32_pro_water_system_state_main');
   const recirc = useEntity('switch.a32_pro_water_system_state_recirculating_shower');
+  const flush = useEntity('switch.a32_pro_water_system_state_recirculating_shower_flush');
 
   const toggleMaster = useToggle('switch.a32_pro_water_system_master_switch');
   const toggleMain = useToggle('switch.a32_pro_water_system_state_main');
   const toggleRecirc = useToggle('switch.a32_pro_water_system_state_recirculating_shower');
+  const toggleFlush = useToggle('switch.a32_pro_water_system_state_recirculating_shower_flush');
 
   return (
     <Card>
@@ -41,6 +98,10 @@ function WaterControls() {
             Recirc Shower
           </span>
           <Switch checked={recirc?.state === 'on'} onCheckedChange={toggleRecirc} />
+        </div>
+        <div className="flex items-center justify-between">
+          <span className="text-sm">Recirc Flush</span>
+          <Switch checked={flush?.state === 'on'} onCheckedChange={toggleFlush} />
         </div>
       </CardContent>
     </Card>
@@ -96,6 +157,57 @@ function PropaneCard() {
   );
 }
 
+function TankTemps() {
+  const { value: freshTemp } = useEntityNumeric('sensor.a32_pro_s5140_channel_38_temperature_fresh_water_tank');
+  const { value: greyTemp } = useEntityNumeric('sensor.a32_pro_s5140_channel_39_temperature_grey_water_tank');
+  const { value: showerTemp } = useEntityNumeric('sensor.a32_pro_s5140_channel_40_temperature_shower_water_tank');
+
+  const freshHeater = useEntity('switch.a32_pro_fresh_water_tank_heater_enable');
+  const greyHeater = useEntity('switch.a32_pro_grey_water_tank_heater_enable');
+  const showerHeater = useEntity('switch.a32_pro_shower_water_tank_heater_enable');
+  const toggleFreshHeater = useToggle('switch.a32_pro_fresh_water_tank_heater_enable');
+  const toggleGreyHeater = useToggle('switch.a32_pro_grey_water_tank_heater_enable');
+  const toggleShowerHeater = useToggle('switch.a32_pro_shower_water_tank_heater_enable');
+
+  const tanks = [
+    { name: 'Fresh', temp: freshTemp, entityId: 'sensor.a32_pro_s5140_channel_38_temperature_fresh_water_tank', heater: freshHeater, toggleHeater: toggleFreshHeater },
+    { name: 'Grey', temp: greyTemp, entityId: 'sensor.a32_pro_s5140_channel_39_temperature_grey_water_tank', heater: greyHeater, toggleHeater: toggleGreyHeater },
+    { name: 'Shower', temp: showerTemp, entityId: 'sensor.a32_pro_s5140_channel_40_temperature_shower_water_tank', heater: showerHeater, toggleHeater: toggleShowerHeater },
+  ];
+
+  return (
+    <Card>
+      <CardHeader className="pb-2">
+        <CardTitle className="flex items-center gap-2 text-base">
+          <Thermometer className="h-4 w-4" />
+          Tank Temperatures
+        </CardTitle>
+      </CardHeader>
+      <CardContent className="space-y-2">
+        {tanks.map((t) => (
+          <div key={t.name} className="flex items-center justify-between">
+            <SparklineStat
+              entityId={t.entityId}
+              label={t.name}
+              value={fmt(t.temp, 1)}
+              unit="°C"
+              color={t.temp != null && t.temp < 3 ? '#ef4444' : '#3b82f6'}
+              className="flex-1"
+            />
+            <div className="flex items-center gap-1.5 ml-2 shrink-0">
+              <span className="text-[10px] text-muted-foreground">Heat</span>
+              <Switch
+                checked={t.heater?.state === 'on'}
+                onCheckedChange={t.toggleHeater}
+              />
+            </div>
+          </div>
+        ))}
+      </CardContent>
+    </Card>
+  );
+}
+
 function ModeButtons() {
   return (
     <Card>
@@ -139,12 +251,14 @@ export default function Water() {
             invertWarning
             icon={<Trash2 className="h-4 w-4 text-orange-500" />}
           />
+          <TankTemps />
           <ModeButtons />
         </div>
 
-        {/* Column 2: Controls */}
+        {/* Column 2: Controls + Valve Status */}
         <div className="space-y-4">
           <WaterControls />
+          <ValveStatus />
         </div>
 
         {/* Column 3: Propane */}

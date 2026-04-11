@@ -19,6 +19,9 @@ import {
   Bed,
   Flame,
   Music,
+  Satellite,
+  Wind,
+  Thermometer,
 } from 'lucide-react';
 
 function StarlinkCard() {
@@ -201,7 +204,38 @@ function SwitchesCard() {
             icon={Flame}
             activeColor="red"
           />
+          <ToggleButton
+            entityId="switch.a32_pro_switch26_starlink_power_supply"
+            name="Starlink"
+            icon={Satellite}
+            activeColor="blue"
+          />
+          <ToggleButton
+            entityId="switch.a32_pro_air_fryer_ventilation_enable"
+            name="Air Fryer Vent"
+            icon={Wind}
+            activeColor="cyan"
+          />
         </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function AirFryerCard() {
+  const { value: temp } = useEntityNumeric('sensor.a32_pro_s5140_channel_37_temperature_air_fryer_compartment');
+
+  return (
+    <Card>
+      <CardContent className="pt-4">
+        <SparklineStat
+          entityId="sensor.a32_pro_s5140_channel_37_temperature_air_fryer_compartment"
+          label="Air Fryer Compartment"
+          value={fmt(temp, 1)}
+          unit="°C"
+          icon={Thermometer}
+          color="#f97316"
+        />
       </CardContent>
     </Card>
   );
@@ -232,6 +266,7 @@ export default function System() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="space-y-4">
           <StarlinkCard />
+          <AirFryerCard />
           <AudioCard />
         </div>
         <div className="space-y-4">

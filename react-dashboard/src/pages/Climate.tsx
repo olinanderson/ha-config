@@ -5,9 +5,11 @@ import { TemperatureCard } from '@/components/TemperatureCard';
 import { FanControl } from '@/components/FanControl';
 import { SparklineStat } from '@/components/ClickableValue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { useEntityNumeric } from '@/hooks/useEntity';
+import { Switch } from '@/components/ui/switch';
+import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
+import { useToggle } from '@/hooks/useService';
 import { fmt } from '@/lib/utils';
-import { Thermometer } from 'lucide-react';
+import { Thermometer, ToggleLeft, Battery } from 'lucide-react';
 
 const zones = [
   {
@@ -34,17 +36,54 @@ const zones = [
 
 function BatteryHeaterCard() {
   const { value: power } = useEntityNumeric('sensor.battery_heater_power_12v');
+  const { value: plateTemp } = useEntityNumeric('sensor.a32_pro_s5140_channel_36_temperature_battery_bottom_aluminum_plate');
+  const heaterEnable = useEntity('switch.a32_pro_battery_heater_enable');
+  const toggleHeater = useToggle('switch.a32_pro_battery_heater_enable');
+  const thermostat = useEntity('climate.a32_pro_battery_heater_thermostat');
+
+  const targetTemp = thermostat?.attributes?.temperature;
+  const currentTemp = thermostat?.attributes?.current_temperature;
+  const mode = thermostat?.state; // 'heat' or 'off'
 
   return (
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Thermometer className="h-4 w-4" />
+          <Battery className="h-4 w-4" />
           Battery Heater
+          <div className="ml-auto flex items-center gap-1.5">
+            <span className="text-[10px] text-muted-foreground">{mode === 'heat' ? 'Heating' : 'Off'}</span>
+            <Switch checked={heaterEnable?.state === 'on'} onCheckedChange={toggleHeater} />
+          </div>
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="space-y-1">
+        <SparklineStat entityId="sensor.a32_pro_s5140_channel_36_temperature_battery_bottom_aluminum_plate" label="Battery Plate" value={fmt(plateTemp, 1)} unit="°C" color="#3b82f6" />
+        {currentTemp != null && <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Thermostat</span><span className="tabular-nums">{fmt(currentTemp, 1)}°C → {fmt(targetTemp, 0)}°C</span></div>}
         <SparklineStat entityId="sensor.battery_heater_power_12v" label="Power" value={fmt(power, 0)} unit="W" color="#ef4444" />
+      </CardContent>
+    </Card>
+  );
+}
+
+function BlowerModeCard() {
+  const blowerMode = useEntity('switch.a32_pro_coolant_blower_mode_auto_manual');
+  const toggleMode = useToggle('switch.a32_pro_coolant_blower_mode_auto_manual');
+  const isAuto = blowerMode?.state === 'on';
+
+  return (
+    <Card>
+      <CardContent className="pt-4">
+        <div className="flex items-center justify-between">
+          <span className="text-sm flex items-center gap-1.5">
+            <ToggleLeft className="h-3.5 w-3.5" />
+            Blower Fan Mode
+          </span>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-muted-foreground">{isAuto ? 'Auto (PID)' : 'Manual'}</span>
+            <Switch checked={isAuto} onCheckedChange={toggleMode} />
+          </div>
+        </div>
       </CardContent>
     </Card>
   );
@@ -78,9 +117,10 @@ export default function Climate() {
           <BatteryHeaterCard />
         </div>
 
-        {/* Column 3: Fan */}
+        {/* Column 3: Fan + Controls */}
         <div className="space-y-4">
           <FanControl />
+          <BlowerModeCard />
         </div>
       </div>
     </PageContainer>

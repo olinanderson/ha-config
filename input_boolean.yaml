@@ -39,3 +39,8 @@ heater_low_fuel_lockout:
   name: "Heater Low Fuel Lockout"
   icon: mdi:fuel-cell
   initial: off
+
+inverter_state:
+  name: "Inverter State"
+  icon: mdi:power-plug
+  initial: off

@@ -484,10 +484,8 @@ def route_via_proxy(points):
         if len(geometry) >= 2:
             dist = 0
             for i in range(1, len(geometry)):
-                d = haversine_m(geometry[i - 1][0], geometry[i - 1][1],
-                                geometry[i][0], geometry[i][1])
-                if d <= 1500:
-                    dist += d
+                dist += haversine_m(geometry[i - 1][0], geometry[i - 1][1],
+                                    geometry[i][0], geometry[i][1])
             return geometry, dist
     except Exception as e:
         log(f"Route error: {e}")

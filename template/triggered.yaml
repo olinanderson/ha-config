@@ -34,7 +34,11 @@
           {%- endif -%}
         {%- endmacro %}
 
-        {% if f is none or t is none %}
+        {# Only calculate grade when the vehicle is actually moving #}
+        {# GPS drift while parked produces false non-zero grades #}
+        {% if not is_state('binary_sensor.vehicle_is_moving', 'on') %}
+          0
+        {% elif f is none or t is none %}
           {{ last_numeric_or_zero(this.state) }}
         {% else %}
           {% set lat1 = (f.attributes.latitude  | float(0)) %}

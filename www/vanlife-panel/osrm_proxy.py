@@ -51,6 +51,29 @@ def _db():
     con.commit()
     return con
 
+def _init_named_places():
+    """Ensure named_places table exists in FILTERED_DB."""
+    con = sqlite3.connect(FILTERED_DB)
+    con.execute("""
+        CREATE TABLE IF NOT EXISTS named_places (
+            id         TEXT PRIMARY KEY,
+            name       TEXT NOT NULL,
+            category   TEXT NOT NULL DEFAULT 'other',
+            lat        REAL NOT NULL,
+            lon        REAL NOT NULL,
+            radius_m   REAL NOT NULL DEFAULT 200,
+            notes      TEXT NOT NULL DEFAULT '',
+            created_at REAL NOT NULL
+        )
+    """)
+    con.commit()
+    con.close()
+
+# init on import
+import os as _os
+if _os.path.exists(FILTERED_DB):
+    _init_named_places()
+
 def waypoint_hash(lonlat_pts):
     """Stable MD5 of the canonical waypoint list — permanent cache key."""
     canon = json.dumps(lonlat_pts, separators=(",", ":"))
@@ -117,9 +140,9 @@ def _match_chunk(lonlat_pts):
         "costing": "auto",
         "shape_match": "map_snap",
         "trace_options": {
-            "search_radius": 50,       # metres — find road candidates near each GPS point
-            "gps_accuracy": 30,        # expected GPS noise (m) — Starlink ~15-30m
-            "breakage_distance": 5000, # max gap (m) before trace break
+            "search_radius": 100,      # metres — max allowed by public Valhalla
+            "gps_accuracy": 50,        # expected GPS noise (m) — Starlink ~15-30m, be generous
+            "breakage_distance": 20000, # max gap (m) before trace break — keep matching through gaps
             "turn_penalty_factor": 0,  # no penalty for turns — trace is known path
         },
     }).encode()
@@ -175,7 +198,7 @@ def route_segment(lonlat_pts):
         i += advance
         if i >= len(lonlat_pts) - 1:
             break
-    return _remove_straight_lines(result)
+    return _fix_breakage(result, lonlat_pts)
 
 
 def _haversine_m(lat1, lon1, lat2, lon2):
@@ -188,27 +211,47 @@ def _haversine_m(lat1, lon1, lat2, lon2):
     return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
 
-def _remove_straight_lines(coords, max_gap_m=1500):
-    """Remove straight-line breakage artifacts from Valhalla geometry.
+def _fix_breakage(routed_coords, gps_lonlat, max_gap_m=500):
+    """Fix Valhalla straight-line breakage by splicing in raw GPS points.
 
-    Valhalla inserts straight lines when it can't match a trace segment to roads.
-    We detect point-to-point gaps > max_gap_m and remove those jumps.
-    Compares against the last *kept* point (not the original predecessor)
-    to avoid cascading removals on straight roads.
+    When Valhalla can't match a section to roads, it inserts straight-line
+    jumps. We detect gaps > max_gap_m in the routed geometry, find the
+    corresponding raw GPS points, and splice them in as fallback.
+    The GPS trace roughly follows roads and looks much better than a
+    straight line cutting through buildings.
     """
-    if len(coords) < 2:
-        return coords
-    cleaned = [coords[0]]
-    removed = 0
-    for i in range(1, len(coords)):
-        d = _haversine_m(cleaned[-1][0], cleaned[-1][1], coords[i][0], coords[i][1])
+    if len(routed_coords) < 2:
+        return routed_coords
+
+    # Convert GPS from [lon,lat] to [lat,lon]
+    gps_ll = [[lat, lon] for lon, lat in gps_lonlat]
+
+    result = [routed_coords[0]]
+    spliced = 0
+
+    for i in range(1, len(routed_coords)):
+        d = _haversine_m(result[-1][0], result[-1][1],
+                         routed_coords[i][0], routed_coords[i][1])
         if d > max_gap_m:
-            removed += 1
-        else:
-            cleaned.append(coords[i])
-    if removed:
-        print(f"[straight-line filter] removed {removed} breakage segments (>{max_gap_m}m gaps)", flush=True)
-    return cleaned
+            # Find GPS points closest to the gap start and end
+            gap_start = result[-1]
+            gap_end = routed_coords[i]
+            start_idx = min(range(len(gps_ll)),
+                            key=lambda j: _haversine_m(gap_start[0], gap_start[1],
+                                                       gps_ll[j][0], gps_ll[j][1]))
+            end_idx = min(range(len(gps_ll)),
+                          key=lambda j: _haversine_m(gap_end[0], gap_end[1],
+                                                     gps_ll[j][0], gps_ll[j][1]))
+            if end_idx > start_idx + 1:
+                # Splice in raw GPS points for the broken section
+                for j in range(start_idx + 1, end_idx):
+                    result.append(gps_ll[j])
+                spliced += 1
+        result.append(routed_coords[i])
+
+    if spliced:
+        print(f"[breakage fix] spliced raw GPS for {spliced} broken section(s)", flush=True)
+    return result
 
 
 def parse_osrm_coords(path):
@@ -231,7 +274,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
-        self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
+        self.send_header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS")
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
     def _json(self, code, data):
@@ -247,8 +290,23 @@ class ProxyHandler(BaseHTTPRequestHandler):
         self._cors()
         self.end_headers()
 
+    def do_PUT(self):
+        if self.path.startswith("/vanlife/named-places/"):
+            self._handle_named_place_update()
+        else:
+            self._json(404, {"error": "not found"})
+
+    def do_DELETE(self):
+        if self.path.startswith("/vanlife/named-places/"):
+            self._handle_named_place_delete()
+        else:
+            self._json(404, {"error": "not found"})
+
     # ── POST /vanlife/route-segment ───────────────────────────────────────────
     def do_POST(self):
+        if self.path.startswith("/vanlife/named-places"):
+            self._handle_named_place_create()
+            return
         if not self.path.startswith("/vanlife/route-segment"):
             self._json(404, {"error": "not found"})
             return
@@ -291,8 +349,38 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     # ── GET /vanlife/filtered-gps?start=TS&end=TS ──────────────────────────────
     # Serve pre-filtered GPS segments + parking from gps_filter.py's DB.
+    # ── GET /vanlife/named-places ─────────────────────────────────────────────
+    # ── PUT /vanlife/named-places/<id> ────────────────────────────────────────
+    # ── DELETE /vanlife/named-places/<id> ─────────────────────────────────────
     # ── GET /route/v1/driving/... (legacy fallback) ───────────────────────────
     def do_GET(self):
+        if self.path.startswith("/vanlife/named-places"):
+            self._handle_named_places_get()
+            return
+
+        if self.path == "/vanlife/data-range":
+            try:
+                import os
+                if not os.path.exists(FILTERED_DB):
+                    self._json(200, {"min_date": None, "max_date": None})
+                    return
+                con = sqlite3.connect(FILTERED_DB)
+                row = con.execute(
+                    "SELECT MIN(start_ts), MAX(end_ts) FROM segments"
+                ).fetchone()
+                con.close()
+                if row and row[0] is not None:
+                    from datetime import datetime, timezone
+                    min_d = datetime.fromtimestamp(row[0] / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
+                    max_d = datetime.fromtimestamp(row[1] / 1000, tz=timezone.utc).strftime("%Y-%m-%d")
+                    self._json(200, {"min_date": min_d, "max_date": max_d})
+                else:
+                    self._json(200, {"min_date": None, "max_date": None})
+            except Exception as e:
+                print(f"[data-range error] {e}", flush=True)
+                self._json(500, {"error": str(e)})
+            return
+
         if self.path.startswith("/vanlife/filtered-gps"):
             try:
                 qs = parse_qs(urlparse(self.path).query)
@@ -321,17 +409,23 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 ).fetchall()
                 con.close()
 
+                def _serve_segment(r):
+                    pts_raw = json.loads(r[3])
+                    geo = json.loads(r[5]) if r[5] else None
+                    # Re-apply breakage fix at serve time with current threshold
+                    if geo and len(geo) >= 2 and pts_raw:
+                        gps_lonlat = [[p["lon"], p["lat"]] for p in pts_raw]
+                        geo = _fix_breakage(geo, gps_lonlat)
+                    return {
+                        "id": r[0],
+                        "start_ts": r[1], "end_ts": r[2],
+                        "points": pts_raw, "point_count": r[4],
+                        "routed_geometry": geo,
+                        "distance_m": r[6],
+                    }
+
                 result = {
-                    "segments": [
-                        {
-                            "id": r[0],
-                            "start_ts": r[1], "end_ts": r[2],
-                            "points": json.loads(r[3]), "point_count": r[4],
-                            "routed_geometry": json.loads(r[5]) if r[5] else None,
-                            "distance_m": r[6],
-                        }
-                        for r in segs
-                    ],
+                    "segments": [_serve_segment(r) for r in segs],
                     "parking_spots": [
                         {"lat": r[0], "lon": r[1], "start_ts": r[2],
                          "duration_s": r[3], "point_count": r[4]}
@@ -367,6 +461,92 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
     def log_message(self, fmt, *args):
         pass   # suppress per-request access log
+
+    # ── Named Places CRUD ─────────────────────────────────────────────────────
+
+    def _handle_named_places_get(self):
+        """GET /vanlife/named-places → return all named places."""
+        _init_named_places()
+        con = sqlite3.connect(FILTERED_DB)
+        rows = con.execute(
+            "SELECT id, name, category, lat, lon, radius_m, notes, created_at "
+            "FROM named_places ORDER BY name"
+        ).fetchall()
+        con.close()
+        places = [
+            {"id": r[0], "name": r[1], "category": r[2], "lat": r[3],
+             "lon": r[4], "radius_m": r[5], "notes": r[6], "created_at": r[7]}
+            for r in rows
+        ]
+        self._json(200, {"places": places})
+
+    def _handle_named_place_create(self):
+        """POST /vanlife/named-places → create a new named place."""
+        _init_named_places()
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length))
+        name = body.get("name", "").strip()
+        if not name:
+            self._json(400, {"error": "name is required"})
+            return
+        lat = body.get("lat")
+        lon = body.get("lon")
+        if lat is None or lon is None:
+            self._json(400, {"error": "lat and lon are required"})
+            return
+        import uuid
+        place_id = str(uuid.uuid4())[:8]
+        category = body.get("category", "other")
+        radius_m = body.get("radius_m", 200)
+        notes = body.get("notes", "")
+        con = sqlite3.connect(FILTERED_DB)
+        con.execute(
+            "INSERT INTO named_places (id, name, category, lat, lon, radius_m, notes, created_at) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+            (place_id, name, category, lat, lon, radius_m, notes, time.time())
+        )
+        con.commit()
+        con.close()
+        self._json(201, {"id": place_id, "name": name})
+
+    def _handle_named_place_update(self):
+        """PUT /vanlife/named-places/<id> → update an existing named place."""
+        place_id = self.path.split("/")[-1]
+        if not place_id:
+            self._json(400, {"error": "place id required"})
+            return
+        length = int(self.headers.get("Content-Length", 0))
+        body = json.loads(self.rfile.read(length))
+        con = sqlite3.connect(FILTERED_DB)
+        existing = con.execute("SELECT id FROM named_places WHERE id = ?", (place_id,)).fetchone()
+        if not existing:
+            con.close()
+            self._json(404, {"error": "place not found"})
+            return
+        fields = []
+        values = []
+        for key in ("name", "category", "lat", "lon", "radius_m", "notes"):
+            if key in body:
+                fields.append(f"{key} = ?")
+                values.append(body[key])
+        if fields:
+            values.append(place_id)
+            con.execute(f"UPDATE named_places SET {', '.join(fields)} WHERE id = ?", values)
+            con.commit()
+        con.close()
+        self._json(200, {"ok": True})
+
+    def _handle_named_place_delete(self):
+        """DELETE /vanlife/named-places/<id> → delete a named place."""
+        place_id = self.path.split("/")[-1]
+        if not place_id:
+            self._json(400, {"error": "place id required"})
+            return
+        con = sqlite3.connect(FILTERED_DB)
+        con.execute("DELETE FROM named_places WHERE id = ?", (place_id,))
+        con.commit()
+        con.close()
+        self._json(200, {"ok": True})
 
 
 if __name__ == "__main__":

@@ -11,7 +11,7 @@ import aiohttp
 _LOGGER = logging.getLogger(__name__)
 
 NOMINATIM_URL = "https://nominatim.openstreetmap.org/reverse"
-USER_AGENT = "VanlifeTracker/0.1 HomeAssistant"
+USER_AGENT = "VanlifeTracker/0.1 (https://github.com/olinanderson/vanlife-tracker)"
 
 # Rate limit: max 1 request per second per Nominatim policy
 _last_request_time: float = 0

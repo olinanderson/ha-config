@@ -46,9 +46,9 @@ All 4 TPMS PIDs use the same init command to talk to the IPC module at address 0
 | **Name** | `TYRE_P_FL` | `TYRE_P_FR` | `TYRE_P_RL` | `TYRE_P_RR` |
 | **PID** | `222813` | `222814` | `222816` | `222815` |
 | **Init** | `ATSH000726;STCAFCP726,72E;` | _(same)_ | _(same)_ | _(same)_ |
-| **Expression** | `[B4:B5]/10` | `[B4:B5]/10` | `[B4:B5]/10` | `[B4:B5]/10` |
+| **Expression** | `[B4:B5]/20` | `[B4:B5]/20` | `[B4:B5]/20` | `[B4:B5]/20` |
 | **MQTT Topic** | `wican/tyre_p_fl` | `wican/tyre_p_fr` | `wican/tyre_p_rl` | `wican/tyre_p_rr` |
-| **Period (ms)** | `60000` | `60000` | `60000` | `60000` |
+| **Period (ms)** | `1000` | `1000` | `1000` | `1000` |
 
 > **Note:** TPMS talks to the Instrument Panel Cluster (IPC) at CAN ID 0x726.
 > The 2016 Transit should have factory TPMS. If these return no data, the IPC
@@ -67,11 +67,11 @@ All PCM PIDs use the same init command to talk to the PCM at address 0x7E0.
 
 | Name | PID | Expression | Topic | Period (ms) | Unit |
 |---|---|---|---|---|---|
-| `TRAN_F_TEMP` | `221E1C` | `[B4:B5]/16` | `wican/trans_temp` | `5000` | °C |
-| `GEAR` | `221E12` | `B4` | `wican/gear` | `2000` | — |
+| `TRAN_F_TEMP` | `221E1C` | `[B4:B5]/16` | `wican/trans_temp` | `1000` | °C |
+| `GEAR` | `221E12` | `B4` | `wican/gear` | `1000` | — |
 | `OIL_LIFE` | `22054B` | `B4` | `wican/oil_life` | `300000` | % |
-| `FUEL_RATE` | `22F49D` | `[B4:B5]*2/100` | `wican/fuel_rate` | `2000` | g/s |
-| `WASTEGATE` | `220462` | `B4*100/128` | `wican/wastegate` | `2000` | % |
+| `FUEL_RATE` | `22F49D` | `[B4:B5]*2/100` | `wican/fuel_rate` | `1000` | g/s |
+| `WASTEGATE` | `220462` | `B4*100/128` | `wican/wastegate` | `1000` | % |
 | `INTAKE_AIR_TMP` | `22F40F` | `B4-40` | `wican/intake_air_temp` | `10000` | °C |
 | `FUEL_PRESSURE` | `22F423` | `[B4:B5]` | `wican/fuel_pressure` | `5000` | kPa |
 | `ALT_DUTY` | `220598` | `B4` | `wican/alt_duty` | `10000` | % |
@@ -82,11 +82,11 @@ All PCM PIDs use the same init command to talk to the PCM at address 0x7E0.
 
 | Category | Period | Rationale |
 |---|---|---|
-| **Driving data** (gear, fuel rate, wastegate) | 2000 ms | Real-time while driving |
-| **Temperatures** (trans, intake air) | 5000–10000 ms | Changes slowly |
-| **TPMS** | 60000 ms | Tires don't change fast |
+| **Core driving** (speed, RPM, throttle, load, gear, ECU voltage, fuel rate, wastegate, coolant temp, trans temp, fuel tank) | 1000 ms | Real-time responsiveness |
+| **Moderate** (fuel pressure) | 5000 ms | Changes over minutes |
+| **Slow** (alt duty, intake air, ambient air, monitor status/CEL, distance MIL) | 10000 ms | Slow-changing or diagnostic |
+| **TPMS** (4 tires) + PIDs Supported | 60000 ms | Tires don't change fast |
 | **Oil life** | 300000 ms (5 min) | Only changes over long drives |
-| **Monitor status (CEL)** | 10000 ms | Check every 10 seconds |
 
 ---
 

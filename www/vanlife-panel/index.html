@@ -180,10 +180,13 @@
     .vl-place-meta { font-size: 12px; color: #757575; margin-bottom: 8px; line-height: 1.5; }
     .vl-place-actions { display: flex; gap: 6px; justify-content: flex-end; }
     #vl-place-form-wrap {
-      padding: 16px 20px; border-top: 2px solid #03a9f4;
-      background: #f5f5f5; flex-shrink: 0;
+      position: absolute; top: 50px; left: 10px; z-index: 9500;
+      width: 310px; max-height: calc(100% - 70px); overflow-y: auto;
+      padding: 14px 16px; background: #fff;
+      border-radius: 10px; box-shadow: 0 4px 24px rgba(0,0,0,0.22);
+      border: 2px solid #7c3aed;
     }
-    #vl-place-form-wrap h3 { font-size: 14px; margin-bottom: 10px; }
+    #vl-place-form-wrap h3 { font-size: 14px; margin: 0 0 10px 0; color: #7c3aed; }
     .vl-pf-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
     .vl-pf-grid .full { grid-column: 1 / -1; }
     .vl-pf-label { font-size: 11px; font-weight: 600; color: #757575; display: block; margin-bottom: 2px; }
@@ -256,6 +259,7 @@
   <div id="vl-map-pane">
     <div id="vl-map"></div>
     <div id="vl-date-bar">
+      <button id="vl-date-back" style="display:none;background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:2px 8px;cursor:pointer;font-size:12px;color:#555" title="Back to previous date range">← Back</button>
       <button class="vl-date-btn active" data-mode="today">Today</button>
       <button class="vl-date-btn" data-mode="yesterday">Yesterday</button>
       <div class="vl-bar-divider"></div>
@@ -263,6 +267,8 @@
       <span style="color:#888;font-size:11px;padding:0 2px">→</span>
       <input type="date" id="vl-date-end" class="vl-date-input" title="End date">
       <span id="vl-date-range-label" style="font-size:11px;color:#888;padding-left:4px"></span>
+      <button id="vl-date-prev" style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:13px;color:#555;margin-left:4px" title="Previous day">◀</button>
+      <button id="vl-date-next" style="background:#f0f0f0;border:1px solid #ccc;border-radius:4px;padding:2px 6px;cursor:pointer;font-size:13px;color:#555" title="Next day">▶</button>
       <div class="vl-bar-divider"></div>
       <div class="vl-route-toggle">
         <button id="vl-mode-snap" class="active" title="Road-snapped via Valhalla">🛣 Road</button>
@@ -271,9 +277,52 @@
       </div>
     </div>
     <div id="vl-status" style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:9000;background:rgba(0,0,0,0.55);color:#fff;font-size:12px;padding:6px 14px;border-radius:20px;pointer-events:none;white-space:nowrap;display:block"></div>
+    <div id="vl-place-form-wrap" style="display:none">
+      <h3 id="vl-pf-title">Add Named Place</h3>
+      <div class="vl-pf-grid">
+        <div class="full">
+          <label class="vl-pf-label">Name *</label>
+          <input class="vl-pf-input" id="vl-pf-name" type="text" placeholder="Home, Climbing gym, etc.">
+        </div>
+        <div>
+          <label class="vl-pf-label">Category</label>
+          <select class="vl-pf-input" id="vl-pf-category"></select>
+        </div>
+        <div>
+          <label class="vl-pf-label">Radius (<span id="vl-pf-radius-label">200</span>m)</label>
+          <input id="vl-pf-radius" type="range" min="50" max="2000" step="10" value="200"
+                 style="width:100%;accent-color:#7c3aed">
+        </div>
+        <div>
+          <label class="vl-pf-label">Latitude</label>
+          <input class="vl-pf-input" id="vl-pf-lat" type="number" step="any" placeholder="50.973">
+        </div>
+        <div>
+          <label class="vl-pf-label">Longitude</label>
+          <input class="vl-pf-input" id="vl-pf-lon" type="number" step="any" placeholder="-114.139">
+        </div>
+        <div class="full">
+          <button class="vl-btn" id="vl-pf-pick" style="width:100%;background:#7c3aed;color:white;font-weight:600;border:none;border-radius:5px;padding:7px;cursor:pointer;font-size:13px">
+            📍 Pick location on map
+          </button>
+          <div id="vl-pf-pick-hint" style="display:none;font-size:11px;color:#7c3aed;font-weight:600;margin-top:4px;text-align:center">
+            Click anywhere on the map to set location… <a href="#" id="vl-pf-pick-cancel" style="color:#e53935">Cancel</a>
+          </div>
+        </div>
+        <div class="full">
+          <label class="vl-pf-label">Notes</label>
+          <textarea class="vl-pf-input" id="vl-pf-notes" rows="2"></textarea>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
+        <button class="vl-btn vl-btn-ghost" id="vl-pf-cancel">Cancel</button>
+        <button class="vl-btn vl-btn-primary" id="vl-pf-save">Save Place</button>
+      </div>
+    </div>
     <div id="vl-sidebar">
       <div id="vl-sidebar-header">
         <span id="vl-stop-count">Loading…</span>
+        <button class="vl-btn" id="vl-add-place-map" style="float:right;background:#7c3aed;color:white;border:none;border-radius:5px;padding:4px 10px;font-size:11px;font-weight:600;cursor:pointer">+ Place</button>
       </div>
       <div id="vl-stop-list"></div>
       <div id="vl-edit-panel" style="display:none">
@@ -325,51 +374,8 @@
   <div id="vl-places-pane">
     <div id="vl-places-toolbar">
       <h2>Named Places</h2>
-      <button class="vl-btn vl-btn-primary" id="vl-add-place">+ Add Place</button>
     </div>
     <div id="vl-place-cards"></div>
-    <div id="vl-place-form-wrap" style="display:none">
-      <h3 id="vl-pf-title">Add Named Place</h3>
-      <div class="vl-pf-grid">
-        <div class="full">
-          <label class="vl-pf-label">Name *</label>
-          <input class="vl-pf-input" id="vl-pf-name" type="text" placeholder="Home, Climbing gym, etc.">
-        </div>
-        <div>
-          <label class="vl-pf-label">Category</label>
-          <select class="vl-pf-input" id="vl-pf-category"></select>
-        </div>
-        <div>
-          <label class="vl-pf-label">Radius (<span id="vl-pf-radius-label">200</span>m)</label>
-          <input id="vl-pf-radius" type="range" min="50" max="2000" step="10" value="200"
-                 style="width:100%;accent-color:#7c3aed">
-        </div>
-        <div>
-          <label class="vl-pf-label">Latitude</label>
-          <input class="vl-pf-input" id="vl-pf-lat" type="number" step="any" placeholder="50.973">
-        </div>
-        <div>
-          <label class="vl-pf-label">Longitude</label>
-          <input class="vl-pf-input" id="vl-pf-lon" type="number" step="any" placeholder="-114.139">
-        </div>
-        <div class="full">
-          <button class="vl-btn" id="vl-pf-pick" style="width:100%;background:#7c3aed;color:white;font-weight:600;border:none;border-radius:5px;padding:7px;cursor:pointer;font-size:13px">
-            📍 Pick location on map
-          </button>
-          <div id="vl-pf-pick-hint" style="display:none;font-size:11px;color:#7c3aed;font-weight:600;margin-top:4px;text-align:center">
-            Click anywhere on the map to set location… <a href="#" id="vl-pf-pick-cancel" style="color:#e53935">Cancel</a>
-          </div>
-        </div>
-        <div class="full">
-          <label class="vl-pf-label">Notes</label>
-          <textarea class="vl-pf-input" id="vl-pf-notes" rows="2"></textarea>
-        </div>
-      </div>
-      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:10px">
-        <button class="vl-btn vl-btn-ghost" id="vl-pf-cancel">Cancel</button>
-        <button class="vl-btn vl-btn-primary" id="vl-pf-save">Save Place</button>
-      </div>
-    </div>
   </div>
 
 </div><!-- #vl-main -->
@@ -386,17 +392,17 @@ const CATEGORY_ICONS = {
   trailhead:"🥾", other:"📍",
 };
 const PLACE_CATEGORY_ICONS = {
-  home:"🏠", climbing:"🧗", gym:"💪", grocery:"🛒", laundry:"👕",
+  home:"🏠", wild_camping:"🏕️", climbing:"🧗", gym:"💪", grocery:"🛒", laundry:"👕",
   coffee:"☕", friend:"👥", work:"💼", mechanic:"🔧", hospital:"🏥",
-  fuel:"⛽", other:"📌",
+  fuel:"⛽", skatepark:"🛹", surf:"🏄", other:"📌",
 };
 const STOP_CATEGORIES = [
   "free_camping","paid_campground","walmart","blm_land",
   "national_forest","rest_area","friend_family","urban","trailhead","other",
 ];
 const PLACE_CATEGORIES = [
-  "home","climbing","gym","grocery","laundry","coffee",
-  "friend","work","mechanic","hospital","fuel","other",
+  "home","wild_camping","climbing","gym","grocery","laundry","coffee",
+  "friend","work","mechanic","hospital","fuel","skatepark","surf","other",
 ];
 
 // ─── HA connection ────────────────────────────────────────
@@ -442,17 +448,11 @@ async function callService(domain, service, data = {}) {
 }
 
 async function getNamedPlaces() {
-  if (!_token) return [];
   try {
-    // Call the service then poll the response sensor
-    await callService("vanlife_tracker", "get_named_places");
-    await new Promise(r => setTimeout(r, 500));
-    const r = await fetch("/api/states/sensor.vanlife_tracker_named_places", {
-      headers: { Authorization: `Bearer ${_token}` },
-    });
+    const r = await fetch(`${OSRM_PROXY}/vanlife/named-places`);
     if (r.ok) {
-      const s = await r.json();
-      return s.attributes?.places || [];
+      const d = await r.json();
+      return d.places || [];
     }
   } catch(_) {}
   return [];
@@ -564,10 +564,11 @@ const STATIONARY_M      = 15;     // metres — tail points within this radius a
  * Try to fetch pre-filtered GPS data from the server-side cache (gps_filter.py → osrm_proxy.py).
  * Returns { movingSegments, parkingSpots, stats, preRouted } or null if not available.
  */
-async function _fetchPreFiltered(start, end) {
+async function _fetchPreFiltered(start, end, signal) {
   try {
     const r = await fetch(
-      `${OSRM_PROXY}/vanlife/filtered-gps?start=${start.getTime()}&end=${end.getTime()}`
+      `${OSRM_PROXY}/vanlife/filtered-gps?start=${start.getTime()}&end=${end.getTime()}`,
+      { signal }
     );
     if (!r.ok) return null;
     const d = await r.json();
@@ -597,6 +598,7 @@ async function _fetchPreFiltered(start, end) {
       stats: { rawCount, dedupedCount: rawCount, movingCount },
     };
   } catch (e) {
+    if (e.name === "AbortError") throw e;
     console.warn("[VL] Pre-filtered fetch failed, will use client-side:", e);
     return null;
   }
@@ -782,6 +784,22 @@ function stopDisplayName(stop, opts = {}) {
   return "Unnamed Stop";
 }
 
+/** Find the named place (from _places) whose center is within radius_m of a coordinate.
+ *  Returns the place object, or null if no match. */
+function placeForCoord(lat, lon) {
+  for (const p of _places) {
+    if (haversineM(lat, lon, p.lat, p.lon) <= p.radius_m) return p;
+  }
+  return null;
+}
+
+/** Display name for a coordinate: named place if within radius, otherwise "lat, lon". */
+function coordDisplayName(lat, lon) {
+  const p = placeForCoord(lat, lon);
+  if (p) return p.name;
+  return `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
+}
+
 function haversineM(lat1, lon1, lat2, lon2) {
   const R = 6371000;
   const dLat = (lat2 - lat1) * Math.PI / 180;
@@ -863,12 +881,16 @@ let _placePreviewCircle = null;     // Leaflet circle shown during place edit
 let _vanMarker = null;
 let _dateMode = "today";
 let _customStart = null, _customEnd = null;
+let _dateHistory = [];  // stack of {mode, start, end, startVal, endVal}
 let _haTz = null;
 let _editingStop = null, _editingPlace = null, _editRating = 0;
 let _hasFitBounds = false;
 let _currentTab = "map";
 let _travels = [], _travelHighlight = null, _selectedTravelIdx = null;
 let _lastSegmentCount = 0, _lastParkingCount = 0;
+let _currentParkingSpots = [];
+let _parkingDotMarkers = [];  // tracked so we can selectively remove after place creation
+let _drawRouteAbort = null;  // AbortController for in-flight drawRoute fetch
 
 /** Check if a DB stop (by id) is the from/to of the currently selected travel. */
 function _isStopFocused(stopId) {
@@ -951,6 +973,7 @@ function initMap() {
   drawRoute();
   renderPlaceMarkers();
   renderVanMarker();
+  _map.on("zoomend", _updateVanPlaceGrouping);
 }
 
 // ─── Overlay dot layers (independent of route mode) ──────────────────
@@ -958,10 +981,24 @@ function initMap() {
 
 async function drawRoute() {
   if (!_routeLayer) return;
+  // Cancel any in-flight request from a previous drawRoute call
+  if (_drawRouteAbort) _drawRouteAbort.abort();
+  _drawRouteAbort = new AbortController();
+  const signal = _drawRouteAbort.signal;
+  // Clear all layers and reset state
   _routeLayer.clearLayers();
   if (_debugLayer) _debugLayer.clearLayers();
   if (_debugRawLayer) _debugRawLayer.clearLayers();
   if (_rawStarlinkLayer) _rawStarlinkLayer.clearLayers();
+  _travels = [];
+  _selectedTravelIdx = null;
+  if (_travelHighlight) { _travelHighlight.remove(); _travelHighlight = null; }
+  _lastSegmentCount = 0;
+  _lastParkingCount = 0;
+  _currentParkingSpots = [];
+  _parkingDotMarkers = [];
+  renderPlaceMarkers();
+  renderStopList();
   _hasFitBounds = false;
   setStatus("Loading trips...");
 
@@ -979,7 +1016,7 @@ async function drawRoute() {
     setStatus("Loading raw Starlink GPS...");
     try {
       const url = `/api/history/period/${start.toISOString()}?filter_entity_id=device_tracker.starlink_device_location&end_time=${end.toISOString()}&significant_changes_only=false`;
-      const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+      const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal });
       if (r.ok) {
         const data = await r.json();
         const states = data?.[0] || [];
@@ -1022,6 +1059,7 @@ async function drawRoute() {
         setStatus("⚠ Failed to load Starlink history");
       }
     } catch(e) {
+      if (e.name === "AbortError") return;
       console.warn("[VL] Raw Starlink fetch failed:", e);
       setStatus("⚠ Failed to load Starlink history");
     }
@@ -1034,16 +1072,21 @@ async function drawRoute() {
 
   // Try server-side pre-filtered data first (instant if gps_filter daemon has processed)
   setStatus("Checking server cache…");
-  let filtered = await _fetchPreFiltered(start, end);
-  let preRouted = null;
-  if (filtered) {
-    preRouted = filtered.preRouted;
-    const preCached = preRouted ? preRouted.filter(r => r.geometry).length : 0;
-    setStatus(`Server cache: ${filtered.movingSegments.length} trips, ${filtered.parkingSpots.length} stops, ${preCached} pre-routed`);
-  } else {
-    // Fall back to client-side filtering
-    setStatus("No server cache — filtering client-side…");
-    filtered = await _fetchAndFilterStarlink(start, end, token);
+  let filtered, preRouted = null;
+  try {
+    filtered = await _fetchPreFiltered(start, end, signal);
+    if (filtered) {
+      preRouted = filtered.preRouted;
+      const preCached = preRouted ? preRouted.filter(r => r.geometry).length : 0;
+      setStatus(`Server cache: ${filtered.movingSegments.length} trips, ${filtered.parkingSpots.length} stops, ${preCached} pre-routed`);
+    } else {
+      // Fall back to client-side filtering
+      setStatus("No server cache — filtering client-side…");
+      filtered = await _fetchAndFilterStarlink(start, end, token, signal);
+    }
+  } catch (e) {
+    if (e.name === "AbortError") return;
+    throw e;
   }
   if (!filtered) { renderVanMarker(); return; }
 
@@ -1153,8 +1196,11 @@ async function drawRoute() {
       _travels.push(travel);
     }
 
-    // Draw parking spots on road mode too
-    parkingSpots.forEach(pk => {
+    // Consolidate GPS-jitter parking spots (nearby + close in time)
+    const mergedParking = _mergeParkingSpots(parkingSpots);
+
+    // Draw consolidated parking spots
+    mergedParking.forEach(pk => {
       allCoords.push([pk.lat, pk.lon]);
       _drawParkingDot(pk);
     });
@@ -1196,7 +1242,10 @@ async function drawRoute() {
       );
     });
 
-    parkingSpots.forEach(pk => {
+    // Consolidate GPS-jitter parking spots
+    const mergedParkFiltered = _mergeParkingSpots(parkingSpots);
+
+    mergedParkFiltered.forEach(pk => {
       allCoords.push([pk.lat, pk.lon]);
       _drawParkingDot(pk);
     });
@@ -1210,12 +1259,52 @@ async function drawRoute() {
 
   _lastSegmentCount = movingSegments.length;
   _lastParkingCount = parkingSpots.length;
+  _currentParkingSpots = parkingSpots;
+  renderPlaceMarkers();
   renderStopList();
   renderVanMarker();
 }
 
+/** Merge parking spots caused by GPS jitter: only merge if within 50m AND
+ *  within 30 minutes of each other (end of one → start of next).
+ *  Separate visits to the same location on different trips stay separate. */
+function _mergeParkingSpots(spots) {
+  const MERGE_RADIUS_M = 50;
+  const MERGE_GAP_MS = 30 * 60 * 1000; // 30 minutes
+  const sorted = [...spots].sort((a, b) => a.ts - b.ts);
+  const merged = [];
+  const used = new Set();
+  for (let i = 0; i < sorted.length; i++) {
+    if (used.has(i)) continue;
+    const group = [sorted[i]];
+    used.add(i);
+    // Greedily absorb subsequent spots that are close in space AND time
+    for (let j = i + 1; j < sorted.length; j++) {
+      if (used.has(j)) continue;
+      // Check distance to any spot already in the group
+      const nearby = group.some(g => haversineM(g.lat, g.lon, sorted[j].lat, sorted[j].lon) < MERGE_RADIUS_M);
+      if (!nearby) continue;
+      // Check time: the start of this spot must be within 30min of the end of the last group spot
+      const lastEnd = Math.max(...group.map(g => g.ts + g.durationS * 1000));
+      if (sorted[j].ts - lastEnd > MERGE_GAP_MS) continue;
+      group.push(sorted[j]);
+      used.add(j);
+    }
+    const lat = group.reduce((s, p) => s + p.lat, 0) / group.length;
+    const lon = group.reduce((s, p) => s + p.lon, 0) / group.length;
+    const earliest = Math.min(...group.map(p => p.ts));
+    const latestEnd = Math.max(...group.map(p => p.ts + p.durationS * 1000));
+    const durationS = (latestEnd - earliest) / 1000;
+    merged.push({ lat, lon, durationS, ts: earliest, count: group.reduce((s, p) => s + (p.count || 1), 0) });
+  }
+  return merged;
+}
+
 /** Draw a parking spot dot on the map */
 function _drawParkingDot(pk) {
+  // Skip parking dots that fall inside a named place — the place marker is enough
+  const place = placeForCoord(pk.lat, pk.lon);
+  if (place) return;
   const localTime = new Date(pk.ts).toLocaleString("en-US", {
     timeZone: _haTz || undefined,
     hour: "numeric", minute: "2-digit", second: "2-digit",
@@ -1224,17 +1313,52 @@ function _drawParkingDot(pk) {
   const durMin = Math.round(pk.durationS / 60);
   const durStr = durMin >= 60 ? `${Math.floor(durMin/60)}h ${durMin%60}m` : `${durMin}m`;
   const cm = L.circleMarker([pk.lat, pk.lon], {
-    radius: 6, color: '#78909c', fillColor: '#b0bec5',
+    radius: 6,
+    color: '#78909c',
+    fillColor: '#b0bec5',
     fillOpacity: 0.8, weight: 2, opacity: 0.9,
   }).addTo(_routeLayer);
+  cm._parkingLat = pk.lat;
+  cm._parkingLon = pk.lon;
+  _parkingDotMarkers.push(cm);
+  const createBtn =
+    `<button class="vl-parking-create-place" data-lat="${pk.lat}" data-lon="${pk.lon}" style="margin-top:6px;background:#7c3aed;color:white;border:none;border-radius:5px;padding:5px 12px;font-size:11px;font-weight:600;cursor:pointer;width:100%">➕ Create Place Here</button>`;
   cm.bindPopup(
     `<div style="font-size:12px;line-height:1.4">` +
     `<b>🅿️ Parked · ${durStr}</b><br>` +
     `🕐 ${localTime}<br>` +
     `📍 ${pk.lat.toFixed(6)}, ${pk.lon.toFixed(6)}` +
+    createBtn +
     `</div>`,
-    { closeButton: false, maxWidth: 220 }
+    { closeButton: false, maxWidth: 250 }
   );
+  cm.on("popupopen", () => {
+    setTimeout(() => {
+      const btn = document.querySelector(`.vl-parking-create-place[data-lat="${pk.lat}"][data-lon="${pk.lon}"]`);
+      if (btn) btn.addEventListener("click", () => {
+        cm.closePopup();
+        openPlaceFormForCoord(pk.lat, pk.lon);
+      });
+    }, 50);
+  });
+}
+
+/** Open the place creation form pre-filled with a coordinate (floating overlay on map). */
+function openPlaceFormForCoord(lat, lon) {
+  _editingPlace = null;
+  _stopPickingPlace();
+  const wrap = document.getElementById("vl-place-form-wrap");
+  wrap.style.display = "block";
+  document.getElementById("vl-pf-title").textContent = "Add Named Place";
+  document.getElementById("vl-pf-name").value = "";
+  document.getElementById("vl-pf-category").value = "other";
+  document.getElementById("vl-pf-radius").value = 200;
+  document.getElementById("vl-pf-radius-label").textContent = "200";
+  document.getElementById("vl-pf-lat").value = lat;
+  document.getElementById("vl-pf-lon").value = lon;
+  document.getElementById("vl-pf-notes").value = "";
+  _updatePlacePreview();
+  _zoomToPlacePreview();
 }
 
 /**
@@ -1242,7 +1366,7 @@ function _drawParkingDot(pk) {
  * Returns: { movingSegments: [[{lat,lon,ts,acc},...], ...], parkingSpots: [{lat,lon,ts,durationS,count},...], stats }
  * movingSegments is an array of trip segments (split at each parking stop).
  */
-async function _fetchAndFilterStarlink(start, end, token) {
+async function _fetchAndFilterStarlink(start, end, token, signal) {
   const MIN_PARK_DURATION_S = 180; // 3 min — avoid splitting trips at traffic lights
   const FILTER_RADIUS_M = 15;
   const CONFIRM_COUNT = 3;
@@ -1250,7 +1374,7 @@ async function _fetchAndFilterStarlink(start, end, token) {
   try {
     const url = `/api/history/period/${start.toISOString()}?filter_entity_id=device_tracker.starlink_device_location&end_time=${end.toISOString()}&significant_changes_only=false`;
     setStatus("Fetching raw GPS from HA history…");
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal });
     if (!r.ok) { setStatus("⚠ Failed to load Starlink history"); return null; }
     const data = await r.json();
     const rawStates = data?.[0] || [];
@@ -1473,6 +1597,65 @@ function renderVanMarker() {
   _vanMarker = L.marker([lat, lon], { icon, zIndexOffset: 1000 })
     .bindPopup("<b>🚐 Van is here</b>")
     .addTo(_map);
+  _updateVanPlaceGrouping();
+}
+
+/** When the van marker overlaps a place marker on screen (pixel distance),
+ *  hide the van and badge the place with a small van icon.
+ *  Zoom in to see them separately. */
+let _vanGroupedPlaceId = null;
+function _updateVanPlaceGrouping() {
+  if (!_map || !_vanMarker) return;
+  const VAN_PX_THRESHOLD = 60;
+  const vanPx = _map.latLngToContainerPoint(_vanMarker.getLatLng());
+
+  // Restore previously-grouped place marker to normal icon
+  if (_vanGroupedPlaceId !== null) {
+    const prev = _places.find(p => p.id === _vanGroupedPlaceId);
+    if (prev && _placeMarkers[prev.id]) {
+      _rebuildPlaceIcon(prev, false);
+    }
+    _vanGroupedPlaceId = null;
+  }
+
+  // Find nearest place marker in pixel space
+  let nearest = null, nearestDist = Infinity;
+  for (const place of _places) {
+    if (!place.lat || !place.lon || !_placeMarkers[place.id]) continue;
+    const px = _map.latLngToContainerPoint([place.lat, place.lon]);
+    const d = vanPx.distanceTo(px);
+    if (d < nearestDist) { nearestDist = d; nearest = place; }
+  }
+
+  if (nearest && nearestDist < VAN_PX_THRESHOLD) {
+    // Group: hide van, badge the place
+    _vanMarker.setOpacity(0);
+    _vanMarker.closePopup();
+    _vanMarker.getElement().style.pointerEvents = 'none';
+    _vanGroupedPlaceId = nearest.id;
+    _rebuildPlaceIcon(nearest, true);
+  } else {
+    _vanMarker.setOpacity(1);
+    _vanMarker.getElement().style.pointerEvents = '';
+  }
+}
+
+function _rebuildPlaceIcon(place, showVanBadge) {
+  const m = _placeMarkers[place.id];
+  if (!m) return;
+  const icon = PLACE_CATEGORY_ICONS[place.category] || "📌";
+  const badge = showVanBadge
+    ? `<div style="position:absolute;top:-6px;right:-10px;background:#e53935;border-radius:50%;width:22px;height:22px;display:flex;align-items:center;justify-content:center;font-size:13px;border:2px solid white;box-shadow:0 1px 4px rgba(0,0,0,0.3);z-index:1">🚐</div>`
+    : '';
+  const divIcon = L.divIcon({
+    html: `<div style="position:relative;display:inline-flex;flex-direction:column;align-items:center;opacity:0.85;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.25))">
+      ${badge}
+      <div style="background:#7c3aed;color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #6d28d9">${icon}</div>
+      <div style="background:#7c3aed;color:white;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:-1px">${place.name}</div>
+    </div>`,
+    className: "", iconAnchor: [16, 50], popupAnchor: [0, -52],
+  });
+  m.setIcon(divIcon);
 }
 
 // ── Unmatched GPS-detected stops: grey markers with "Create Stop" action ──
@@ -1707,8 +1890,17 @@ function renderPlaceMarkers() {
   Object.values(_placeCircles).forEach(c => c.remove());
   _placeCircles = {};
 
-  _places.forEach(place => {
-    if (!place.lat || !place.lon) return;
+  // Only show places that have a parking spot on the current route, or where the van currently is
+  const vanPos = getVanLocation();
+  const relevantPlaces = _places.filter(place => {
+    if (!place.lat || !place.lon) return false;
+    // Van is currently at this place
+    if (vanPos && haversineM(vanPos[0], vanPos[1], place.lat, place.lon) <= place.radius_m) return true;
+    // A parking spot from the current route is within this place
+    return _currentParkingSpots.some(pk => haversineM(pk.lat, pk.lon, place.lat, place.lon) <= place.radius_m);
+  });
+
+  relevantPlaces.forEach(place => {
     const icon = PLACE_CATEGORY_ICONS[place.category] || "📌";
 
     const divIcon = L.divIcon({
@@ -1719,10 +1911,11 @@ function renderPlaceMarkers() {
       className: "", iconAnchor: [16, 50], popupAnchor: [0, -52],
     });
 
+    // Create radius circle but don't add to map yet — shown on marker click
     const circle = L.circle([place.lat, place.lon], {
       radius: place.radius_m, color: "#7c3aed", fillColor: "#7c3aed",
       fillOpacity: 0.07, weight: 1.5, dashArray: "4 4",
-    }).addTo(_map);
+    });
     _placeCircles[place.id] = circle;
 
     const m = L.marker([place.lat, place.lon], { icon: divIcon });
@@ -1733,9 +1926,40 @@ function renderPlaceMarkers() {
       ${place.notes ? `<div class="vl-popup-row" style="font-style:italic">${place.notes}</div>` : ""}
       <button class="vl-popup-edit" data-place-edit="${place.id}">✏️ Edit Place</button>
     `);
+    let _tempPlaceDots = [];  // temporary parking dots shown when place popup is open
+
     m.on("popupopen", () => {
+      circle.addTo(_map);
+      // Show hidden parking dots inside this place
+      _currentParkingSpots.filter(pk =>
+        haversineM(pk.lat, pk.lon, place.lat, place.lon) <= place.radius_m
+      ).forEach(pk => {
+        const localTime = new Date(pk.ts).toLocaleString("en-US", {
+          timeZone: _haTz || undefined,
+          hour: "numeric", minute: "2-digit",
+          hour12: true, month: "short", day: "numeric",
+        });
+        const durMin = Math.round(pk.durationS / 60);
+        const durStr = durMin >= 60 ? `${Math.floor(durMin/60)}h ${durMin%60}m` : `${durMin}m`;
+        const dot = L.circleMarker([pk.lat, pk.lon], {
+          radius: 5, color: '#78909c', fillColor: '#b0bec5',
+          fillOpacity: 0.8, weight: 2, opacity: 0.9,
+        }).addTo(_routeLayer);
+        dot.bindPopup(
+          `<div style="font-size:12px;line-height:1.4">` +
+          `<b>🅿️ ${durStr}</b><br>🕐 ${localTime}<br>` +
+          `📍 ${pk.lat.toFixed(6)}, ${pk.lon.toFixed(6)}</div>`,
+          { closeButton: false, maxWidth: 250 }
+        );
+        _tempPlaceDots.push(dot);
+      });
       const btn = document.querySelector(`[data-place-edit="${place.id}"]`);
       if (btn) btn.addEventListener("click", () => { m.closePopup(); showPlaceForm(place); });
+    });
+    m.on("popupclose", () => {
+      circle.remove();
+      _tempPlaceDots.forEach(d => d.remove());
+      _tempPlaceDots = [];
     });
     m.addTo(_map);
     _placeMarkers[place.id] = m;
@@ -1767,8 +1991,8 @@ function renderStopList() {
   const travelsDesc = [..._travels];
 
   list.innerHTML = travelsDesc.map(travel => {
-    const fromName = travel.from ? stopDisplayName(travel.from) : (travel.fromGps ? `${travel.fromGps.centroid.lat.toFixed(4)}, ${travel.fromGps.centroid.lon.toFixed(4)}` : "Journey Start");
-    const toName   = travel.to   ? stopDisplayName(travel.to)   : (travel.toGps   ? `${travel.toGps.centroid.lat.toFixed(4)}, ${travel.toGps.centroid.lon.toFixed(4)}` : "Journey End");
+    const fromName = travel.from ? stopDisplayName(travel.from) : (travel.fromGps ? coordDisplayName(travel.fromGps.centroid.lat, travel.fromGps.centroid.lon) : "Journey Start");
+    const toName   = travel.to   ? stopDisplayName(travel.to)   : (travel.toGps   ? coordDisplayName(travel.toGps.centroid.lat, travel.toGps.centroid.lon) : "Journey End");
     const depIso   = new Date(travel.depTs).toISOString();
     const arrIso   = new Date(travel.arrTs).toISOString();
     const driveDur = formatDuration(depIso, arrIso);
@@ -1788,10 +2012,21 @@ function renderStopList() {
     const lPer100 = (fuelUsedL != null && distKm > 0) ? (fuelUsedL / distKm) * 100 : null;
     const fuelBrief = lPer100 != null ? `⛽ ${lPer100.toFixed(1)} L/100km` : (fuelUsedL != null ? `⛽ ${fuelUsedL.toFixed(1)} L` : "");
 
+    // Stop duration at destination
+    let stopDur = null;
+    if (travel.to && travel.to.arrived_at && travel.to.departed_at) {
+      stopDur = formatDuration(travel.to.arrived_at, travel.to.departed_at);
+    } else if (travel.toGps && travel.toGps.durationH > 0) {
+      const h = travel.toGps.durationH;
+      if (h >= 1) stopDur = `${h.toFixed(1)}h`;
+      else stopDur = `${Math.round(h * 60)}m`;
+    }
+
     // Summary line
     const metaParts = [dateStr];
     if (driveDur) metaParts.push(`🚗 ${driveDur}`);
     if (distStr) metaParts.push(`📏 ${distStr}`);
+    if (stopDur) metaParts.push(`🅿️ ${stopDur}`);
     if (fuelBrief) metaParts.push(fuelBrief);
 
     // ── Expanded detail rows ────────────────────────────────────────
@@ -1807,6 +2042,13 @@ function renderStopList() {
       }
       driveRows.push(detailRow("Departed", fmtTime(travel.depTs)));
       driveRows.push(detailRow("Arrived", fmtTime(travel.arrTs)));
+      if (travel.dbId) driveRows.push(detailRow("Segment", `<span style="color:#999;font-family:monospace">#${travel.dbId}</span>`));
+      // "View this day" link — useful in multi-day ranges
+      const tripDate = new Date(travel.depTs);
+      const tripDateStr = _haTz
+        ? tripDate.toLocaleDateString("en-CA", { timeZone: _haTz })
+        : tripDate.toISOString().slice(0, 10);
+      driveRows.push(detailRow("", `<a href="#" onclick="event.preventDefault();event.stopPropagation();goToDate('${tripDateStr}')" style="color:#03a9f4;font-size:12px">📅 View all trips this day</a>`));
       const driveSection = driveRows.length
         ? `<div class="vl-detail-section"><div class="vl-detail-label">🚗 Drive</div>${driveRows.join("")}</div>` : "";
 
@@ -1854,6 +2096,21 @@ function renderStopList() {
   list.querySelectorAll("[data-travel-idx]").forEach(el => {
     el.addEventListener("click", () => selectTravel(parseInt(el.dataset.travelIdx)));
   });
+
+  // Trip summary at bottom
+  if (count > 0) {
+    const totalDistM = _travels.reduce((s, t) => s + (t.distanceM || 0), 0);
+    const totalDriveMs = _travels.reduce((s, t) => s + (t.arrTs - t.depTs), 0);
+    const totalH = Math.floor(totalDriveMs / 3600000);
+    const totalM = Math.floor((totalDriveMs % 3600000) / 60000);
+    const driveStr = totalH > 0 ? `${totalH}h ${totalM}m` : `${totalM}m`;
+    const distStr = totalDistM > 0 ? `${(totalDistM / 1000).toFixed(1)} km` : "";
+    const parts = [];
+    if (distStr) parts.push(`📏 ${distStr}`);
+    parts.push(`🚗 ${driveStr} driving`);
+    list.insertAdjacentHTML("beforeend",
+      `<div style="padding:8px 12px;border-top:1px solid #eee;color:#888;font-size:12px;text-align:center">${parts.join(" · ")}</div>`);
+  }
 }
 
 function detailRow(label, value) {
@@ -1869,7 +2126,70 @@ function escHtml(s) {
   return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
 }
 
+/** Set date picker to a specific date and reload. Pushes current range to history stack. */
+function goToDate(dateStr) {
+  const startInput = document.getElementById("vl-date-start");
+  const endInput = document.getElementById("vl-date-end");
+  // Save current state to history
+  _dateHistory.push({ mode: _dateMode, start: _customStart, end: _customEnd, startVal: startInput.value, endVal: endInput.value });
+  document.getElementById("vl-date-back").style.display = "";
+  startInput.value = dateStr;
+  endInput.value = dateStr;
+  startInput.dispatchEvent(new Event("change"));
+}
 
+/** Go back to the previous date range. */
+function goDateBack() {
+  if (!_dateHistory.length) return;
+  const prev = _dateHistory.pop();
+  if (!_dateHistory.length) document.getElementById("vl-date-back").style.display = "none";
+  const startInput = document.getElementById("vl-date-start");
+  const endInput = document.getElementById("vl-date-end");
+  if (prev.mode === "today" || prev.mode === "yesterday") {
+    // Click the preset button to restore
+    const btn = document.querySelector(`.vl-date-btn[data-mode="${prev.mode}"]`);
+    if (btn) btn.click();
+  } else {
+    startInput.value = prev.startVal;
+    endInput.value = prev.endVal;
+    startInput.dispatchEvent(new Event("change"));
+  }
+}
+
+/** Shift the current date range by `days` (-1 = prev, +1 = next). */
+function _shiftDate(days) {
+  const startInput = document.getElementById("vl-date-start");
+  const endInput = document.getElementById("vl-date-end");
+  let startDate, endDate;
+
+  if (_dateMode === "today" || _dateMode === "yesterday") {
+    // Convert preset to a concrete date, then shift
+    const base = new Date();
+    if (_dateMode === "yesterday") base.setDate(base.getDate() - 1);
+    base.setHours(0, 0, 0, 0);
+    startDate = new Date(base);
+    endDate = new Date(base);
+  } else if (startInput.value && endInput.value) {
+    startDate = new Date(startInput.value + "T00:00:00");
+    endDate = new Date(endInput.value + "T00:00:00");
+  } else {
+    return;
+  }
+
+  startDate.setDate(startDate.getDate() + days);
+  endDate.setDate(endDate.getDate() + days);
+
+  // Don't go into the future
+  const today = new Date(); today.setHours(0, 0, 0, 0);
+  if (endDate > today) return;
+
+  const fmt = d => d.toISOString().slice(0, 10);
+  startInput.value = fmt(startDate);
+  endInput.value = fmt(endDate);
+  // Deactivate preset buttons
+  document.querySelectorAll(".vl-date-btn").forEach(b => b.classList.remove("active"));
+  startInput.dispatchEvent(new Event("change"));
+}
 
 /** Highlight a travel's route on the map (toggle off if clicked again). */
 function selectTravel(idx) {
@@ -1879,7 +2199,6 @@ function selectTravel(idx) {
     if (_travelHighlight) { _travelHighlight.remove(); _travelHighlight = null; }
     renderStopList();
     renderStopMarkers();
-    renderUnmatchedStopMarkers();
     return;
   }
   _selectedTravelIdx = idx;
@@ -1897,7 +2216,11 @@ function selectTravel(idx) {
   }
   renderStopList();
   renderStopMarkers();
-  renderUnmatchedStopMarkers();
+  // Scroll the selected trip into view in the sidebar
+  if (_selectedTravelIdx != null) {
+    const el = document.querySelector(`[data-travel-idx="${_selectedTravelIdx}"]`);
+    if (el) el.scrollIntoView({ behavior: "smooth", block: "nearest" });
+  }
 }
 
 // ─── Trip Inspector ─────────────────────────────────────────
@@ -2046,7 +2369,7 @@ async function saveStop() {
 // ─── Named places tab ─────────────────────────────────────
 
 function setupPlacesTab() {
-  document.getElementById("vl-add-place").addEventListener("click", () => showPlaceForm(null));
+  document.getElementById("vl-add-place-map").addEventListener("click", () => showPlaceForm(null));
   document.getElementById("vl-pf-cancel").addEventListener("click", () => {
     document.getElementById("vl-place-form-wrap").style.display = "none";
     _editingPlace = null;
@@ -2095,8 +2418,7 @@ function _onPlaceMapClick(e) {
   document.getElementById("vl-pf-lon").value = e.latlng.lng.toFixed(6);
   _stopPickingPlace();
   _updatePlacePreview();
-  // Pan to the picked location
-  _map.panTo(e.latlng);
+  _zoomToPlacePreview();
 }
 
 function _updatePlacePreview() {
@@ -2119,6 +2441,35 @@ function _removePlacePreview() {
   if (_placePreviewCircle) { _placePreviewCircle.remove(); _placePreviewCircle = null; }
 }
 
+/** Zoom the map to fit the place preview circle with padding. */
+function _zoomToPlacePreview() {
+  if (_placePreviewCircle && _map) {
+    _map.fitBounds(_placePreviewCircle.getBounds(), { padding: [60, 60], maxZoom: 17 });
+  }
+}
+
+/** Disable the Raw mode button when the date range spans more than 1 day. */
+function _updateRawButtonState() {
+  const rawBtn = document.getElementById("vl-mode-raw");
+  if (!rawBtn) return;
+  const { start, end } = _dateWindow(_dateMode);
+  const spanMs = end - start;
+  const isMultiDay = spanMs > 86400000 + 60000; // >1 day + 1min tolerance
+  rawBtn.disabled = isMultiDay;
+  rawBtn.style.opacity = isMultiDay ? "0.4" : "";
+  rawBtn.style.cursor = isMultiDay ? "not-allowed" : "";
+  rawBtn.title = isMultiDay
+    ? "Raw mode disabled for multi-day ranges (too much data)"
+    : "Raw Starlink GPS history (unprocessed, from HA)";
+  // If currently in raw mode and range became multi-day, switch to road
+  if (isMultiDay && _routeMode === "raw") {
+    _routeMode = "snap";
+    rawBtn.classList.remove("active");
+    document.getElementById("vl-mode-snap").classList.add("active");
+    if (_routeLayer) { _routeLayer.clearLayers(); drawRoute(); }
+  }
+}
+
 function setupDateBar() {
   const params = new URLSearchParams(window.location.search);
   const urlMode = params.get("mode");
@@ -2128,10 +2479,13 @@ function setupDateBar() {
   const endInput = document.getElementById("vl-date-end");
   const rangeLabel = document.getElementById("vl-date-range-label");
 
-  // Set max date to today
+  // Set max date to today, fetch min date from data range
   const todayStr = new Date().toISOString().slice(0, 10);
   startInput.max = todayStr;
   endInput.max = todayStr;
+  fetch("/api/vanlife/data-range").then(r => r.json()).then(d => {
+    if (d.min_date) { startInput.min = d.min_date; endInput.min = d.min_date; }
+  }).catch(() => {});
 
   // Restore from URL
   if (urlStart && urlEnd) {
@@ -2161,17 +2515,26 @@ function setupDateBar() {
   function updateRangeLabel() {
     if (_dateMode !== "custom" || !startInput.value || !endInput.value) {
       rangeLabel.textContent = "";
+      _updateRawButtonState();
       return;
     }
     const days = Math.round((new Date(endInput.value) - new Date(startInput.value)) / 86400000) + 1;
     rangeLabel.textContent = `${days}d`;
     rangeLabel.style.color = days > 7 ? "#d32f2f" : "#888";
+    _updateRawButtonState();
   }
 
   // Sync active buttons
   document.querySelectorAll(".vl-date-btn").forEach(b =>
     b.classList.toggle("active", b.dataset.mode === _dateMode));
   updateRangeLabel();
+
+  // Back button
+  document.getElementById("vl-date-back").addEventListener("click", () => goDateBack());
+
+  // Prev / Next day buttons
+  document.getElementById("vl-date-prev").addEventListener("click", () => _shiftDate(-1));
+  document.getElementById("vl-date-next").addEventListener("click", () => _shiftDate(1));
 
   // Preset buttons (Today / Yesterday)
   document.querySelectorAll(".vl-date-btn").forEach(btn => {
@@ -2235,6 +2598,8 @@ function setupDateBar() {
     if (_routeMode !== "filtered") setRouteMode("filtered");
   });
   document.getElementById("vl-mode-raw").addEventListener("click", () => {
+    const rawBtn = document.getElementById("vl-mode-raw");
+    if (rawBtn.disabled) return;
     if (_routeMode !== "raw") setRouteMode("raw");
   });
 }
@@ -2276,7 +2641,7 @@ function renderPlacesList() {
     btn.addEventListener("click", async () => {
       const p = _places.find(x => x.id === btn.dataset.del);
       if (!p || !confirm(`Delete "${p.name}"?`)) return;
-      await callService("vanlife_tracker", "delete_named_place", { place_id: p.id });
+      await fetch(`${OSRM_PROXY}/vanlife/named-places/${p.id}`, { method: "DELETE" });
       _places = await getNamedPlaces();
       renderPlacesList();
       renderPlaceMarkers();
@@ -2287,6 +2652,14 @@ function renderPlacesList() {
 function showPlaceForm(place) {
   _editingPlace = place;
   _stopPickingPlace();
+  // Ensure we're on the map tab so the floating overlay is visible
+  if (_currentTab !== "map") {
+    _currentTab = "map";
+    document.querySelectorAll(".vl-tab").forEach(t => t.classList.toggle("active", t.dataset.tab === "map"));
+    document.getElementById("vl-map-pane").classList.remove("hidden");
+    document.getElementById("vl-places-pane").classList.remove("active");
+    if (_map) _map.invalidateSize();
+  }
   const wrap = document.getElementById("vl-place-form-wrap");
   wrap.style.display = "block";
   document.getElementById("vl-pf-title").textContent = place ? `Edit: ${place.name}` : "Add Named Place";
@@ -2298,12 +2671,10 @@ function showPlaceForm(place) {
   document.getElementById("vl-pf-lat").value = place?.lat ?? "";
   document.getElementById("vl-pf-lon").value = place?.lon ?? "";
   document.getElementById("vl-pf-notes").value = place?.notes || "";
-  wrap.scrollIntoView({ behavior: "smooth" });
-  // Show preview circle if editing an existing place
   _updatePlacePreview();
-  // Pan map to the place if it has coordinates
+  // Zoom to place if it has coordinates
   if (place?.lat && place?.lon && _map) {
-    _map.panTo([place.lat, place.lon]);
+    _zoomToPlacePreview();
   }
 }
 
@@ -2321,17 +2692,32 @@ async function savePlace() {
   if (!data.lat || !data.lon) { alert("Latitude and longitude are required"); return; }
 
   if (_editingPlace) {
-    await callService("vanlife_tracker", "update_named_place", { place_id: _editingPlace.id, ...data });
+    await fetch(`${OSRM_PROXY}/vanlife/named-places/${_editingPlace.id}`, {
+      method: "PUT", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
   } else {
-    await callService("vanlife_tracker", "create_named_place", data);
+    await fetch(`${OSRM_PROXY}/vanlife/named-places`, {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(data),
+    });
   }
   document.getElementById("vl-place-form-wrap").style.display = "none";
   _editingPlace = null;
   _stopPickingPlace();
   _removePlacePreview();
   _places = await getNamedPlaces();
+  // Remove parking dots that now fall inside any place radius
+  _parkingDotMarkers = _parkingDotMarkers.filter(cm => {
+    if (placeForCoord(cm._parkingLat, cm._parkingLon)) {
+      cm.remove();
+      return false;
+    }
+    return true;
+  });
   renderPlacesList();
   renderPlaceMarkers();
+  renderStopList();
 }
 
 // ─── Data loading ─────────────────────────────────────────
@@ -2339,7 +2725,7 @@ async function savePlace() {
 async function loadData() {
   const state = getStates()["sensor.vanlife_tracker_recent_stops"];
   _stops = state?.attributes?.stops || [];
-  _places = []; // named places via REST not yet wired; will add later
+  _places = await getNamedPlaces();
   // Don't call renderStopList() here — _travels is built by drawRoute() which runs next.
   // Set loading placeholder so the sidebar isn't blank.
   const countEl = document.getElementById("vl-stop-count");

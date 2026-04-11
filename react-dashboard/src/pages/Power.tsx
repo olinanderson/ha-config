@@ -12,6 +12,7 @@ import { Zap, PlugZap, Gauge } from 'lucide-react';
 
 function VoltageCard() {
   const { value: v12 } = useEntityNumeric('sensor.a32_pro_smart_battery_sense_12v_voltage');
+  const { value: v12Temp } = useEntityNumeric('sensor.a32_pro_smart_battery_sense_12v_temperature');
   const { value: charging } = useEntityNumeric('sensor.battery_charging');
   const { value: discharging } = useEntityNumeric('sensor.battery_discharging');
 
@@ -25,6 +26,7 @@ function VoltageCard() {
       </CardHeader>
       <CardContent className="space-y-1">
         <SparklineStat entityId="sensor.a32_pro_smart_battery_sense_12v_voltage" label="12V Rail" value={fmt(v12, 2)} unit="V" color="#6366f1" />
+        <SparklineStat entityId="sensor.a32_pro_smart_battery_sense_12v_temperature" label="12V Temp" value={fmt(v12Temp, 1)} unit="°C" color="#3b82f6" />
         <SparklineStat entityId="sensor.battery_charging" label="Charging" value={fmt(charging, 0)} unit="W" color="#22c55e" />
         <SparklineStat entityId="sensor.battery_discharging" label="Discharging" value={fmt(discharging, 0)} unit="W" color="#f97316" />
       </CardContent>

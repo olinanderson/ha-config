@@ -15,58 +15,30 @@ media_source:
 
 stream:
 
+go2rtc:
+
 frontend:
   themes: !include_dir_merge_named themes
 
 # --- Lovelace dashboards ---
-# mode: storage keeps all existing dashboards working.
-# Additional YAML-mode dashboards are defined below.
+# mode: storage keeps the default Overview dashboard working.
 lovelace:
   mode: storage
-  dashboards:
-    yaml-home:
-      mode: yaml
-      title: Home
-      icon: mdi:home
-      show_in_sidebar: true
-      filename: dashboards/home_v3.yaml
-    yaml-van:
-      mode: yaml
-      title: Van
-      icon: mdi:van-passenger
-      show_in_sidebar: true
-      filename: dashboards/van.yaml
-    yaml-power:
-      mode: yaml
-      title: Power & Energy
-      icon: mdi:lightning-bolt
-      show_in_sidebar: true
-      filename: dashboards/power_v2.yaml
-    yaml-climate:
-      mode: yaml
-      title: Climate
-      icon: mdi:thermostat
-      show_in_sidebar: true
-      filename: dashboards/climate_v2.yaml
-    yaml-water:
-      mode: yaml
-      title: Water & Propane
-      icon: mdi:water
-      show_in_sidebar: true
-      filename: dashboards/water_v2.yaml
-    yaml-system:
-      mode: yaml
-      title: System
-      icon: mdi:wrench
-      show_in_sidebar: true
-      filename: dashboards/system_v2.yaml
-# --- Custom Panels ---
+
+# --- Custom Panels (React dashboards + Vanlife) ---
 panel_custom:
+  - name: van-dashboard
+    url_path: dashboard
+    sidebar_title: Dashboard
+    sidebar_icon: mdi:view-dashboard
+    module_url: /local/react-dashboard/panel-loader.js?v=16
+    embed_iframe: false
+    trust_external_script: true
   - name: vanlife-panel
     url_path: vanlife
     sidebar_title: Vanlife
     sidebar_icon: mdi:map-marker-path
-    module_url: /local/vanlife-panel/panel.js?v=11
+    module_url: /local/vanlife-panel/panel.js?v=12
 
 # --- Includes ---
 automation: !include automations.yaml

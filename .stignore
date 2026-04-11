@@ -78,5 +78,10 @@ Thumbs.db
 // --- Sync tooling ---
 .ha-sync
 
+// --- React dashboard build artifacts ---
+react-dashboard/node_modules
+react-dashboard/dist
+react-dashboard/.env
+
 // --- VS Code workspace settings ---
 .vscode

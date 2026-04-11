@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { useEntity } from '@/hooks/useEntity';
+import { useToggle } from '@/hooks/useService';
 import { useHassStore } from '@/context/HomeAssistantContext';
-import { Maximize2, VideoOff, Grid2x2, Loader2 } from 'lucide-react';
+import { Maximize2, VideoOff, Grid2x2, Loader2, Lightbulb } from 'lucide-react';
 
 const CAMERAS = [
-  { entityId: 'camera.channel_1', label: 'Channel 1' },
-  { entityId: 'camera.channel_2', label: 'Channel 2' },
-  { entityId: 'camera.channel_3', label: 'Channel 3' },
-  { entityId: 'camera.channel_4', label: 'Channel 4' },
+  { entityId: 'camera.channel_1', label: 'Left', lightEntityId: 'switch.a32_pro_switch21_left_outdoor_lights' },
+  { entityId: 'camera.channel_2', label: 'Right', lightEntityId: 'switch.a32_pro_switch22_right_outdoor_lights' },
+  { entityId: 'camera.channel_3', label: 'Front', lightEntityId: 'switch.a32_pro_switch31_lightbar' },
+  { entityId: 'camera.channel_4', label: 'Back', lightEntityId: 'switch.a32_pro_switch23_rear_outdoor_lights' },
 ];
 
 const ICE_SERVERS: RTCIceServer[] = [
@@ -170,9 +171,32 @@ function WebRTCFeed({ entityId }: { entityId: string }) {
 
 // ─── Single Camera Cell ───
 
+function LightButton({ entityId }: { entityId: string }) {
+  const entity = useEntity(entityId);
+  const toggle = useToggle(entityId);
+  const isOn = entity?.state === 'on';
+
+  return (
+    <button
+      onClick={(e) => {
+        e.stopPropagation();
+        toggle();
+      }}
+      className={`flex items-center justify-center w-9 h-9 rounded-full transition-all ${
+        isOn
+          ? 'bg-yellow-400/90 text-black shadow-[0_0_12px_rgba(250,204,21,0.5)]'
+          : 'bg-white/15 text-white/70 hover:bg-white/25'
+      }`}
+    >
+      <Lightbulb className="h-4.5 w-4.5" />
+    </button>
+  );
+}
+
 function CameraCell({
   entityId,
   label,
+  lightEntityId,
   hidden,
   expanded,
   onExpand,
@@ -180,6 +204,7 @@ function CameraCell({
 }: {
   entityId: string;
   label: string;
+  lightEntityId: string;
   hidden: boolean;
   expanded: boolean;
   onExpand: () => void;
@@ -196,9 +221,12 @@ function CameraCell({
       onClick={expanded ? undefined : onExpand}
     >
       <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-3 py-1.5 bg-gradient-to-b from-black/70 to-transparent">
-        <span className={`text-white font-medium drop-shadow ${expanded ? '' : 'text-sm'}`}>
-          {label}
-        </span>
+        <div className="flex items-center gap-2">
+          <span className={`text-white font-medium drop-shadow ${expanded ? '' : 'text-sm'}`}>
+            {label}
+          </span>
+          <LightButton entityId={lightEntityId} />
+        </div>
         {expanded ? (
           <button
             onClick={onCollapse}
@@ -250,6 +278,7 @@ export default function Cameras() {
               key={cam.entityId}
               entityId={cam.entityId}
               label={cam.label}
+              lightEntityId={cam.lightEntityId}
               hidden={isHidden}
               expanded={isExpanded}
               onExpand={() => setExpanded(cam.entityId)}

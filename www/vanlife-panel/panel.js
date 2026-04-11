@@ -1,5 +1,5 @@
 /**
- * Vanlife Tracker — Custom Panel (v10 — postMessage auth)
+ * Vanlife Tracker — Custom Panel (v11 — auto cache-bust iframe)
  *
  * panel_custom gives us `this.hass` directly. We forward the auth
  * token and states to index.html via postMessage so the iframe
@@ -12,7 +12,7 @@ class VanlifePanel extends HTMLElement {
     this._mounted = true;
 
     const iframe = document.createElement("iframe");
-    iframe.src = "/local/vanlife-panel/index.html";
+    iframe.src = `/local/vanlife-panel/index.html?v=${Date.now()}`;
     iframe.style.cssText = "width:100%;height:100%;border:none;display:block;";
     this.appendChild(iframe);
     this._iframe = iframe;

@@ -10,8 +10,6 @@ from typing import Any
 
 _LOGGER = logging.getLogger(__name__)
 
-SCHEMA_VERSION = 1
-
 CREATE_STOPS_TABLE = """
 CREATE TABLE IF NOT EXISTS stops (
     id          TEXT PRIMARY KEY,
