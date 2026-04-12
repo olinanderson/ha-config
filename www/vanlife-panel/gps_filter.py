@@ -645,22 +645,85 @@ def backfill(token, from_date):
 
 # ── Incremental Processing ────────────────────────────────────────────────────
 
+def _process_day(token, day_start, day_end, label=""):
+    """Process a single UTC day's GPS data. Returns True if segments were found."""
+    day_start_ts = day_start.timestamp() * 1000
+    day_end_ts = day_end.timestamp() * 1000
+
+    try:
+        points = fetch_gps_from_ha(token, day_start, day_end)
+    except Exception as e:
+        log(f"Incremental ({label}): HA fetch error: {e}")
+        return False
+
+    if not points:
+        return False
+
+    segments, parking = process_gps(points)
+    store_results(segments, parking, clear_after_ts=day_start_ts)
+
+    if segments or parking:
+        moving_pts = sum(len(s) for s in segments)
+        log(f"Incremental ({label}): {len(segments)} segs ({moving_pts} pts), "
+            f"{len(parking)} parking")
+
+    return bool(segments)
+
+
 def incremental_run(token):
     """One incremental processing pass.
 
-    Strategy: re-process today's GPS data every cycle. This avoids complex state
-    machine serialization. The state machine processes from midnight to (now - 5min),
-    so all stops within the window are finalized. Old segments are atomically
-    replaced. Routing hits the proxy cache for unchanged segments (instant).
+    Strategy: re-process today's GPS data every cycle. Also backfill any recent
+    days (up to LOOKBACK_DAYS) that have no segments yet — this catches data
+    missed when the daemon was down or when trips happened near midnight UTC.
+    Routing hits the proxy cache for unchanged segments (instant).
     """
+    LOOKBACK_DAYS = 3
+
     now = datetime.now(timezone.utc)
     safe_end = now - timedelta(seconds=PROCESS_DELAY_S)
 
     # Today's midnight (UTC)
     today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
-    today_midnight_ts = today_midnight.timestamp() * 1000
 
-    # Fetch today's GPS data
+    # ── Backfill recent days if needed ────────────────────────────────────────
+    con = sqlite3.connect(FILTER_DB)
+    for days_ago in range(LOOKBACK_DAYS, 0, -1):
+        day_start = today_midnight - timedelta(days=days_ago)
+        day_end = day_start + timedelta(days=1)
+        day_start_ts = day_start.timestamp() * 1000
+        day_end_ts = day_end.timestamp() * 1000
+
+        # Skip if this day already has segments or was already checked recently
+        existing = con.execute(
+            "SELECT COUNT(*) FROM segments WHERE start_ts >= ? AND start_ts < ?",
+            (day_start_ts, day_end_ts)
+        ).fetchone()[0]
+        if existing > 0:
+            continue
+
+        # Check meta flag to avoid re-checking empty days every cycle
+        meta_key = f"backfill_checked_{day_start.strftime('%Y%m%d')}"
+        checked = con.execute(
+            "SELECT value FROM filter_meta WHERE key = ?", (meta_key,)
+        ).fetchone()
+        if checked:
+            continue
+
+        # Process this day
+        label = day_start.strftime('%Y-%m-%d')
+        log(f"Backfilling {label} (no segments found)...")
+        _process_day(token, day_start, day_end, label=label)
+
+        # Mark as checked so we don't retry every 2 minutes
+        con.execute(
+            "INSERT OR REPLACE INTO filter_meta (key, value) VALUES (?, ?)",
+            (meta_key, str(now.timestamp()))
+        )
+        con.commit()
+    con.close()
+
+    # ── Process today ─────────────────────────────────────────────────────────
     try:
         points = fetch_gps_from_ha(token, today_midnight, safe_end)
     except Exception as e:
@@ -671,10 +734,8 @@ def incremental_run(token):
         set_meta("last_processed_ts", safe_end.timestamp() * 1000)
         return
 
-    # Process today's data
     segments, parking = process_gps(points)
-
-    # Atomically replace today's data
+    today_midnight_ts = today_midnight.timestamp() * 1000
     store_results(segments, parking, clear_after_ts=today_midnight_ts)
     set_meta("last_processed_ts", safe_end.timestamp() * 1000)
 

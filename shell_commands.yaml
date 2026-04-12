@@ -51,9 +51,20 @@ start_gps_filter: >
     TOKEN=$(cat /config/.gps_filter_token 2>/dev/null);
     if [ -z "$TOKEN" ]; then echo "No token file at /config/.gps_filter_token"; exit 1; fi;
     python3 -c "import subprocess; subprocess.Popen([\"python3\",\"/config/www/vanlife-panel/gps_filter.py\",\"--token\",\"$TOKEN\"],
-      stdout=open(\"/config/www/vanlife-panel/gps_filter.log\",\"w\"),
+      stdout=open(\"/config/www/vanlife-panel/gps_filter.log\",\"a\"),
       stderr=__import__(\"subprocess\").STDOUT, close_fds=True)";
     echo "GPS filter daemon started";
   else
     echo "GPS filter daemon already running";
+  fi'
+
+# Start DVR proxy — camera playback API + RTSP Scale proxy
+start_dvr_proxy: >
+  /bin/sh -c 'if ! pgrep -f "dvr_proxy.py" > /dev/null 2>&1; then
+    python3 -c "import subprocess; subprocess.Popen([\"python3\",\"/config/www/react-dashboard/dvr_proxy.py\"],
+      stdout=open(\"/config/www/react-dashboard/dvr_proxy.log\",\"w\"),
+      stderr=__import__(\"subprocess\").STDOUT, close_fds=True)";
+    echo "DVR proxy started";
+  else
+    echo "DVR proxy already running";
   fi'

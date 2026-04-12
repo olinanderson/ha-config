@@ -6,7 +6,7 @@
 # ─── Fuel level • 5-minute rolling mean ───
 - platform: statistics
   name: "WiCAN Fuel 5 min mean"
-  entity_id: sensor.wican_fuel
+  entity_id: sensor.192_168_10_90_2f_fueltanklevel
   state_characteristic: mean
   max_age:
     minutes: 5

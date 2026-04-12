@@ -32,12 +32,12 @@ views:
 
       # ── WiCAN ──
       - type: custom:mushroom-template-badge
-        entity: binary_sensor.wican_connected
+        entity: binary_sensor.meatpi_pro_ecu_status
         icon: mdi:car-connected
         content: >
-          {{ 'Online' if is_state('binary_sensor.wican_connected', 'on') else 'Offline' }}
+          {{ 'Online' if is_state('binary_sensor.meatpi_pro_ecu_status', 'on') else 'Offline' }}
         color: >
-          {{ 'green' if is_state('binary_sensor.wican_connected', 'on') else 'red' }}
+          {{ 'green' if is_state('binary_sensor.meatpi_pro_ecu_status', 'on') else 'red' }}
         label: WiCAN
         tap_action:
           action: more-info

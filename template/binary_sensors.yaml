@@ -8,7 +8,7 @@
       unique_id: vehicle_is_moving
       device_class: moving
       state: >
-        {% set speed = states('sensor.wican_speed') | float(0) %}
+        {% set speed = states('sensor.192_168_10_90_0d_vehiclespeed') | float(0) %}
         {% set speed_threshold = states('input_number.vehicle_stopped_threshold') | float(2) %}
         {% set wican_available = is_state('binary_sensor.engine_is_running', 'on') %}
         {{ wican_available and speed > speed_threshold and speed < 255 }}
@@ -38,7 +38,7 @@
       unique_id: engine_is_running
       device_class: running
       state: >
-        {% set rpm_state = states('sensor.wican_rpm') %}
+        {% set rpm_state = states('sensor.192_168_10_90_0c_enginerpm') %}
         {% if rpm_state in ['unknown', 'unavailable'] %}
           false
         {% else %}
@@ -66,18 +66,18 @@
       device_class: problem
       icon: mdi:car-tire-alert
       state: >
-        {% set fl = states('sensor.wican_wican_tire_pressure_fl') | float(0) %}
-        {% set fr = states('sensor.wican_wican_tire_pressure_fr') | float(0) %}
-        {% set rl = states('sensor.wican_wican_tire_pressure_rl') | float(0) %}
-        {% set rr = states('sensor.wican_wican_tire_pressure_rr') | float(0) %}
+        {% set fl = (states('sensor.192_168_10_90_tyre_p_fl') | float(0)) * 0.0725190 %}
+        {% set fr = (states('sensor.192_168_10_90_tyre_p_fr') | float(0)) * 0.0725190 %}
+        {% set rl = (states('sensor.192_168_10_90_tyre_p_rl') | float(0)) * 0.0725190 %}
+        {% set rr = (states('sensor.192_168_10_90_tyre_p_rr') | float(0)) * 0.0725190 %}
         {% set threshold = 35 %}
-        {% set pressures = [fl, fr, rl, rr] | select('gt', 0) | reject('gt', 120) | list %}
+        {% set pressures = [fl, fr, rl, rr] | select('gt', 0) | reject('gt', 200) | list %}
         {{ pressures | select('lt', threshold) | list | length > 0 if pressures | length > 0 else false }}
       attributes:
-        fl_psi: "{{ states('sensor.wican_wican_tire_pressure_fl') }}"
-        fr_psi: "{{ states('sensor.wican_wican_tire_pressure_fr') }}"
-        rl_psi: "{{ states('sensor.wican_wican_tire_pressure_rl') }}"
-        rr_psi: "{{ states('sensor.wican_wican_tire_pressure_rr') }}"
+        fl_psi: "{{ ((states('sensor.192_168_10_90_tyre_p_fl') | float(0)) * 0.0725190) | round(1) }}"
+        fr_psi: "{{ ((states('sensor.192_168_10_90_tyre_p_fr') | float(0)) * 0.0725190) | round(1) }}"
+        rl_psi: "{{ ((states('sensor.192_168_10_90_tyre_p_rl') | float(0)) * 0.0725190) | round(1) }}"
+        rr_psi: "{{ ((states('sensor.192_168_10_90_tyre_p_rr') | float(0)) * 0.0725190) | round(1) }}"
 
 # ─── Check Engine Light (MIL from PID 0x01) ───
 - binary_sensor:
@@ -86,6 +86,6 @@
       device_class: problem
       icon: mdi:engine
       state: >
-        {{ states('sensor.wican_wican_monitor_status_raw') | int(0) >= 128 }}
+        {{ states('sensor.192_168_10_90_01_monitorstatus') | int(0) >= 128 }}
       attributes:
         dtc_count: "{{ states('sensor.dtc_count') }}"

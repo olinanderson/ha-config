@@ -35,6 +35,15 @@ vehicle_stopped_threshold:
   unit_of_measurement: "km/h"
   icon: mdi:car-brake-parking
 
+fuel_ve_correction:
+  name: "Fuel VE Correction Factor"
+  icon: mdi:gas-station
+  min: 0.10
+  max: 1.50
+  step: 0.01
+  initial: 0.55
+  unit_of_measurement: ""
+
 # --- Vanlife Tracker journal ---
 vanlife_stop_rating:
   name: "Stop Rating"

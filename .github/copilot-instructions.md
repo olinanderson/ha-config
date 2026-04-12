@@ -30,7 +30,7 @@ entertainment, and safety subsystems for full-time van life.
 | **Fuel tank** | 94.6 L (25 US gal) |
 | **Drivetrain** | RWD, 6-speed automatic |
 | **Electrical** | 24V LiFePO4 house battery system (separate from 12V chassis) |
-| **OBD** | Standard OBD-II; supports PIDs 01–20 + select 41–60; no TPMS/odometer via OBD |
+| **OBD** | WiCAN Pro (v4.48) at 192.168.10.90; Standard PIDs 01–20 + select 41–60; Ford Mode 22 custom PIDs; **no MAF/MAP/fuel-rate PID** |
 
 ---
 
@@ -42,7 +42,7 @@ entertainment, and safety subsystems for full-time van life.
 |---|---|---|
 | **Simarine A32 Pro** (ESP32-S3) | Primary controller — switches, sensors, MPPT, tank levels, BME280s, S5140 current sensors, DAC outputs | ESPHome via WiFi |
 | **AG Pro** (ESPHome) | Roof fan (speed, direction, lid), additional controls | ESPHome via WiFi |
-| **WiCAN OBD** | Vehicle OBD2 data — speed, fuel, RPM, coolant temp, throttle, engine load | MQTT (`wican/` topics) |
+| **WiCAN Pro** (v4.48) | Vehicle OBD2 data — speed, fuel, RPM, coolant, tire pressure, gear, trans temp, etc. | HACS `ha-wican` integration (HTTP webhooks, IP 192.168.10.90) |
 | **Starlink** | Internet + GPS location tracking | Native integration + MQTT filtered tracker |
 | **Apollo MSR-2** | mmWave radar presence/occupancy sensor | ESPHome |
 | **Shelly EM** | AC power monitoring (inverter output voltage, power) | Native integration (ping-based) |
@@ -394,49 +394,81 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 | `button.a32_pro_inverter_on_off_toggle` | Inverter toggle (momentary) |
 | `binary_sensor.192_168_10_174` | Shelly EM ping → inverter AC is live |
 
-### Vehicle / OBD (WiCAN MQTT — Standard PIDs)
-| Entity | Description |
-|---|---|
-| `sensor.wican_speed` | Speed (km/h) |
-| `sensor.wican_fuel` | Fuel tank level (%) — raw, noisy |
-| `sensor.wican_fuel_5_min_mean` | 5-min rolling mean fuel |
-| `sensor.stable_fuel_level` | Template: sticky fuel (updates only when stable) |
-| `sensor.wican_coolant_temperature` | Engine coolant (°C) |
-| `sensor.wican_rpm` | Engine RPM |
-| `sensor.wican_throttle_position` | Throttle (%) |
-| `sensor.wican_engine_load` | Engine load (%) |
-| `sensor.wican_control_module_voltage` | ECU voltage (V) |
-| `sensor.wican_ambient_air_temperature` | OBD ambient air temp (°C) |
-| `sensor.wican_distance_mil_on` | Distance since check engine (km) |
-| `sensor.wican_monitor_status_raw` | PID 0x01 raw byte (MIL bit 7 + DTC count bits 0-6) |
-| `binary_sensor.wican_connected` | WiCAN online/offline |
+### Vehicle / OBD — WiCAN Pro Native Integration (`ha-wican` HACS)
 
-### Vehicle / OBD (WiCAN Pro — Ford Mode 22 Custom PIDs)
+The WiCAN Pro connects via **HTTP webhooks** (not MQTT). All entities are created by the
+`ha-wican` HACS integration (jay-oswald/ha-wican v1.0.0). Entity IDs follow the pattern
+`sensor.192_168_10_90_*` (derived from the device IP).
+
+**Standard OBD PIDs (Mode 01):**
+| Entity | PID | Description |
+|---|---|---|
+| `sensor.192_168_10_90_01_monitorstatus` | 0x01 | Monitor status (MIL bit 7, DTC count bits 0-6) |
+| `sensor.192_168_10_90_04_calcengineload` | 0x04 | Calculated engine load (%) |
+| `sensor.192_168_10_90_05_enginecoolanttemp` | 0x05 | Engine coolant temp (°C) |
+| `sensor.192_168_10_90_0c_enginerpm` | 0x0C | Engine RPM |
+| `sensor.192_168_10_90_0d_vehiclespeed` | 0x0D | Vehicle speed (km/h) |
+| `sensor.192_168_10_90_0f_intakeairtemperature` | 0x0F | Intake air temp (°C) |
+| `sensor.192_168_10_90_11_throttleposition` | 0x11 | Throttle position (%) |
+| `sensor.192_168_10_90_1f_timesinceengstart` | 0x1F | Time since engine start (seconds) |
+| `sensor.192_168_10_90_2f_fueltanklevel` | 0x2F | Fuel tank level (%) — raw, noisy |
+| `sensor.192_168_10_90_42_controlmodulevolt` | 0x42 | ECU/control module voltage (V) |
+| `sensor.192_168_10_90_46_ambientairtemp` | 0x46 | Ambient air temp (°C) |
+
+**Ford Mode 22 Custom PIDs (via WiCAN Automate tab):**
 | Entity | Description |
 |---|---|
-| `sensor.wican_tire_pressure_fl` | Front-left tire pressure (psi) |
-| `sensor.wican_tire_pressure_fr` | Front-right tire pressure (psi) |
-| `sensor.wican_tire_pressure_rl` | Rear-left tire pressure (psi) |
-| `sensor.wican_tire_pressure_rr` | Rear-right tire pressure (psi) |
-| `sensor.wican_transmission_temperature` | Transmission fluid temp (°C) |
-| `sensor.wican_current_gear` | Current gear (raw int: 0=P, 15=N, 255=R, 1-6=gear) |
-| `sensor.wican_oil_life` | Engine oil life remaining (%) |
-| `sensor.wican_fuel_rate` | Fuel consumption rate (g/s) |
-| `sensor.wican_wastegate` | Turbo wastegate position (%) |
-| `sensor.wican_intake_air_temperature` | Intake air temp (°C) |
-| `sensor.wican_fuel_pressure` | Fuel rail pressure (kPa) |
-| `sensor.wican_alternator_duty` | Alternator duty cycle (%) |
+| `sensor.192_168_10_90_tyre_p_fl` | Front-left tire pressure (kPa) — raw; divide by ~2 for actual psi |
+| `sensor.192_168_10_90_tyre_p_fr` | Front-right tire pressure (kPa) — raw; divide by ~2 for actual psi |
+| `sensor.192_168_10_90_tyre_p_rl` | Rear-left tire pressure (kPa) — raw; divide by ~2 for actual psi |
+| `sensor.192_168_10_90_tyre_p_rr` | Rear-right tire pressure (kPa) — raw; divide by ~2 for actual psi |
+| `sensor.192_168_10_90_tran_f_temp` | Transmission fluid temp (°C) |
+| `sensor.192_168_10_90_gear` | Current gear (raw int: 0=P, 15=N, 255=R, 1-6=gear) |
+| `sensor.192_168_10_90_oil_life` | Engine oil life remaining (%) |
+| `sensor.192_168_10_90_wastegate` | Turbo wastegate position (%) |
+| `sensor.192_168_10_90_intake_air_tmp` | Intake air temp (°C) — Mode 22 |
+| `sensor.192_168_10_90_intake_air_temp_2` | Intake air temp #2 (°C) |
+| `sensor.192_168_10_90_fuel_pressure` | Fuel rail pressure (kPa) |
+| `sensor.192_168_10_90_fuel_pump_duty` | Fuel pump duty cycle (%) |
+| `sensor.192_168_10_90_fuel_sys_stat` | Fuel system status (raw int) |
+| `sensor.192_168_10_90_coolant_tmp` | Coolant temp (°C) — Mode 22 (duplicate of 0x05) |
+| `sensor.192_168_10_90_park_brake` | Parking brake (0=off, 1=on) |
+
+**User Custom PIDs (via WiCAN Automate → User Custom tab):**
+| Entity | PID | Expression | Description |
+|---|---|---|---|
+| `sensor.192_168_10_90_map` | `22F404` | `[B4:B5]/256` | Manifold Absolute Pressure (kPa) — Ford Mode 22; enables speed-density fuel calculation |
+
+**NOT supported by this ECU** (tested, returns "no positive response" or "NO DATA"):
+- `FUEL_RATE` (Mode 22, PID 22F49D) — fuel consumption rate
+- `ALT_DUTY` (Mode 22) — alternator duty cycle
+- Standard PID 0x10 (MAF) — not exposed by Ford PCM (speed-density engine)
+- Standard PID 0x0B (MAP) — not exposed via standard OBD (but Ford Mode 22 `22F404` **works**)
+- Standard PID 0x5E (Engine Fuel Rate) — NO DATA
+- Ford Mode 22 MAF (`22F410`) — no positive response
+
+**WiCAN device entities:**
+| Entity | Description |
+|---|---|
+| `binary_sensor.meatpi_pro_ecu_status` | WiCAN connected to ECU (on/off) |
+| `binary_sensor.meatpi_pro_ble_status` | WiCAN BLE status |
+| `sensor.meatpi_pro_batt_voltage` | WiCAN battery voltage (V) |
+| `sensor.meatpi_pro_uptime` | WiCAN uptime |
+| `device_tracker.meatpi_pro_location` | WiCAN GPS (if available) |
+| `update.meatpi_pro_firmware` | Firmware update entity |
 
 ### Vehicle Computed Sensors (templates)
 | Entity | Description |
 |---|---|
-| `sensor.fuel_consumption_l100km` | Fuel economy (L/100km, only when speed > 5 km/h) |
-| `sensor.fuel_consumption_lh` | Fuel consumption rate (L/h) |
-| `sensor.trans_temp_last` | Sticky last-known-good transmission temp |
-| `sensor.wican_gear_display` | Gear as text: Park/Reverse/Neutral/1-6 |
-| `sensor.wican_tyre_pressure_min` | Min tire pressure across all 4 (ignoring 0s) |
+| `sensor.wican_fuel_5_min_mean` | Statistics: 5-min rolling mean fuel (source: native fuel PID) |
+| `sensor.stable_fuel_level` | Template: sticky fuel (updates only when vehicle stable) |
+| `sensor.trans_temp_last_good` | Sticky last-known-good transmission temp |
+| `sensor.gear_display` | Gear as text: Park/Reverse/Neutral/1-6 |
+| `sensor.tire_pressure_min` | Min tire pressure across all 4 (psi, with kPa÷2 correction) |
 | `sensor.dtc_count` | Number of active DTCs (from PID 0x01) |
-| `binary_sensor.check_engine_light` | MIL/CEL on/off (from PID 0x01 bit 7) |
+| `sensor.estimated_fuel_rate` | Speed-density fuel rate (L/h) from MAP × RPM × IAT × VE |
+| `sensor.estimated_fuel_consumption` | Fuel economy (L/100km) — only when speed > 5 km/h |
+| `binary_sensor.check_engine_light` | MIL/CEL on/off (from PID 0x01 bit 7 ≥ 128) |
 | `binary_sensor.low_tire_pressure` | Any tire < 35 psi (has fl/fr/rl/rr_psi attributes) |
 
 ### Vehicle Movement (template binary_sensors)
@@ -444,7 +476,7 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 |---|---|
 | `binary_sensor.vehicle_is_moving` | speed > threshold AND engine running |
 | `binary_sensor.vehicle_is_stable` | acceleration ≤ threshold |
-| `binary_sensor.engine_is_running` | OBD data fresh (< 120s) |
+| `binary_sensor.engine_is_running` | RPM > 0 (from native WiCAN PID 0x0C) |
 
 ### GPS / Location
 | Entity | Description |
@@ -473,10 +505,10 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 ### "Last good" fallback sensors
 | Entity | Description |
 |---|---|
-| `sensor.ambient_air_temp_last` | Sticky last-good OBD ambient temp |
-| `sensor.coolant_temp_last` | Sticky last-good coolant temp |
+| `sensor.ambient_air_temp_last_good` | Sticky last-good OBD ambient temp |
+| `sensor.coolant_temp_last_good` | Sticky last-good coolant temp |
 | `sensor.road_grade_percent_last` | Sticky last-good road grade % |
-| `sensor.trans_temp_last` | Sticky last-good transmission temp |
+| `sensor.trans_temp_last_good` | Sticky last-good transmission temp |
 
 ### Security Cameras (Lorex DVR)
 | Entity | Description |
@@ -744,6 +776,16 @@ Used in `old_home.yaml`:
 - **Fuel level** is noisy from OBD — use `sensor.stable_fuel_level` or `sensor.wican_fuel_5_min_mean`.
 - **Roof fan direction**: `forward` = exhaust, `reverse` = intake.
 - **Scenes are all dynamic** — `scenes.yaml` is empty. They're created via `scene.create` in scripts/automations.
+- **Tire pressure raw kPa values from WiCAN are ~2× actual.** All template sensors and
+  dashboards use `* 0.0725190` (= `0.145038 / 2`) for kPa→psi conversion.
+- **Fuel consumption uses speed-density estimation** — via Ford Mode 22 MAP PID (`22F404`)
+  combined with RPM + IAT. The formula uses a volumetric efficiency (VE) correction factor
+  (`input_number.fuel_ve_correction`, default 0.55) that should be calibrated against
+  fill-to-fill measurements. Overestimates at idle, most accurate at cruise. MAF (0x10,
+  `22F410`), fuel rate (`22F49D`, 0x5E), and MAP (0x0B) via standard OBD all don't work.
+- **Jinja2 pipe + math precedence**: `states(x) | float(0) * N` parses as `float(0 * N)`.
+  Always use parentheses: `(states(x) | float(0)) * N`. Same for `* N | round(M)` →
+  use `(expr * N) | round(M)`.
 
 ---
 

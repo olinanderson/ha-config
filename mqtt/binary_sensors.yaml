@@ -1,15 +1,5 @@
 # ================================
 # mqtt/binary_sensors.yaml
 # ================================
-- state_topic: "wican/status"
-  name: "WiCAN Connected"
-  unique_id: wican_connected_mqtt
-  payload_on: '{"status": "online"}'
-  payload_off: '{"status": "offline"}'
-  device_class: connectivity
-  icon: mdi:car-connected
-  device:
-    identifiers: ["WiCAN"]
-    manufacturer: "MeatPi"
-    model: "WiCAN OBD"
-    name: "WiCAN"
+# WiCAN MQTT binary sensor removed — now using native ha-wican integration.
+# Use binary_sensor.meatpi_pro_ecu_status for WiCAN connectivity.

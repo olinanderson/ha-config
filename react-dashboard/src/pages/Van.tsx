@@ -18,17 +18,17 @@ import {
 } from 'lucide-react';
 
 function EngineCard() {
-  const { value: speed } = useEntityNumeric('sensor.wican_speed');
-  const { value: rpm } = useEntityNumeric('sensor.wican_rpm');
+  const { value: speed } = useEntityNumeric('sensor.192_168_10_90_0d_vehiclespeed');
+  const { value: rpm } = useEntityNumeric('sensor.192_168_10_90_0c_enginerpm');
   const gear = useEntity('sensor.gear_display');
-  const { value: throttle } = useEntityNumeric('sensor.wican_throttle_position');
-  const { value: load } = useEntityNumeric('sensor.wican_engine_load');
-  const { value: coolant } = useEntityNumeric('sensor.wican_coolant_temperature');
-  const { value: ecuV } = useEntityNumeric('sensor.wican_control_module_voltage');
+  const { value: throttle } = useEntityNumeric('sensor.192_168_10_90_11_throttleposition');
+  const { value: load } = useEntityNumeric('sensor.192_168_10_90_04_calcengineload');
+  const { value: coolant } = useEntityNumeric('sensor.192_168_10_90_05_enginecoolanttemp');
+  const { value: ecuV } = useEntityNumeric('sensor.192_168_10_90_42_controlmodulevolt');
   const moving = useEntity('binary_sensor.vehicle_is_moving');
   const engine = useEntity('binary_sensor.engine_is_running');
 
-  const { data: speedHistory } = useHistory('sensor.wican_speed', 6);
+  const { data: speedHistory } = useHistory('sensor.192_168_10_90_0d_vehiclespeed', 6);
   const { open } = useHistoryDialog();
 
   const isMoving = moving?.state === 'on';
@@ -57,11 +57,11 @@ function EngineCard() {
       </CardHeader>
       <CardContent className="space-y-3">
         <div className="grid grid-cols-3 gap-3 text-center">
-          <div className="cursor-pointer hover:bg-muted/50 rounded-md p-1 transition-colors" onClick={() => open('sensor.wican_speed', 'Speed', 'km/h')}>
+          <div className="cursor-pointer hover:bg-muted/50 rounded-md p-1 transition-colors" onClick={() => open('sensor.192_168_10_90_0d_vehiclespeed', 'Speed', 'km/h')}>
             <p className="text-3xl font-bold tabular-nums">{fmt(speed, 0)}</p>
             <p className="text-[10px] text-muted-foreground">km/h</p>
           </div>
-          <div className="cursor-pointer hover:bg-muted/50 rounded-md p-1 transition-colors" onClick={() => open('sensor.wican_rpm', 'RPM', 'rpm')}>
+          <div className="cursor-pointer hover:bg-muted/50 rounded-md p-1 transition-colors" onClick={() => open('sensor.192_168_10_90_0c_enginerpm', 'RPM', 'rpm')}>
             <p className="text-3xl font-bold tabular-nums">{fmt(rpm, 0)}</p>
             <p className="text-[10px] text-muted-foreground">RPM</p>
           </div>
@@ -70,12 +70,12 @@ function EngineCard() {
             <p className="text-[10px] text-muted-foreground">Gear</p>
           </div>
         </div>
-        <Sparkline data={speedHistory} color="#3b82f6" width={300} height={32} className="w-full" onClick={() => open('sensor.wican_speed', 'Speed', 'km/h')} />
+        <Sparkline data={speedHistory} color="#3b82f6" width={300} height={32} className="w-full" onClick={() => open('sensor.192_168_10_90_0d_vehiclespeed', 'Speed', 'km/h')} />
         <div className="grid gap-1">
-          <SparklineStat entityId="sensor.wican_throttle_position" label="Throttle" value={fmt(throttle, 0)} unit="%" color="#f59e0b" />
-          <SparklineStat entityId="sensor.wican_engine_load" label="Engine Load" value={fmt(load, 0)} unit="%" color="#ef4444" />
-          <SparklineStat entityId="sensor.wican_coolant_temperature" label="Coolant Temp" value={fmt(coolant, 0)} unit="°C" color="#ef4444" />
-          <SparklineStat entityId="sensor.wican_control_module_voltage" label="ECU Voltage" value={fmt(ecuV, 1)} unit="V" color="#6366f1" />
+          <SparklineStat entityId="sensor.192_168_10_90_11_throttleposition" label="Throttle" value={fmt(throttle, 0)} unit="%" color="#f59e0b" />
+          <SparklineStat entityId="sensor.192_168_10_90_04_calcengineload" label="Engine Load" value={fmt(load, 0)} unit="%" color="#ef4444" />
+          <SparklineStat entityId="sensor.192_168_10_90_05_enginecoolanttemp" label="Coolant Temp" value={fmt(coolant, 0)} unit="°C" color="#ef4444" />
+          <SparklineStat entityId="sensor.192_168_10_90_42_controlmodulevolt" label="ECU Voltage" value={fmt(ecuV, 1)} unit="V" color="#6366f1" />
         </div>
       </CardContent>
     </Card>
@@ -84,11 +84,10 @@ function EngineCard() {
 
 function FuelCard() {
   const { value: stable } = useEntityNumeric('sensor.stable_fuel_level');
-  const { value: raw } = useEntityNumeric('sensor.wican_fuel');
+  const { value: raw } = useEntityNumeric('sensor.192_168_10_90_2f_fueltanklevel');
   const { value: mean5 } = useEntityNumeric('sensor.wican_fuel_5_min_mean');
   const { value: economy } = useEntityNumeric('sensor.fuel_consumption_l_100km');
   const { value: rate } = useEntityNumeric('sensor.fuel_consumption_l_h');
-  const { value: fuelRate } = useEntityNumeric('sensor.wican_wican_fuel_rate');
 
   const { data: fuelHistory } = useHistory('sensor.stable_fuel_level', 24);
   const { open: openFuel } = useHistoryDialog();
@@ -115,20 +114,19 @@ function FuelCard() {
       <CardContent className="space-y-1">
         <SparklineStat entityId="sensor.stable_fuel_level" label="Estimated" value={fmt(tankLiters, 1)} unit="L" color="#22c55e" />
         <SparklineStat entityId="sensor.wican_fuel_5_min_mean" label="5min Mean" value={fmt(mean5, 0)} unit="%" color="#3b82f6" />
-        <SparklineStat entityId="sensor.wican_fuel" label="Raw OBD" value={fmt(raw, 0)} unit="%" color="#64748b" />
+        <SparklineStat entityId="sensor.192_168_10_90_2f_fueltanklevel" label="Raw OBD" value={fmt(raw, 0)} unit="%" color="#64748b" />
         {(economy ?? 0) > 0 && <SparklineStat entityId="sensor.fuel_consumption_l_100km" label="Economy" value={fmt(economy, 1)} unit="L/100km" color="#8b5cf6" />}
         {(rate ?? 0) > 0 && <SparklineStat entityId="sensor.fuel_consumption_l_h" label="Rate" value={fmt(rate, 1)} unit="L/h" color="#f59e0b" />}
-        {(fuelRate ?? 0) > 0 && <SparklineStat entityId="sensor.wican_wican_fuel_rate" label="Fuel Rate" value={fmt(fuelRate, 2)} unit="g/s" color="#06b6d4" />}
       </CardContent>
     </Card>
   );
 }
 
 function TirePressureCard() {
-  const { value: flRaw, entity: flEntity } = useEntityNumeric('sensor.wican_wican_tire_pressure_fl');
-  const { value: frRaw, entity: frEntity } = useEntityNumeric('sensor.wican_wican_tire_pressure_fr');
-  const { value: rlRaw, entity: rlEntity } = useEntityNumeric('sensor.wican_wican_tire_pressure_rl');
-  const { value: rrRaw, entity: rrEntity } = useEntityNumeric('sensor.wican_wican_tire_pressure_rr');
+  const { value: flRaw, entity: flEntity } = useEntityNumeric('sensor.192_168_10_90_tyre_p_fl');
+  const { value: frRaw, entity: frEntity } = useEntityNumeric('sensor.192_168_10_90_tyre_p_fr');
+  const { value: rlRaw, entity: rlEntity } = useEntityNumeric('sensor.192_168_10_90_tyre_p_rl');
+  const { value: rrRaw, entity: rrEntity } = useEntityNumeric('sensor.192_168_10_90_tyre_p_rr');
   const lowTire = useEntity('binary_sensor.low_tire_pressure');
   const isLow = lowTire?.state === 'on';
 
@@ -136,7 +134,7 @@ function TirePressureCard() {
   const toPsi = (val: number | null, entity: typeof flEntity) => {
     if (val == null) return null;
     const unit = entity?.attributes?.unit_of_measurement;
-    if (unit === 'kPa') return val * 0.145038;
+    if (unit === 'kPa') return val * 0.0725190;
     return val;
   };
   const fl = toPsi(flRaw, flEntity);
@@ -212,13 +210,12 @@ function RoadGradeCard() {
 }
 
 function DiagnosticsCard() {
-  const { value: oilLife } = useEntityNumeric('sensor.wican_wican_oil_life');
-  const { value: transTemp } = useEntityNumeric('sensor.wican_wican_transmission_temperature');
-  const { value: wastegate } = useEntityNumeric('sensor.wican_wican_wastegate_duty');
-  const { value: altDuty } = useEntityNumeric('sensor.wican_wican_alternator_duty');
-  const { value: intakeAir } = useEntityNumeric('sensor.wican_wican_intake_air_temperature');
-  const { value: ambientAir } = useEntityNumeric('sensor.wican_ambient_air_temperature');
-  const { value: fuelPressure } = useEntityNumeric('sensor.wican_wican_fuel_pressure');
+  const { value: oilLife } = useEntityNumeric('sensor.192_168_10_90_oil_life');
+  const { value: transTemp } = useEntityNumeric('sensor.192_168_10_90_tran_f_temp');
+  const { value: wastegate } = useEntityNumeric('sensor.192_168_10_90_wastegate');
+  const { value: intakeAir } = useEntityNumeric('sensor.192_168_10_90_intake_air_tmp');
+  const { value: ambientAir } = useEntityNumeric('sensor.192_168_10_90_46_ambientairtemp');
+  const { value: fuelPressure } = useEntityNumeric('sensor.192_168_10_90_fuel_pressure');
   const cel = useEntity('binary_sensor.check_engine_light');
   const { value: dtcCount } = useEntityNumeric('sensor.dtc_count');
   const isCel = cel?.state === 'on';
@@ -238,12 +235,11 @@ function DiagnosticsCard() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-1">
-        <SparklineStat entityId="sensor.wican_wican_oil_life" label="Oil Life" value={fmt(oilLife, 0)} unit="%" color="#22c55e" />
-        <SparklineStat entityId="sensor.wican_wican_wastegate_duty" label="Wastegate" value={fmt(wastegate, 0)} unit="%" color="#f59e0b" />
-        <SparklineStat entityId="sensor.wican_wican_alternator_duty" label="Alt Duty" value={fmt(altDuty, 0)} unit="%" color="#6366f1" />
-        <SparklineStat entityId="sensor.wican_wican_intake_air_temperature" label="Intake Air" value={fmt(intakeAir, 0)} unit="°C" color="#06b6d4" />
-        <SparklineStat entityId="sensor.wican_ambient_air_temperature" label="Ambient Air" value={fmt(ambientAir, 0)} unit="°C" color="#3b82f6" />
-        <SparklineStat entityId="sensor.wican_wican_fuel_pressure" label="Fuel Pressure" value={fmt(fuelPressure, 0)} unit="kPa" color="#8b5cf6" />
+        <SparklineStat entityId="sensor.192_168_10_90_oil_life" label="Oil Life" value={fmt(oilLife, 0)} unit="%" color="#22c55e" />
+        <SparklineStat entityId="sensor.192_168_10_90_wastegate" label="Wastegate" value={fmt(wastegate, 0)} unit="%" color="#f59e0b" />
+        <SparklineStat entityId="sensor.192_168_10_90_intake_air_tmp" label="Intake Air" value={fmt(intakeAir, 0)} unit="°C" color="#06b6d4" />
+        <SparklineStat entityId="sensor.192_168_10_90_46_ambientairtemp" label="Ambient Air" value={fmt(ambientAir, 0)} unit="°C" color="#3b82f6" />
+        <SparklineStat entityId="sensor.192_168_10_90_fuel_pressure" label="Fuel Pressure" value={fmt(fuelPressure, 0)} unit="kPa" color="#8b5cf6" />
       </CardContent>
     </Card>
   );
@@ -251,10 +247,10 @@ function DiagnosticsCard() {
 
 /** Big at-a-glance driving stats — always visible at the top on mobile */
 function DrivingHeroCard() {
-  const { value: rpm } = useEntityNumeric('sensor.wican_rpm');
-  const { value: ecuV } = useEntityNumeric('sensor.wican_control_module_voltage');
-  const { value: coolant } = useEntityNumeric('sensor.wican_coolant_temperature');
-  const { value: transTemp } = useEntityNumeric('sensor.wican_wican_transmission_temperature');
+  const { value: rpm } = useEntityNumeric('sensor.192_168_10_90_0c_enginerpm');
+  const { value: ecuV } = useEntityNumeric('sensor.192_168_10_90_42_controlmodulevolt');
+  const { value: coolant } = useEntityNumeric('sensor.192_168_10_90_05_enginecoolanttemp');
+  const { value: transTemp } = useEntityNumeric('sensor.192_168_10_90_tran_f_temp');
   const { value: gradePct } = useEntityNumeric('sensor.road_grade');
   const aggression = useEntity('sensor.hill_aggression');
   const { open } = useHistoryDialog();
@@ -266,19 +262,19 @@ function DrivingHeroCard() {
     <Card>
       <CardContent className="pt-4 pb-3">
         <div className="grid grid-cols-2 gap-3">
-          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.wican_rpm', 'RPM', 'rpm')}>
+          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.192_168_10_90_0c_enginerpm', 'RPM', 'rpm')}>
             <p className="text-3xl font-bold tabular-nums">{fmt(rpm, 0)}</p>
             <p className="text-[10px] text-muted-foreground">RPM</p>
           </div>
-          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.wican_control_module_voltage', 'Battery Voltage', 'V')}>
+          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.192_168_10_90_42_controlmodulevolt', 'Battery Voltage', 'V')}>
             <p className="text-3xl font-bold tabular-nums">{fmt(ecuV, 2)}</p>
             <p className="text-[10px] text-muted-foreground">Battery V</p>
           </div>
-          <div className={cn('cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors')} onClick={() => open('sensor.wican_coolant_temperature', 'Coolant Temp', '°C')}>
+          <div className={cn('cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors')} onClick={() => open('sensor.192_168_10_90_05_enginecoolanttemp', 'Coolant Temp', '°C')}>
             <p className={cn('text-3xl font-bold tabular-nums', coolantColor)}>{fmt(coolant, 0)}°</p>
             <p className="text-[10px] text-muted-foreground">Coolant</p>
           </div>
-          <div className={cn('cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors')} onClick={() => open('sensor.wican_wican_transmission_temperature', 'Trans Temp', '°C')}>
+          <div className={cn('cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors')} onClick={() => open('sensor.192_168_10_90_tran_f_temp', 'Trans Temp', '°C')}>
             <p className={cn('text-3xl font-bold tabular-nums', transColor)}>{fmt(transTemp, 0)}°</p>
             <p className="text-[10px] text-muted-foreground">Trans</p>
           </div>

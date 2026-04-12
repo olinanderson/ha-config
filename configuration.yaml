@@ -62,8 +62,6 @@ template: !include_dir_merge_list template/
 # --- Integration sensors (Riemann, statistics, history) ---
 sensor: !include integrations/sensor.yaml
 
-# --- MQTT sensors, binary sensors & device tracker ---
+# --- MQTT device tracker ---
 mqtt:
-  sensor: !include mqtt/sensors.yaml
-  binary_sensor: !include mqtt/binary_sensors.yaml
   device_tracker: !include mqtt/device_tracker.yaml

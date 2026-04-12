@@ -104,9 +104,9 @@ views:
               [[[
                 function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
                 function fmt(n,d){ return isNaN(n)?'—':n.toFixed(d); }
-                var rpm=s('sensor.wican_rpm'), speed=s('sensor.wican_speed'),
-                    coolant=s('sensor.coolant_temp_last'), throttle=s('sensor.wican_throttle_position'),
-                    load=s('sensor.wican_engine_load'), ecuV=s('sensor.wican_control_module_voltage');
+                var rpm=s('sensor.192_168_10_90_0c_enginerpm'), speed=s('sensor.192_168_10_90_0d_vehiclespeed'),
+                    coolant=s('sensor.coolant_temp_last'), throttle=s('sensor.192_168_10_90_11_throttleposition'),
+                    load=s('sensor.192_168_10_90_04_calcengineload'), ecuV=s('sensor.192_168_10_90_42_controlmodulevolt');
                 var gear=states['sensor.wican_gear_display']?states['sensor.wican_gear_display'].state:'—';
                 var running=states['binary_sensor.engine_is_running'].state==='on';
                 var runDot=running?'#22c55e':'#6b7280';
@@ -173,8 +173,8 @@ views:
             label: |
               [[[
                 function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
-                var fl=s('sensor.wican_tire_pressure_fl'), fr=s('sensor.wican_tire_pressure_fr'),
-                    rl=s('sensor.wican_tire_pressure_rl'), rr=s('sensor.wican_tire_pressure_rr');
+                var fl=s('sensor.192_168_10_90_tyre_p_fl')*0.0725190, fr=s('sensor.192_168_10_90_tyre_p_fr')*0.0725190,
+                    rl=s('sensor.192_168_10_90_tyre_p_rl')*0.0725190, rr=s('sensor.192_168_10_90_tyre_p_rr')*0.0725190;
                 function tc(p){ return isNaN(p)||p===0?'var(--secondary-text-color)':p<35?'#ef4444':'var(--primary-text-color)'; }
                 return `<div style="padding:4px 0;">
                   <div style="font-size:13px; font-weight:600; margin-bottom:14px;">Tire Pressure (psi)</div>
@@ -222,10 +222,10 @@ views:
               [[[
                 function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
                 function fmt(n,d){ return isNaN(n)?'—':n.toFixed(d); }
-                var transTemp=s('sensor.trans_temp_last'), oilLife=s('sensor.wican_oil_life'),
-                    fuelRate=s('sensor.wican_fuel_rate'), wastegate=s('sensor.wican_wastegate'),
-                    intakeTemp=s('sensor.wican_intake_air_temperature'), fuelPress=s('sensor.wican_fuel_pressure'),
-                    altDuty=s('sensor.wican_alternator_duty'), ambient=s('sensor.ambient_air_temp_last');
+                var transTemp=s('sensor.trans_temp_last'), oilLife=s('sensor.192_168_10_90_oil_life'),
+                    wastegate=s('sensor.192_168_10_90_wastegate'),
+                    intakeTemp=s('sensor.192_168_10_90_intake_air_tmp'), fuelPress=s('sensor.192_168_10_90_fuel_pressure'),
+                    ambient=s('sensor.ambient_air_temp_last');
                 function row(label,val,unit,color){
                   var c=color||'var(--primary-text-color)';
                   return `<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--divider-color);">
@@ -237,11 +237,9 @@ views:
                   <div style="font-size:13px; font-weight:600; margin-bottom:8px;">Drivetrain Details</div>
                   ${row('Trans Temp',fmt(transTemp,0),'°C',isNaN(transTemp)||transTemp<120?'':'#ef4444')}
                   ${row('Oil Life',fmt(oilLife,0),'%',isNaN(oilLife)||oilLife>15?'':'#ef4444')}
-                  ${row('Fuel Rate',fmt(fuelRate,2),' g/s')}
                   ${row('Wastegate',fmt(wastegate,0),'%')}
                   ${row('Intake Temp',fmt(intakeTemp,0),'°C')}
                   ${row('Fuel Pressure',fmt(fuelPress,0),' kPa')}
-                  ${row('Alt Duty',fmt(altDuty,0),'%')}
                   ${row('Ambient',fmt(ambient,0),'°C')}
                 </div>`;
               ]]]
@@ -276,7 +274,7 @@ views:
             label: |
               [[[
                 function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
-                var fuel=s('sensor.stable_fuel_level'), rawFuel=s('sensor.wican_fuel'),
+                var fuel=s('sensor.stable_fuel_level'), rawFuel=s('sensor.192_168_10_90_2f_fueltanklevel'),
                     meanFuel=s('sensor.wican_fuel_5_min_mean'),
                     l100=s('sensor.fuel_consumption_l100km'), lh=s('sensor.fuel_consumption_lh');
                 var fuelColor=isNaN(fuel)||fuel<15?'#ef4444':fuel<30?'#f59e0b':'#22c55e';
@@ -384,7 +382,7 @@ views:
                 curve: stepline
                 stroke_width: 2
                 opacity: 0.1
-              - entity: sensor.wican_fuel
+              - entity: sensor.192_168_10_90_2f_fueltanklevel
                 name: Raw OBD
                 type: line
                 color: '#6b7280'

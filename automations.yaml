@@ -487,11 +487,11 @@
   mode: single
   trigger:
     - trigger: state
-      entity_id: sensor.wican_speed
+      entity_id: sensor.192_168_10_90_0d_vehiclespeed
   condition:
     # Only if we have a valid speed reading
     - condition: template
-      value_template: "{{ states('sensor.wican_speed') not in ['unavailable', 'unknown'] }}"
+      value_template: "{{ states('sensor.192_168_10_90_0d_vehiclespeed') not in ['unavailable', 'unknown'] }}"
   action:
     - action: input_text.set_value
       target:
@@ -508,7 +508,7 @@
     # Check when fuel changes or acceleration changes
     - trigger: state
       entity_id:
-        - sensor.wican_fuel
+        - sensor.192_168_10_90_2f_fueltanklevel
         - sensor.vehicle_acceleration
       # Wait 5 seconds to ensure stability
       for: "00:00:05"
@@ -527,7 +527,7 @@
       target:
         entity_id: input_text.previous_fuel_level
       data:
-        value: "{{ states('sensor.wican_fuel') }}"
+        value: "{{ states('sensor.192_168_10_90_2f_fueltanklevel') }}"
 
 # Handle WICAN disconnection (engine off)
 - id: update_fuel_on_wican_disconnect
@@ -536,7 +536,7 @@
   mode: single
   trigger:
     - trigger: state
-      entity_id: sensor.wican_fuel
+      entity_id: sensor.192_168_10_90_2f_fueltanklevel
       to: "unavailable"
   action:
     # Store the last known fuel level before disconnect
@@ -554,23 +554,23 @@
       event: start
     # Also trigger when WICAN comes back online
     - trigger: state
-      entity_id: sensor.wican_fuel
+      entity_id: sensor.192_168_10_90_2f_fueltanklevel
       from: "unavailable"
   condition:
     # Only if we have valid readings
     - condition: template
-      value_template: "{{ states('sensor.wican_fuel') not in ['unavailable', 'unknown'] }}"
+      value_template: "{{ states('sensor.192_168_10_90_2f_fueltanklevel') not in ['unavailable', 'unknown'] }}"
   action:
     - action: input_text.set_value
       target:
         entity_id: input_text.previous_fuel_level
       data:
-        value: "{{ states('sensor.wican_fuel') }}"
+        value: "{{ states('sensor.192_168_10_90_2f_fueltanklevel') }}"
     - action: input_text.set_value
       target:
         entity_id: input_text.previous_speed
       data:
-        value: "{{ states('sensor.wican_speed') | default('0') }}"
+        value: "{{ states('sensor.192_168_10_90_0d_vehiclespeed') | default('0') }}"
 
 # ────────────────────────────────────────────────────────────────
 # Auto Power Saving When Driving
@@ -874,6 +874,16 @@
     - delay: "00:00:45"
     - action: shell_command.start_gps_filter
 
+- id: dvr_proxy_start_on_boot
+  alias: "DVR Proxy • Start on HA boot"
+  mode: single
+  trigger:
+    - trigger: homeassistant
+      event: start
+  action:
+    - delay: "00:00:40"
+    - action: shell_command.start_dvr_proxy
+
 # ───────────────────────────────────────────────
 #  Shelly EM – reconnect when inverter turns on
 # ───────────────────────────────────────────────
@@ -931,16 +941,10 @@
         entity_id: input_boolean.inverter_state
 
 # ────────────────────────────────────────────────────────────────
-# WiCAN OBD — Raw PID Logging on Engine Start
+# WiCAN OBD — PID Logging on Engine Start (native integration)
 # ────────────────────────────────────────────────────────────────
-# Logs all raw WiCAN MQTT sensor values when the engine starts,
-# then periodically during the drive. Useful for diagnosing
-# tire pressure expression issues and other PID problems.
-# All values are saved to persistent_notification and system_log
-# so they survive HA restarts and can be reviewed after the drive.
-
 - id: wican_drive_start_log
-  alias: "WiCAN • Log raw PIDs on engine start"
+  alias: "WiCAN • Log PIDs on engine start"
   mode: single
   trigger:
     - trigger: state
@@ -949,56 +953,45 @@
       to: "on"
       for: "00:00:10"
   action:
-    # Initial snapshot
     - action: system_log.write
       data:
         level: info
         logger: automation.wican_drive_log
         message: >
-          === DRIVE START — Raw PID Snapshot ===
+          === DRIVE START — PID Snapshot ===
           Time: {{ now().isoformat() }}
-          --- Standard PIDs ---
-          Speed: {{ states('sensor.wican_speed') }} km/h | RAW: {{ states('sensor.wican_raw_vehicle_speed') }}
-          RPM: {{ states('sensor.wican_rpm') }} | Fuel: {{ states('sensor.wican_fuel') }}% | RAW Fuel: {{ states('sensor.wican_raw_fuel_tank_level') }}
-          Coolant: {{ states('sensor.wican_coolant_temperature') }}°C | Throttle: {{ states('sensor.wican_throttle_position') }}%
-          Engine Load: {{ states('sensor.wican_engine_load') }}% | ECU Volt: {{ states('sensor.wican_control_module_voltage') }} V
-          Ambient: {{ states('sensor.wican_ambient_air_temperature') }}°C
-          --- Mode 22 / Ford PIDs ---
-          Tire FL: {{ states('sensor.wican_tire_pressure_fl') }} psi | RAW: {{ states('sensor.wican_raw_tire_pressure_fl') }}
-          Tire FR: {{ states('sensor.wican_tire_pressure_fr') }} psi | RAW: {{ states('sensor.wican_raw_tire_pressure_fr') }}
-          Tire RL: {{ states('sensor.wican_tire_pressure_rl') }} psi | RAW: {{ states('sensor.wican_raw_tire_pressure_rl') }}
-          Tire RR: {{ states('sensor.wican_tire_pressure_rr') }} psi | RAW: {{ states('sensor.wican_raw_tire_pressure_rr') }}
-          Trans Temp: {{ states('sensor.wican_transmission_temperature') }}°C | RAW: {{ states('sensor.wican_raw_transmission_temp') }}
-          Gear: {{ states('sensor.wican_current_gear') }} | RAW: {{ states('sensor.wican_raw_current_gear') }}
-          Oil Life: {{ states('sensor.wican_oil_life') }}% | Fuel Rate: {{ states('sensor.wican_fuel_rate') }} g/s
-          Wastegate: {{ states('sensor.wican_wastegate') }}% | Intake Air: {{ states('sensor.wican_intake_air_temperature') }}°C
-          Fuel Pressure: {{ states('sensor.wican_fuel_pressure') }} kPa | Alt Duty: {{ states('sensor.wican_alternator_duty') }}%
-          Monitor Status: {{ states('sensor.wican_monitor_status_raw') }} | DTC Count: {{ states('sensor.dtc_count') }}
-          CEL: {{ states('binary_sensor.check_engine_light') }}
+          Speed: {{ states('sensor.192_168_10_90_0d_vehiclespeed') }} km/h
+          RPM: {{ states('sensor.192_168_10_90_0c_enginerpm') }}
+          Fuel: {{ states('sensor.192_168_10_90_2f_fueltanklevel') }}%
+          Coolant: {{ states('sensor.192_168_10_90_05_enginecoolanttemp') }}°C
+          Throttle: {{ states('sensor.192_168_10_90_11_throttleposition') }}%
+          Load: {{ states('sensor.192_168_10_90_04_calcengineload') }}%
+          ECU Volt: {{ states('sensor.192_168_10_90_42_controlmodulevolt') }} V
+          Ambient: {{ states('sensor.192_168_10_90_46_ambientairtemp') }}°C
+          Tires FL/FR/RL/RR: {{ states('sensor.192_168_10_90_tyre_p_fl') }}/{{ states('sensor.192_168_10_90_tyre_p_fr') }}/{{ states('sensor.192_168_10_90_tyre_p_rl') }}/{{ states('sensor.192_168_10_90_tyre_p_rr') }} kPa
+          Trans: {{ states('sensor.192_168_10_90_tran_f_temp') }}°C
+          Gear: {{ states('sensor.192_168_10_90_gear') }}
+          Oil Life: {{ states('sensor.192_168_10_90_oil_life') }}%
+          Wastegate: {{ states('sensor.192_168_10_90_wastegate') }}%
+          Intake Air: {{ states('sensor.192_168_10_90_intake_air_tmp') }}°C
+          Fuel Pressure: {{ states('sensor.192_168_10_90_fuel_pressure') }} kPa
+          DTC Count: {{ states('sensor.dtc_count') }} | CEL: {{ states('binary_sensor.check_engine_light') }}
     - action: persistent_notification.create
       data:
         title: "Drive Start — OBD Snapshot {{ now().strftime('%H:%M') }}"
         message: >
-          **Standard PIDs:**
-          Speed: {{ states('sensor.wican_speed') }} km/h | RPM: {{ states('sensor.wican_rpm') }}
-          Fuel: {{ states('sensor.wican_fuel') }}% | Coolant: {{ states('sensor.wican_coolant_temperature') }}°C
-          Throttle: {{ states('sensor.wican_throttle_position') }}% | Load: {{ states('sensor.wican_engine_load') }}%
-          
-          **Mode 22 / Ford:**
-          Tires FL/FR/RL/RR: {{ states('sensor.wican_tire_pressure_fl') }}/{{ states('sensor.wican_tire_pressure_fr') }}/{{ states('sensor.wican_tire_pressure_rl') }}/{{ states('sensor.wican_tire_pressure_rr') }} psi
-          Trans: {{ states('sensor.wican_transmission_temperature') }}°C | Gear: {{ states('sensor.wican_current_gear') }}
-          Oil: {{ states('sensor.wican_oil_life') }}% | Wastegate: {{ states('sensor.wican_wastegate') }}%
-          
-          **Raw tire JSON:** {{ states('sensor.wican_raw_tire_pressure_fl') }}
-          
-          **DTC:** Count={{ states('sensor.dtc_count') }} CEL={{ states('binary_sensor.check_engine_light') }}
+          Speed: {{ states('sensor.192_168_10_90_0d_vehiclespeed') }} km/h | RPM: {{ states('sensor.192_168_10_90_0c_enginerpm') }}
+          Fuel: {{ states('sensor.192_168_10_90_2f_fueltanklevel') }}% | Coolant: {{ states('sensor.192_168_10_90_05_enginecoolanttemp') }}°C
+          Throttle: {{ states('sensor.192_168_10_90_11_throttleposition') }}% | Load: {{ states('sensor.192_168_10_90_04_calcengineload') }}%
+          Tires FL/FR/RL/RR: {{ states('sensor.192_168_10_90_tyre_p_fl') }}/{{ states('sensor.192_168_10_90_tyre_p_fr') }}/{{ states('sensor.192_168_10_90_tyre_p_rl') }}/{{ states('sensor.192_168_10_90_tyre_p_rr') }} kPa
+          Trans: {{ states('sensor.192_168_10_90_tran_f_temp') }}°C | Gear: {{ states('sensor.192_168_10_90_gear') }}
+          Oil: {{ states('sensor.192_168_10_90_oil_life') }}% | Wastegate: {{ states('sensor.192_168_10_90_wastegate') }}%
+          DTC: {{ states('sensor.dtc_count') }} | CEL: {{ states('binary_sensor.check_engine_light') }}
         notification_id: wican_drive_log
-    # Also fire the raw tire pressure script for raw CAN byte capture
-    - action: script.wican_raw_tire_pressure
 
-# Periodic raw PID log every 5 minutes during a drive
+# Periodic PID log every 5 minutes during a drive
 - id: wican_drive_periodic_log
-  alias: "WiCAN • Periodic raw PID log while driving"
+  alias: "WiCAN • Periodic PID log while driving"
   mode: single
   trigger:
     - trigger: time_pattern
@@ -1015,31 +1008,7 @@
         message: >
           === PERIODIC PID LOG ===
           Time: {{ now().isoformat() }}
-          Speed: {{ states('sensor.wican_speed') }} | RPM: {{ states('sensor.wican_rpm') }} | Fuel: {{ states('sensor.wican_fuel') }}%
-          Coolant: {{ states('sensor.wican_coolant_temperature') }}°C | Throttle: {{ states('sensor.wican_throttle_position') }}%
-          Tire FL: {{ states('sensor.wican_tire_pressure_fl') }} | FR: {{ states('sensor.wican_tire_pressure_fr') }} | RL: {{ states('sensor.wican_tire_pressure_rl') }} | RR: {{ states('sensor.wican_tire_pressure_rr') }} psi
-          RAW FL: {{ states('sensor.wican_raw_tire_pressure_fl') }}
-          Trans: {{ states('sensor.wican_transmission_temperature') }}°C | Gear: {{ states('sensor.wican_current_gear') }}
-          Fuel Rate: {{ states('sensor.wican_fuel_rate') }} g/s | Wastegate: {{ states('sensor.wican_wastegate') }}%
-          Alt Duty: {{ states('sensor.wican_alternator_duty') }}%
-
-# Log raw CAN frame responses to system log for post-drive analysis
-- id: wican_tx_frame_logger
-  alias: "WiCAN • Log raw CAN frames from wican/tx"
-  mode: queued
-  max: 20
-  trigger:
-    - trigger: state
-      entity_id: sensor.wican_tx_raw_frame
-  condition:
-    # Only log when engine is running to avoid noise
-    - condition: state
-      entity_id: binary_sensor.engine_is_running
-      state: "on"
-  action:
-    - action: system_log.write
-      data:
-        level: debug
-        logger: automation.wican_tx_logger
-        message: "CAN TX: {{ states('sensor.wican_tx_raw_frame') }}"
+          Speed: {{ states('sensor.192_168_10_90_0d_vehiclespeed') }} | RPM: {{ states('sensor.192_168_10_90_0c_enginerpm') }} | Fuel: {{ states('sensor.192_168_10_90_2f_fueltanklevel') }}%
+          Coolant: {{ states('sensor.192_168_10_90_05_enginecoolanttemp') }}°C | Trans: {{ states('sensor.192_168_10_90_tran_f_temp') }}°C
+          Tires FL/FR/RL/RR: {{ states('sensor.192_168_10_90_tyre_p_fl') }}/{{ states('sensor.192_168_10_90_tyre_p_fr') }}/{{ states('sensor.192_168_10_90_tyre_p_rl') }}/{{ states('sensor.192_168_10_90_tyre_p_rr') }} kPa
 

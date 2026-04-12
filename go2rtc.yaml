@@ -1,0 +1,2 @@
+# Streams are managed by HA's go2rtc integration (via camera entities).
+# Do NOT define streams here — they create duplicate RTSP connections to the DVR.
