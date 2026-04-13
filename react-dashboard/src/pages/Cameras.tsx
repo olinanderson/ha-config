@@ -22,187 +22,241 @@ const CAMERAS = [
   { entityId: 'camera.channel_4', label: 'Back', channel: 4, stream: 'channel_4', lightEntityId: 'switch.a32_pro_switch23_rear_outdoor_lights' },
 ];
 
-const ICE_SERVERS: RTCIceServer[] = [
-  { urls: 'stun:stun.l.google.com:19302' },
-];
-
 type StreamState = 'connecting' | 'playing' | 'error';
 
+// ─── DVR Proxy ───
+
+const DVR_PROXY = (() => {
+  // Proxy runs on port 8766 on the HA host
+  const loc = window.location;
+  const host = loc.hostname;
+  return `http://${host}:8766`;
+})();
+
 /**
- * WebRTC camera feed using direct go2rtc signaling via dvr_proxy.
- * Bypasses HA entirely — sends SDP offer to dvr_proxy (:8766/api/webrtc),
- * which forwards to go2rtc's RTSP stream, and returns the SDP answer.
+ * Live camera feed using MSE (Media Source Extensions) over HTTP.
+ * Fetches go2rtc's fMP4 stream via dvr_proxy (/api/mse?src=...) over TCP.
  *
- * Stall recovery strategy (avoids reconnect cascade across 4 channels):
- *  1. Grace period: ignore stalls for 15s after connection established
- *  2. Soft recovery first: try pause/play before tearing down the peer connection
- *  3. Require 2 consecutive stall checks (10s apart) before hard reconnect
- *  4. Stagger reconnects: add per-channel random delay to avoid thundering herd
+ * This is far more reliable than WebRTC for security cameras:
+ *  - TCP delivery: no UDP packet loss/jitter on WiFi
+ *  - Better MSE hardware decode acceleration in Chrome
+ *  - ~1s latency (vs ~0.3s WebRTC) — fine for security cameras
+ *
+ * Auto-reconnects with exponential backoff on stream errors.
  */
-function WebRTCFeed({ stream }: { stream: string }) {
+function MSEFeed({ stream }: { stream: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
-  const pcRef = useRef<RTCPeerConnection | null>(null);
   const [state, setState] = useState<StreamState>('connecting');
   const [retryKey, setRetryKey] = useState(0);
   const retryCountRef = useRef(0);
 
   useEffect(() => {
+    if (!videoRef.current) return;
+    const video = videoRef.current;
+
     let cancelled = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-    let stallTimer: ReturnType<typeof setInterval> | undefined;
-    let lastVideoTime = 0;
-    let stallCount = 0; // consecutive stall detections (need 2 to trigger reconnect)
-    let isPlaying = false;
-    let playingSince = 0; // timestamp when playback started (for grace period)
+    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let objectUrl: string | null = null;
 
     function scheduleReconnect() {
       if (cancelled) return;
-      // Per-channel stagger: hash the stream name to get 0-2s offset
       const stagger = (stream.charCodeAt(stream.length - 1) % 4) * 500;
       const base = Math.min(2000 * Math.pow(2, retryCountRef.current), 30000);
-      const delay = base + stagger;
       retryCountRef.current++;
       reconnectTimer = setTimeout(() => {
         if (!cancelled) {
           setState('connecting');
           setRetryKey((k) => k + 1);
         }
-      }, delay);
+      }, base + stagger);
     }
 
-    async function connect() {
+    async function start() {
       try {
-        const pc = new RTCPeerConnection({
-          iceServers: ICE_SERVERS,
-          bundlePolicy: 'max-bundle',
-        });
-        pcRef.current = pc;
-
-        pc.addTransceiver('video', { direction: 'recvonly' });
-        pc.addTransceiver('audio', { direction: 'recvonly' });
-
-        pc.ontrack = (event) => {
-          if (!cancelled && videoRef.current && event.streams[0]) {
-            videoRef.current.srcObject = event.streams[0];
-          }
-        };
-
-        pc.onconnectionstatechange = () => {
-          if (cancelled) return;
-          const s = pc.connectionState;
-          if (s === 'connected') {
-            setState('playing');
-            isPlaying = true;
-            playingSince = Date.now();
-            stallCount = 0;
-            retryCountRef.current = 0;
-          } else if (s === 'failed' || s === 'closed') {
-            isPlaying = false;
-            setState('connecting');
-            scheduleReconnect();
-          } else if (s === 'disconnected') {
-            // Wait 8s before treating disconnected as dead — WebRTC ICE can recover
-            isPlaying = false;
-            setTimeout(() => {
-              if (!cancelled && pc.connectionState === 'disconnected') {
-                setState('connecting');
-                scheduleReconnect();
-              }
-            }, 8000);
-          }
-        };
-
-        // Create offer and wait for ICE gathering to complete
-        const offer = await pc.createOffer();
-        await pc.setLocalDescription(offer);
-
-        // Wait for ICE candidates to be gathered (needed for HTTP signaling)
-        if (pc.iceGatheringState !== 'complete') {
-          await new Promise<void>((resolve) => {
-            const check = () => {
-              if (pc.iceGatheringState === 'complete') resolve();
-            };
-            pc.addEventListener('icegatheringstatechange', check);
-            // Safety timeout — don't wait forever
-            setTimeout(resolve, 3000);
-          });
+        const resp = await fetch(
+          `${DVR_PROXY}/api/mse?src=${encodeURIComponent(stream)}`,
+        );
+        if (cancelled) return;
+        if (!resp.ok || !resp.body) {
+          throw new Error(`MSE stream error: ${resp.status}`);
         }
 
+        // Determine MSE codec from Content-Type
+        const ct =
+          resp.headers.get('Content-Type') || 'video/mp4; codecs="avc1.640028"';
+        let mimeType = ct
+          .split(';')
+          .map((s) => s.trim())
+          .join('; ');
+        if (!MediaSource.isTypeSupported(mimeType)) {
+          mimeType = 'video/mp4; codecs="avc1.640028"';
+        }
+        if (!MediaSource.isTypeSupported(mimeType)) {
+          throw new Error('No supported MSE codec');
+        }
+
+        // Create MediaSource
+        const ms = new MediaSource();
+        objectUrl = URL.createObjectURL(ms);
+        video.src = objectUrl;
+
+        await new Promise<void>((resolve) =>
+          ms.addEventListener('sourceopen', () => resolve(), { once: true }),
+        );
         if (cancelled) return;
 
-        // Exchange SDP via dvr_proxy → go2rtc (no HA involved)
-        const resp = await fetch(`${DVR_PROXY}/api/webrtc`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            stream,
-            offer: pc.localDescription!.sdp,
-          }),
-        });
+        const sb = ms.addSourceBuffer(mimeType);
+        reader = resp.body.getReader();
 
-        if (!resp.ok) {
-          throw new Error(`WebRTC proxy error: ${resp.status}`);
+        // --- Single unified updateend handler ---
+        // Priority: 1) drain queued chunks, 2) trim old buffer
+        const queue: Uint8Array[] = [];
+        let trimPending = false;
+
+        function processQueue() {
+          if (sb.updating || ms.readyState !== 'open') return;
+
+          // Priority 1: append queued data
+          if (queue.length > 0) {
+            try {
+              sb.appendBuffer(queue.shift()!);
+            } catch {
+              // QuotaExceededError — force a trim next cycle
+              trimPending = true;
+              if (!sb.updating) processTrim();
+            }
+            return;
+          }
+
+          // Priority 2: trim old data (only when queue is empty)
+          if (trimPending) {
+            processTrim();
+          }
         }
 
-        const data = await resp.json();
-        if (!data.answer) {
-          throw new Error('No answer in response');
+        function processTrim() {
+          if (sb.updating || ms.readyState !== 'open' || sb.buffered.length === 0) return;
+          const bufStart = sb.buffered.start(0);
+          const bufEnd = sb.buffered.end(sb.buffered.length - 1);
+          if (bufEnd - bufStart > 60) {
+            try {
+              sb.remove(bufStart, bufEnd - 20);
+              trimPending = false;
+            } catch { /* ignore */ }
+          } else {
+            trimPending = false;
+          }
         }
 
-        await pc.setRemoteDescription(
-          new RTCSessionDescription({ type: 'answer', sdp: data.answer }),
-        );
+        sb.addEventListener('updateend', processQueue);
+
+        // Schedule trims periodically (every 10s) instead of on every append
+        const trimInterval = setInterval(() => {
+          if (cancelled) return;
+          trimPending = true;
+          processQueue();
+        }, 10000);
+
+        // Pump fetch stream → SourceBuffer
+        let started = false;
+        while (!cancelled) {
+          const { done, value } = await reader.read();
+          if (done || !value) break;
+
+          if (sb.updating || queue.length > 0) {
+            queue.push(value);
+          } else {
+            try {
+              sb.appendBuffer(value);
+            } catch {
+              queue.push(value);
+            }
+          }
+
+          if (!started) {
+            started = true;
+            video.play().catch(() => {});
+          }
+        }
+
+        clearInterval(trimInterval);
+
+        // Stream ended (server closed) — reconnect
+        if (!cancelled) {
+          setState('connecting');
+          scheduleReconnect();
+        }
       } catch (err) {
         if (!cancelled) {
-          console.error(`WebRTC connect failed for ${stream}:`, err);
+          console.error(`[${stream}] MSE error:`, err);
           setState('connecting');
           scheduleReconnect();
         }
       }
     }
 
-    // Stall detection: check every 10s if video.currentTime is advancing.
-    // - Skip checks during 15s grace period after connection
-    // - First stall: try soft recovery (pause/play)
-    // - Second consecutive stall: hard reconnect
-    stallTimer = setInterval(() => {
-      const video = videoRef.current;
-      if (!video || !isPlaying || video.paused) return;
-      // 15s grace period after connection — DVR needs time to start streaming
-      if (Date.now() - playingSince < 15000) {
-        lastVideoTime = video.currentTime;
-        return;
+    const onPlaying = () => {
+      if (!cancelled) {
+        setState('playing');
+        retryCountRef.current = 0;
       }
-      if (video.currentTime > 0 && video.currentTime === lastVideoTime) {
+    };
+    const onError = () => {
+      if (!cancelled) {
+        console.error(`[${stream}] Video element error:`, video.error);
+        setState('connecting');
+        scheduleReconnect();
+      }
+    };
+
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('error', onError);
+
+    // Live edge seeker + stall watchdog (every 3s)
+    let lastTime = -1;
+    let stallCount = 0;
+    const watchdog = setInterval(() => {
+      if (cancelled) return;
+
+      // Seek to live edge if playback falls behind
+      if (video.buffered.length > 0) {
+        const edge = video.buffered.end(video.buffered.length - 1);
+        if (edge - video.currentTime > 3) {
+          video.currentTime = edge - 0.5;
+        }
+      }
+
+      // Stall detection
+      const t = video.currentTime;
+      if (lastTime >= 0 && t === lastTime && t > 0) {
         stallCount++;
-        if (stallCount === 1) {
-          // Soft recovery: try pause/play to unstick the video element
-          console.warn(`[${stream}] Stall detected, attempting soft recovery`);
-          video.pause();
-          video.play().catch(() => {});
-        } else if (stallCount >= 2) {
-          // Hard reconnect after 2 consecutive stalls (20s frozen)
-          console.warn(`[${stream}] Persistent stall (${stallCount}), reconnecting`);
-          isPlaying = false;
+        if (stallCount >= 3) {
+          console.warn(`[${stream}] Stall detected (${t.toFixed(1)}s stuck), reconnecting`);
           stallCount = 0;
+          reader?.cancel().catch(() => {});
           setState('connecting');
-          setRetryKey((k) => k + 1);
+          scheduleReconnect();
         }
       } else {
         stallCount = 0;
       }
-      lastVideoTime = video.currentTime;
-    }, 10000);
+      lastTime = t;
+    }, 3000);
 
-    connect();
+    start();
 
     return () => {
       cancelled = true;
-      isPlaying = false;
       clearTimeout(reconnectTimer);
-      clearInterval(stallTimer);
-      pcRef.current?.close();
-      pcRef.current = null;
+      clearInterval(watchdog);
+      video.removeEventListener('playing', onPlaying);
+      video.removeEventListener('error', onError);
+      reader?.cancel().catch(() => {});
+      video.pause();
+      video.removeAttribute('src');
+      video.load();
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   }, [stream, retryKey]);
 
@@ -262,6 +316,7 @@ function CameraCell({
   lightEntityId,
   hidden,
   expanded,
+  quality,
   onExpand,
   onCollapse,
 }: {
@@ -270,16 +325,18 @@ function CameraCell({
   lightEntityId: string;
   hidden: boolean;
   expanded: boolean;
+  quality: 'main' | 'sub';
   onExpand: () => void;
   onCollapse: () => void;
 }) {
+  const activeStream = quality === 'main' ? stream : `${stream}_sub`;
 
   return (
     <div
       className={`relative rounded-lg overflow-hidden bg-black border border-border cursor-pointer group ${
         hidden ? 'hidden' : ''
       }`}
-      onClick={expanded ? undefined : onExpand}
+      onClick={expanded ? onCollapse : onExpand}
     >
       <div className="absolute top-0 left-0 right-0 z-10 flex items-center justify-between px-3 py-1.5 bg-gradient-to-b from-black/70 to-transparent">
         <div className="flex items-center gap-2">
@@ -301,19 +358,12 @@ function CameraCell({
         )}
       </div>
 
-      <WebRTCFeed stream={stream} />
+      <MSEFeed stream={activeStream} />
     </div>
   );
 }
 
-// ─── DVR Proxy ───
-
-const DVR_PROXY = (() => {
-  // Proxy runs on port 8766 on the HA host
-  const loc = window.location;
-  const host = loc.hostname;
-  return `http://${host}:8766`;
-})();
+// ─── DVR Helpers ───
 
 interface TimelineSegment {
   start: string;
@@ -826,6 +876,7 @@ function PlaybackMode() {
 export default function Cameras() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [mode, setMode] = useState<'live' | 'playback'>('live');
+  const [quality, setQuality] = useState<'main' | 'sub'>('main');
 
   return (
     <PageContainer title="Cameras">
@@ -853,6 +904,29 @@ export default function Cameras() {
           <History className="h-4 w-4" />
           Playback
         </button>
+
+        <div className="ml-auto flex items-center gap-1 bg-muted rounded-md p-0.5">
+          <button
+            onClick={() => setQuality('sub')}
+            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+              quality === 'sub'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            SD
+          </button>
+          <button
+            onClick={() => setQuality('main')}
+            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
+              quality === 'main'
+                ? 'bg-background text-foreground shadow-sm'
+                : 'text-muted-foreground hover:text-foreground'
+            }`}
+          >
+            HD
+          </button>
+        </div>
       </div>
 
       {/* Live camera grid — always mounted, hidden when playback */}
@@ -876,6 +950,7 @@ export default function Cameras() {
                 lightEntityId={cam.lightEntityId}
                 hidden={isHidden}
                 expanded={isExpanded}
+                quality={quality}
                 onExpand={() => setExpanded(cam.stream)}
                 onCollapse={() => setExpanded(null)}
               />

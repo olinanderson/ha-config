@@ -284,13 +284,16 @@
 
     # ─── Fuel Consumption (Speed-Density from MAP + RPM + IAT) ───
     #
-    # Formula: MAF = ρ_air × Vd × RPM/120 × VE
-    #          fuel_gs = MAF / AFR
-    #          fuel_Lh = fuel_gs × 3600 / 750
+    # Improved formula with three corrections over base speed-density:
+    #   1. RPM-based VE curve — VE scales ~0.60 at idle to ~1.0 at 3000+ RPM
+    #   2. Fuel trim correction — real-time ECU STFT+LTFT avg both banks
+    #   3. Lambda correction — commanded AFR from ECU instead of fixed 14.7
     #
-    # MAP entity appears only when engine is running (WiCAN webhook).
-    # VE correction factor adjustable via input_number.fuel_ve_correction.
-    # Default VE=0.55 — calibrate via fill-to-fill measurements.
+    # Falls back gracefully: if fuel trim / lambda entities don't exist
+    # or are unavailable, uses neutral defaults (0% trim, lambda 1.0).
+    #
+    # VE base factor adjustable via input_number.fuel_ve_correction.
+    # The RPM curve multiplies this base, so set it to match cruise (~0.55).
 
     - name: "Estimated Fuel Rate"
       unique_id: estimated_fuel_rate
@@ -301,19 +304,49 @@
         {% set map_kpa = states('sensor.192_168_10_90_map') | float(0) %}
         {% set rpm = states('sensor.192_168_10_90_0c_enginerpm') | float(0) %}
         {% set iat_c = states('sensor.192_168_10_90_0f_intakeairtemperature') | float(20) %}
-        {% set ve = states('input_number.fuel_ve_correction') | float(0.55) %}
+        {% set ve_base = states('input_number.fuel_ve_correction') | float(0.55) %}
         {% if map_kpa > 0 and rpm > 0 %}
+          {# RPM-based VE curve: ~0.60 at idle, ~0.85 at 1500, ~1.0 at 3000+ #}
+          {% set rpm_factor = [0.60 + 0.40 * ((rpm - 600) / 2400), 1.0] | min %}
+          {% set rpm_factor = [rpm_factor, 0.55] | max %}
+          {% set ve = ve_base * rpm_factor %}
+          {# Fuel trims: average both banks (STFT + LTFT) #}
+          {% set stft1 = states('sensor.192_168_10_90_stft_b1') | float(0) %}
+          {% set ltft1 = states('sensor.192_168_10_90_ltft_b1') | float(0) %}
+          {% set stft2 = states('sensor.192_168_10_90_stft_b2') | float(0) %}
+          {% set ltft2 = states('sensor.192_168_10_90_ltft_b2') | float(0) %}
+          {% set trim_avg = ((stft1 + ltft1) + (stft2 + ltft2)) / 2 %}
+          {% set trim_factor = 1 + (trim_avg / 100) %}
+          {# Lambda: commanded AFR = 14.7 × lambda #}
+          {% set lambda_val = states('sensor.192_168_10_90_lambda') | float(1.0) %}
+          {% set lambda_val = [lambda_val, 0.7] | max %}
+          {% set afr = 14.7 * lambda_val %}
+          {# Speed-density: MAF = ρ_air × Vd × RPM/120 × VE #}
           {% set t_k = iat_c + 273.15 %}
           {% set air_density = (map_kpa * 1000) / (287 * t_k) %}
           {% set maf_gs = (air_density * 0.0035 * rpm * ve * 1000) / 120 %}
-          {% set fuel_gs = maf_gs / 14.7 %}
+          {% set fuel_gs = (maf_gs / afr) * trim_factor %}
           {{ ((fuel_gs * 3600) / 750) | round(2) }}
         {% else %}
           0
         {% endif %}
       attributes:
         map_kpa: "{{ states('sensor.192_168_10_90_map') }}"
-        ve_factor: "{{ states('input_number.fuel_ve_correction') }}"
+        ve_base: "{{ states('input_number.fuel_ve_correction') }}"
+        rpm: "{{ states('sensor.192_168_10_90_0c_enginerpm') }}"
+        ve_effective: >
+          {% set rpm = states('sensor.192_168_10_90_0c_enginerpm') | float(0) %}
+          {% set ve_base = states('input_number.fuel_ve_correction') | float(0.55) %}
+          {% set rpm_factor = [0.60 + 0.40 * ((rpm - 600) / 2400), 1.0] | min %}
+          {% set rpm_factor = [rpm_factor, 0.55] | max %}
+          {{ (ve_base * rpm_factor) | round(3) }}
+        fuel_trim_avg: >
+          {% set stft1 = states('sensor.192_168_10_90_stft_b1') | float(0) %}
+          {% set ltft1 = states('sensor.192_168_10_90_ltft_b1') | float(0) %}
+          {% set stft2 = states('sensor.192_168_10_90_stft_b2') | float(0) %}
+          {% set ltft2 = states('sensor.192_168_10_90_ltft_b2') | float(0) %}
+          {{ (((stft1 + ltft1) + (stft2 + ltft2)) / 2) | round(1) }}
+        lambda: "{{ states('sensor.192_168_10_90_lambda') }}"
 
     - name: "Estimated Fuel Consumption"
       unique_id: estimated_fuel_consumption
@@ -328,3 +361,60 @@
         {% else %}
           0
         {% endif %}
+
+    # ─── Injector Pulse Width (ms) ───
+    # Raw WiCAN value is in µs (5120 = 5.12 ms). Typical 3.5 EB GDI:
+    #   Idle: ~4–6 ms, Cruise: ~6–10 ms, WOT: ~12–20 ms
+
+    - name: "Injector Pulse Width"
+      unique_id: injector_pulse_width_ms
+      icon: mdi:fuel
+      unit_of_measurement: "ms"
+      state_class: measurement
+      state: >
+        {% set raw = states('sensor.192_168_10_90_inj_pw') | float(0) %}
+        {% if raw > 0 %}
+          {{ (raw / 1000) | round(2) }}
+        {% else %}
+          0
+        {% endif %}
+
+    # ─── Fuel Trim Sensors (derived) ───
+
+    - name: "Average Fuel Trim"
+      unique_id: average_fuel_trim
+      icon: mdi:tune-vertical
+      unit_of_measurement: "%"
+      state_class: measurement
+      state: >
+        {% set stft1 = states('sensor.192_168_10_90_stft_b1') | float(0) %}
+        {% set ltft1 = states('sensor.192_168_10_90_ltft_b1') | float(0) %}
+        {% set stft2 = states('sensor.192_168_10_90_stft_b2') | float(0) %}
+        {% set ltft2 = states('sensor.192_168_10_90_ltft_b2') | float(0) %}
+        {{ (((stft1 + ltft1) + (stft2 + ltft2)) / 2) | round(1) }}
+      attributes:
+        stft_b1: "{{ states('sensor.192_168_10_90_stft_b1') }}"
+        ltft_b1: "{{ states('sensor.192_168_10_90_ltft_b1') }}"
+        stft_b2: "{{ states('sensor.192_168_10_90_stft_b2') }}"
+        ltft_b2: "{{ states('sensor.192_168_10_90_ltft_b2') }}"
+        total_b1: >
+          {{ ((states('sensor.192_168_10_90_stft_b1') | float(0)) +
+              (states('sensor.192_168_10_90_ltft_b1') | float(0))) | round(1) }}
+        total_b2: >
+          {{ ((states('sensor.192_168_10_90_stft_b2') | float(0)) +
+              (states('sensor.192_168_10_90_ltft_b2') | float(0))) | round(1) }}
+
+    - name: "Commanded AFR"
+      unique_id: commanded_afr
+      icon: mdi:air-filter
+      unit_of_measurement: ":1"
+      state_class: measurement
+      state: >
+        {% set l = states('sensor.192_168_10_90_lambda') | float(0) %}
+        {% if l > 0.5 %}
+          {{ (14.7 * l) | round(1) }}
+        {% else %}
+          14.7
+        {% endif %}
+      attributes:
+        lambda: "{{ states('sensor.192_168_10_90_lambda') }}"

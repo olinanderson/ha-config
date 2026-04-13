@@ -6,6 +6,7 @@ Handles both live camera WebRTC signaling and DVR playback.
 Runs on the HA host at port 8766.
 
 Endpoints:
+  GET  /api/mse?src=channel_N                        — Live fMP4 stream (MSE over HTTP)
   POST /api/webrtc                                   — Live camera WebRTC (SDP proxy)
   GET  /api/recordings?channel=N&start=ISO&end=ISO   — Search recordings
   GET  /api/date-range?channel=N                     — Oldest/newest recording dates
@@ -29,7 +30,12 @@ import urllib.error
 import subprocess
 import http.client as _httplib
 from http.server import HTTPServer, BaseHTTPRequestHandler
+from socketserver import ThreadingMixIn
 import threading
+
+
+class ThreadingHTTPServer(ThreadingMixIn, HTTPServer):
+    daemon_threads = True
 
 # ─── Config ───
 
@@ -434,6 +440,49 @@ class DVRHandler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
+    def _proxy_mse_stream(self, stream_name):
+        """Proxy go2rtc's fMP4 live stream to the browser.
+
+        go2rtc blocks external access (local_auth), so we proxy from localhost.
+        Uses http.client for unbuffered streaming reads.
+        """
+        try:
+            conn = _httplib.HTTPConnection("localhost", 1984, timeout=10)
+            encoded = urllib.parse.quote(stream_name, safe="")
+            conn.request("GET", f"/api/stream.mp4?src={encoded}")
+            resp = conn.getresponse()
+            if resp.status != 200:
+                self._json_response({"error": f"go2rtc: {resp.status}"}, 502)
+                return
+
+            ct = resp.getheader("Content-Type", 'video/mp4; codecs="avc1.640028"')
+            self.send_response(200)
+            self._cors()
+            self.send_header("Content-Type", ct)
+            self.send_header("Cache-Control", "no-cache, no-store")
+            self.send_header("Connection", "close")
+            self.end_headers()
+            self.wfile.flush()
+
+            while True:
+                chunk = resp.read(65536)
+                if not chunk:
+                    break
+                self.wfile.write(chunk)
+                self.wfile.flush()
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # Browser closed connection
+        except Exception as e:
+            try:
+                self._json_response({"error": str(e)}, 502)
+            except Exception:
+                pass
+        finally:
+            try:
+                conn.close()
+            except Exception:
+                pass
+
     def _proxy_mp4_stream(self):
         """Stream DVR playback as fMP4 directly to the HTTP response.
 
@@ -539,6 +588,13 @@ class DVRHandler(BaseHTTPRequestHandler):
             # Simplify to just time segments
             segments = [{"start": r["start"], "end": r["end"], "flags": r["flags"]} for r in results]
             self._json_response({"segments": segments, "channel": int(channel), "date": date})
+
+        elif path == "/api/mse":
+            src = qs.get("src", "")
+            if not src or (src not in DVRIP_STREAMS and not src.startswith("camera.")):
+                self._json_response({"error": "unknown stream"}, 400)
+                return
+            self._proxy_mse_stream(src)
 
         elif path == "/api/health":
             self._json_response({"status": "ok"})
@@ -663,7 +719,7 @@ def main():
         print(f"[dvr_proxy] Retrying stream registration ({attempt + 1}/5)...", flush=True)
         _time.sleep(3)
 
-    server = HTTPServer(("0.0.0.0", LISTEN_PORT), DVRHandler)
+    server = ThreadingHTTPServer(("0.0.0.0", LISTEN_PORT), DVRHandler)
     print(f"DVR proxy listening on port {LISTEN_PORT}", flush=True)
     server.serve_forever()
 
