@@ -120,7 +120,8 @@ function MSEFeed({ stream }: { stream: string }) {
           // Priority 1: append queued data
           if (queue.length > 0) {
             try {
-              sb.appendBuffer(queue.shift()!);
+              const chunk = queue.shift()!;
+              sb.appendBuffer(chunk.buffer as ArrayBuffer);
             } catch {
               // QuotaExceededError — force a trim next cycle
               trimPending = true;
@@ -168,7 +169,7 @@ function MSEFeed({ stream }: { stream: string }) {
             queue.push(value);
           } else {
             try {
-              sb.appendBuffer(value);
+              sb.appendBuffer(value.buffer as ArrayBuffer);
             } catch {
               queue.push(value);
             }
@@ -455,7 +456,8 @@ function PlaybackFeed({
 
         const drain = () => {
           if (queue.length > 0 && !sb.updating && ms.readyState === 'open') {
-            sb.appendBuffer(queue.shift()!);
+            const chunk = queue.shift()!;
+            sb.appendBuffer(chunk.buffer as ArrayBuffer);
           }
         };
         sb.addEventListener('updateend', drain);
@@ -469,7 +471,7 @@ function PlaybackFeed({
           if (sb.updating || queue.length > 0) {
             queue.push(value);
           } else {
-            sb.appendBuffer(value);
+            sb.appendBuffer(value.buffer as ArrayBuffer);
           }
 
           // Start playback once we have some data buffered
