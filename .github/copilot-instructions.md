@@ -58,7 +58,7 @@ entertainment, and safety subsystems for full-time van life.
 | **Olins Van BMS** | Battery management — SOC, voltage, current, temperature, cycles, stored energy | BLE via `bms_ble` custom component |
 | **Victron MPPT** (×2) | Solar charge controllers (MPPT1 & MPPT2) — PV power, output voltage/current, yield | BLE via `victron_ble` ESPHome component |
 | **Pro Check F317** | Propane tank ultrasonic level sensor | BLE |
-| **Lorex D231A41B** | 4-channel 1080p DVR (security cameras) — RTSP streams, H.265 main / H.264 sub | go2rtc (WebRTC) via generic camera |
+| **Lorex D231A41B** | 4-channel 1080p DVR (security cameras) — RTSP streams, H.264 main / H.264 sub | go2rtc (MSE) via dvr_proxy |
 | **Kidde HomeSafe** | CO/smoke detection | `kidde_homesafe` custom component |
 | **Zigbee2MQTT** | Zigbee device gateway | MQTT bridge |
 | **VLC Telnet** | Media player for TTS and audio | Media player integration |
@@ -819,6 +819,7 @@ Used in `old_home.yaml`:
 | Inverter pending clear | Clear pending flag when ping state changes |
 | Bootstrap ducking / Scream | Start audio ducking + Scream receiver on HA boot |
 | `syncthing_start_on_boot` | Start Syncthing daemon 30s after HA boot |
+| `dvr_proxy_start_on_boot` | Start DVR camera proxy daemon 40s after HA boot |
 
 ---
 
@@ -841,9 +842,6 @@ Used in `old_home.yaml`:
   commanded AFR instead of fixed 14.7. Overestimates at idle, most accurate at cruise.
   MAF (0x10, `22F410`), fuel rate (`22F49D`, 0x5E), and MAP (0x0B) via standard OBD all
   don't work.
-- **Jinja2 pipe + math precedence**: `states(x) | float(0) * N` parses as `float(0 * N)`.
-  Always use parentheses: `(states(x) | float(0)) * N`. Same for `* N | round(M)` →
-  use `(expr * N) | round(M)`.
 - **Jinja2 pipe + math precedence**: `states(x) | float(0) * N` parses as `float(0 * N)`.
   Always use parentheses: `(states(x) | float(0)) * N`. Same for `* N | round(M)` →
   use `(expr * N) | round(M)`.
@@ -1137,7 +1135,7 @@ react-dashboard/
       Climate.tsx          # Thermostat, heating controls, fan, temperatures
       Water.tsx            # Tank levels, propane, water controls
       Van.tsx              # Fuel, tire pressure, OBD data, GPS
-      Cameras.tsx          # 4-camera WebRTC grid (always mounted, see note below)
+      Cameras.tsx          # 4-camera MSE grid (always mounted, see note below)
       System.tsx           # Connectivity, device status, system info
     components/
       BatteryCard.tsx      # SOC gauge, power flow, charge estimate
@@ -1191,14 +1189,41 @@ const forecast = useWeatherForecast('weather.pirateweather', 'daily');
 
 ### Cache Busting
 
-Two-layer cache busting system:
-1. `panel-loader.js` has `CACHE_VER = 'vN'` — appended to JS/CSS imports
-2. `configuration.yaml` has `module_url: .../panel-loader.js?v=N` — forces HA to reload the loader
+`panel-loader.js` uses `CACHE_VER = Date.now()` — JS/CSS imports get a unique timestamp on
+every page load, so no manual version bumping is needed for the bundle. The `configuration.yaml`
+`module_url` still has `?v=N` to force HA to reload the loader itself — only bump this when
+`panel-loader.js` changes.
 
-**Both must be bumped** when deploying changes. After bumping `configuration.yaml`, HA must be restarted.
+### Prerequisites (Building the Dashboard)
+
+Node.js is required to build the React dashboard. Install via **fnm** (Fast Node Manager):
+
+```powershell
+# Install fnm (one-time)
+winget install Schniz.fnm
+
+# Install Node.js LTS (one-time, after restarting shell)
+fnm install --lts
+fnm use lts-latest
+
+# Install dashboard dependencies (one-time, or after package.json changes)
+cd react-dashboard
+npm install
+```
+
+| Machine | Node.js | fnm | Notes |
+|---|---|---|---|
+| **Asylum** | ❓ Unknown | ❓ Unknown | May need setup |
+| **Satellite** | v24.14.1 | v1.39.0 | Installed 2025-04-12 via winget |
 
 ### Deploy Workflow
 
+**Quick deploy** (builds + deploys JS, CSS, and panel-loader.js in one command):
+```bash
+cd react-dashboard && bash deploy.sh
+```
+
+**Manual deploy** (if `deploy.sh` doesn't work or for partial deploys):
 ```bash
 # 1. Build
 cd react-dashboard && npm run build
@@ -1220,11 +1245,17 @@ curl -X POST "http://100.80.15.86:8123/api/services/homeassistant/restart" \
   -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json"
 ```
 
+**Prerequisites** (must be in place on any machine that deploys):
+- **SSH key**: `~/.ssh/id_ed25519` must be authorized on HA (user `hassio@100.80.15.86`)
+- **Node.js + npm**: Required for `npm run build` (Vite build)
+- **Tailscale**: HA is only reachable at `100.80.15.86` over Tailscale VPN
+- After deploy, **hard-refresh the browser** (Ctrl+Shift+R) to load new JS/CSS
+
 ### Current Versions
 
 | File | Version |
 |---|---|
-| `panel-loader.js` CACHE_VER | `v10` |
+| `panel-loader.js` CACHE_VER | `Date.now()` (automatic) |
 | `configuration.yaml` ?v= | `9` |
 
 ### CSS Scoping
@@ -1238,11 +1269,11 @@ absolute-positioned overlays (like the history dialog modal) stay within the pan
 
 The `Cameras` page is **always mounted** regardless of which tab is active. When the user
 navigates away from the Cameras tab, it renders with `className="hidden"` instead of
-unmounting. This preserves the 4 WebRTC peer connections across tab switches.
+unmounting. This preserves the 4 MSE streaming connections across tab switches.
 
 In `App.tsx`:
 ```tsx
-{/* Cameras always mounted — hidden when not active to preserve WebRTC */}
+{/* Cameras always mounted — hidden when not active to preserve MSE streams */}
 <div className={page === 'cameras' ? '' : 'hidden'}>
   <Cameras />
 </div>
@@ -1251,64 +1282,90 @@ In `App.tsx`:
 
 Within `Cameras.tsx`, all 4 camera cells are always rendered. When a single camera is
 expanded, the other 3 use `className="hidden"` — they are never unmounted. This prevents
-WebRTC renegotiation when switching between grid and single-camera views.
+stream reconnection when switching between grid and single-camera views.
 
 **Rule**: If you add another component that holds long-lived connections (WebSocket streams,
-WebRTC, etc.), follow the same pattern — keep it mounted and use CSS `hidden` to toggle
+MSE streams, etc.), follow the same pattern — keep it mounted and use CSS `hidden` to toggle
 visibility instead of conditional rendering.
 
 ---
 
-## Security Cameras — Lorex DVR + go2rtc WebRTC
+## Security Cameras — Lorex DVR + go2rtc + MSE Streaming
 
 The van has a **Lorex D231A41B** 4-channel 1080p DVR connected via ethernet to the MoFi
-router. Live video is streamed to the React dashboard via **go2rtc's WebRTC** bridge.
+router. Live video is streamed to the React dashboard via **MSE (Media Source Extensions)
+over HTTP (TCP)**, proxied through `dvr_proxy.py` → go2rtc → RTSP → DVR.
 
 ### DVR Details
 
 | Setting | Value |
 |---|---|
-| **Model** | Lorex D231A41B (4-channel, 1TB HDD) |
+| **Model** | Lorex D231A41B (Dahua XVR5104C-X1, 4-channel, 1TB HDD) |
 | **IP** | `192.168.10.156` |
 | **RTSP port** | 554 |
 | **Credentials** | `admin` / `***REDACTED***` |
-| **Main stream** (`subtype=0`) | H.265 (HEVC), 960×480 — **NOT WebRTC compatible** |
-| **Sub stream** (`subtype=1`) | H.264, 704×480 — **used for WebRTC** |
-| **RTSP URL format** | `rtsp://admin:PASSWORD@192.168.10.156:554/cam/realmonitor?channel=N&subtype=1` |
+| **Main stream** (`subtype=0`) | H.264 High, 960×480, 30fps, 768kbps VBR |
+| **Sub stream** (`subtype=1`) | H.264, 704×480, 15fps, 512kbps CBR |
+| **RTSP URL format** | `rtsp://admin:PASSWORD@192.168.10.156:554/cam/realmonitor?channel=N&subtype=S` |
 
-### go2rtc Integration
+### Streaming Architecture
 
-`go2rtc:` must be present in `configuration.yaml` (or `default_config:` must be used).
-Without it, the go2rtc binary runs but the HA Python integration that registers it as a
-WebRTC provider never loads — cameras will only report HLS support.
+```
+Browser (MSEFeed)  ──HTTP/TCP──►  dvr_proxy:8766  ──HTTP──►  go2rtc:1984  ──RTSP──►  DVR:554
+   /api/mse?src=channel_N           (proxy)        /api/stream.mp4          (H.264)
+```
+
+**Why MSE over HTTP instead of WebRTC?**
+- WebRTC uses UDP — WiFi jitter caused frequent stalls/freezes on all 4 channels
+- MSE over HTTP uses TCP — eliminates packet loss, rock-solid delivery
+- ~1s latency vs ~0.3s WebRTC — fine for security cameras
+- go2rtc's `/api/stream.mp4` outputs fMP4 (fragmented MP4) — MSE appends fragments as they arrive
+
+### go2rtc Configuration
+
+`go2rtc:` must be present in `configuration.yaml` to load the HA go2rtc integration.
 
 | File | Purpose |
 |---|---|
 | `configuration.yaml` → `go2rtc:` | Triggers HA to load the go2rtc integration |
-| `/config/go2rtc.yaml` | go2rtc stream definitions (4 channels, `subtype=1`) |
+| `/config/go2rtc.yaml` | Stream definitions: 4 main (`channel_1-4`, subtype=0) + 4 sub (`channel_1-4_sub`, subtype=1) |
 | go2rtc API | `http://localhost:1984/api/streams` (on HA host) |
+| go2rtc MSE endpoint | `http://localhost:1984/api/stream.mp4?src=channel_N` |
 
-### How WebRTC Streaming Works
+### dvr_proxy.py
 
-1. **Browser** (React `WebRTCFeed` component) creates an `RTCPeerConnection`
-2. Sends SDP offer via HA WebSocket: `camera/webrtc/offer`
-3. **HA go2rtc integration** receives the offer, lazily registers the stream in go2rtc
-   (stream name = `camera.entity_id`, URL from camera entity's `stream_source`)
-4. For generic cameras, HA prepends `ffmpeg:` to the RTSP URL before registering
-5. **go2rtc** connects to DVR via RTSP, transcodes/remuxes to WebRTC
-6. SDP answer + ICE candidates flow back through HA WebSocket
-7. Browser receives near-zero-latency video via WebRTC
+Python HTTP server running on port **8766** inside the HA container. Proxies go2rtc's MSE
+stream to the browser (since go2rtc's `local_auth: true` blocks external CORS requests).
+Also serves the DVR playback/recording API on port **8767**.
+
+| Endpoint | Method | Purpose |
+|---|---|---|
+| `/api/mse?src=channel_N` | GET | Proxies go2rtc `/api/stream.mp4` — long-lived streaming response |
+| `/api/webrtc` | POST | Legacy WebRTC signaling (still functional, no longer used by frontend) |
+| Port 8767 | GET | RTSP Scale proxy for DVR playback |
+
+**Auto-start**: `shell_command.start_dvr_proxy` + automation `dvr_proxy_start_on_boot` (40s delay).
+The proxy's `ensure_dvrip_streams()` also re-registers all streams in go2rtc via API on startup
+as a fallback in case `go2rtc.yaml` wasn't loaded.
+
+### MSEFeed Component (Cameras.tsx)
+
+The `MSEFeed` React component handles live streaming:
+- Fetches `/api/mse?src=channel_N` via `fetch()` → `ReadableStream`
+- Creates `MediaSource` → `SourceBuffer`, pumps fMP4 chunks into it
+- **Buffer management**: Single `updateend` handler, drain queue before trim, trim on 10s interval (keeps last 20s, trims at 60s)
+- **Live edge seeking**: Every 3s, if playback falls >3s behind buffer edge, seeks forward
+- **Stall watchdog**: 3 consecutive 3s checks without `currentTime` advancing → force reconnect
+- **Auto-reconnect**: Exponential backoff (2s → 30s cap) with per-channel stagger
+- **Quality toggle**: SD (sub-stream, 15fps) / HD (main stream, 30fps) — defaults to HD
 
 ### Critical Notes
 
-- **H.265 causes black video** in WebRTC — browsers only support H.264. Always use
-  `subtype=1` (sub stream) for the camera entities and go2rtc.yaml.
-- **Lazy stream registration**: go2rtc streams are created on-demand when a camera is
-  first accessed via WebRTC. The go2rtc.yaml streams are separate from what HA registers.
+- **Both streams are H.264** — main was changed from H.265 to H.264 on the DVR for MSE/WebRTC compatibility.
+- **go2rtc.yaml has 8 streams**: `channel_1-4` (main, subtype=0) + `channel_1-4_sub` (sub, subtype=1).
+- **Buffer trim was the cause of 30s stalls** — the old code had two competing `updateend`
+  listeners that corrupted the SourceBuffer. Fixed with a single unified handler.
 - **Camera entity stream_source** (in `.storage/core.config_entries` under `options`)
-  must match the go2rtc.yaml `subtype=1` URLs.
-- **Generic camera config entries** for channels 2-4 previously had extra `username`/
-  `password` fields and URL-encoded `%21` — these were cleaned up. All 4 should use
-  identical URL patterns with unencoded `!` and no separate auth fields.
+  must match the go2rtc.yaml URLs.
 - **go2rtc config entry** is auto-created with `source: "system"` after restart when
   `go2rtc:` is in configuration.yaml.

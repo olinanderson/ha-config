@@ -55,15 +55,20 @@ function MSEFeed({ stream }: { stream: string }) {
     const video = videoRef.current;
 
     let cancelled = false;
+    let reconnecting = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
-    let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     let objectUrl: string | null = null;
+    const abortCtrl = new AbortController();
 
     function scheduleReconnect() {
-      if (cancelled) return;
+      if (cancelled || reconnecting) return;
+      reconnecting = true;
+      // Abort the fetch to fully close the TCP connection / RTSP session in go2rtc
+      abortCtrl.abort();
       const stagger = (stream.charCodeAt(stream.length - 1) % 4) * 500;
       const base = Math.min(2000 * Math.pow(2, retryCountRef.current), 30000);
       retryCountRef.current++;
+      console.log(`[${stream}] Reconnecting in ${((base + stagger) / 1000).toFixed(1)}s (attempt ${retryCountRef.current})`);
       reconnectTimer = setTimeout(() => {
         if (!cancelled) {
           setState('connecting');
@@ -76,6 +81,7 @@ function MSEFeed({ stream }: { stream: string }) {
       try {
         const resp = await fetch(
           `${DVR_PROXY}/api/mse?src=${encodeURIComponent(stream)}`,
+          { signal: abortCtrl.signal },
         );
         if (cancelled) return;
         if (!resp.ok || !resp.body) {
@@ -107,7 +113,7 @@ function MSEFeed({ stream }: { stream: string }) {
         if (cancelled) return;
 
         const sb = ms.addSourceBuffer(mimeType);
-        reader = resp.body.getReader();
+        const reader = resp.body.getReader();
 
         // --- Single unified updateend handler ---
         // Priority: 1) drain queued chunks, 2) trim old buffer
@@ -161,7 +167,7 @@ function MSEFeed({ stream }: { stream: string }) {
 
         // Pump fetch stream → SourceBuffer
         let started = false;
-        while (!cancelled) {
+        while (!cancelled && !reconnecting) {
           const { done, value } = await reader.read();
           if (done || !value) break;
 
@@ -189,7 +195,9 @@ function MSEFeed({ stream }: { stream: string }) {
           scheduleReconnect();
         }
       } catch (err) {
-        if (!cancelled) {
+        if (!cancelled && !reconnecting) {
+          // Don't log AbortError — that's us intentionally killing the fetch
+          if (err instanceof DOMException && err.name === 'AbortError') return;
           console.error(`[${stream}] MSE error:`, err);
           setState('connecting');
           scheduleReconnect();
@@ -217,8 +225,9 @@ function MSEFeed({ stream }: { stream: string }) {
     // Live edge seeker + stall watchdog (every 3s)
     let lastTime = -1;
     let stallCount = 0;
+    let stallStartTime = 0;
     const watchdog = setInterval(() => {
-      if (cancelled) return;
+      if (cancelled || reconnecting) return;
 
       // Seek to live edge if playback falls behind
       if (video.buffered.length > 0) {
@@ -231,11 +240,12 @@ function MSEFeed({ stream }: { stream: string }) {
       // Stall detection
       const t = video.currentTime;
       if (lastTime >= 0 && t === lastTime && t > 0) {
+        if (stallCount === 0) stallStartTime = Date.now();
         stallCount++;
         if (stallCount >= 3) {
-          console.warn(`[${stream}] Stall detected (${t.toFixed(1)}s stuck), reconnecting`);
+          const stuckFor = ((Date.now() - stallStartTime) / 1000).toFixed(0);
+          console.warn(`[${stream}] Stall detected (stuck ${stuckFor}s at ${t.toFixed(1)}s), reconnecting`);
           stallCount = 0;
-          reader?.cancel().catch(() => {});
           setState('connecting');
           scheduleReconnect();
         }
@@ -249,11 +259,11 @@ function MSEFeed({ stream }: { stream: string }) {
 
     return () => {
       cancelled = true;
+      abortCtrl.abort();
       clearTimeout(reconnectTimer);
       clearInterval(watchdog);
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('error', onError);
-      reader?.cancel().catch(() => {});
       video.pause();
       video.removeAttribute('src');
       video.load();

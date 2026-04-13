@@ -86,8 +86,9 @@ function FuelCard() {
   const { value: stable } = useEntityNumeric('sensor.stable_fuel_level');
   const { value: raw } = useEntityNumeric('sensor.192_168_10_90_2f_fueltanklevel');
   const { value: mean5 } = useEntityNumeric('sensor.wican_fuel_5_min_mean');
-  const { value: economy } = useEntityNumeric('sensor.fuel_consumption_l_100km');
-  const { value: rate } = useEntityNumeric('sensor.fuel_consumption_l_h');
+  const { value: economy } = useEntityNumeric('sensor.estimated_fuel_consumption');
+  const { value: rate } = useEntityNumeric('sensor.estimated_fuel_rate');
+  const { value: speed } = useEntityNumeric('sensor.192_168_10_90_0d_vehiclespeed');
 
   const { data: fuelHistory } = useHistory('sensor.stable_fuel_level', 24);
   const { open: openFuel } = useHistoryDialog();
@@ -96,6 +97,7 @@ function FuelCard() {
   const stableNum = stable ?? 0;
   const fuelColor =
     stableNum < 15 ? 'text-red-500' : stableNum < 30 ? 'text-orange-500' : 'text-green-500';
+  const economyDisplay = (speed ?? 0) > 5 ? fmt(economy, 1) : '—';
 
   return (
     <Card>
@@ -115,8 +117,8 @@ function FuelCard() {
         <SparklineStat entityId="sensor.stable_fuel_level" label="Estimated" value={fmt(tankLiters, 1)} unit="L" color="#22c55e" />
         <SparklineStat entityId="sensor.wican_fuel_5_min_mean" label="5min Mean" value={fmt(mean5, 0)} unit="%" color="#3b82f6" />
         <SparklineStat entityId="sensor.192_168_10_90_2f_fueltanklevel" label="Raw OBD" value={fmt(raw, 0)} unit="%" color="#64748b" />
-        {(economy ?? 0) > 0 && <SparklineStat entityId="sensor.fuel_consumption_l_100km" label="Economy" value={fmt(economy, 1)} unit="L/100km" color="#8b5cf6" />}
-        {(rate ?? 0) > 0 && <SparklineStat entityId="sensor.fuel_consumption_l_h" label="Rate" value={fmt(rate, 1)} unit="L/h" color="#f59e0b" />}
+        {(rate ?? 0) > 0 && <SparklineStat entityId="sensor.estimated_fuel_rate" label="Rate" value={fmt(rate, 1)} unit="L/h" color="#f59e0b" />}
+        {(rate ?? 0) > 0 && <SparklineStat entityId="sensor.estimated_fuel_consumption" label="Economy" value={economyDisplay} unit="L/100km" color="#8b5cf6" />}
       </CardContent>
     </Card>
   );
@@ -216,6 +218,10 @@ function DiagnosticsCard() {
   const { value: intakeAir } = useEntityNumeric('sensor.192_168_10_90_intake_air_tmp');
   const { value: ambientAir } = useEntityNumeric('sensor.192_168_10_90_46_ambientairtemp');
   const { value: fuelPressure } = useEntityNumeric('sensor.192_168_10_90_fuel_pressure');
+  const { value: mapKpa } = useEntityNumeric('sensor.192_168_10_90_map');
+  const { value: injPw } = useEntityNumeric('sensor.injector_pulse_width_ms');
+  const { value: fuelTrim } = useEntityNumeric('sensor.average_fuel_trim');
+  const { value: afr } = useEntityNumeric('sensor.commanded_afr');
   const cel = useEntity('binary_sensor.check_engine_light');
   const { value: dtcCount } = useEntityNumeric('sensor.dtc_count');
   const isCel = cel?.state === 'on';
@@ -240,6 +246,10 @@ function DiagnosticsCard() {
         <SparklineStat entityId="sensor.192_168_10_90_intake_air_tmp" label="Intake Air" value={fmt(intakeAir, 0)} unit="°C" color="#06b6d4" />
         <SparklineStat entityId="sensor.192_168_10_90_46_ambientairtemp" label="Ambient Air" value={fmt(ambientAir, 0)} unit="°C" color="#3b82f6" />
         <SparklineStat entityId="sensor.192_168_10_90_fuel_pressure" label="Fuel Pressure" value={fmt(fuelPressure, 0)} unit="kPa" color="#8b5cf6" />
+        <SparklineStat entityId="sensor.192_168_10_90_map" label="MAP" value={fmt(mapKpa, 0)} unit="kPa" color="#14b8a6" />
+        <SparklineStat entityId="sensor.injector_pulse_width_ms" label="Injector PW" value={fmt(injPw, 2)} unit="ms" color="#e879f9" />
+        <SparklineStat entityId="sensor.average_fuel_trim" label="Fuel Trim" value={fmt(fuelTrim, 1)} unit="%" color="#fb923c" />
+        <SparklineStat entityId="sensor.commanded_afr" label="AFR" value={fmt(afr, 1)} unit=":1" color="#a78bfa" />
       </CardContent>
     </Card>
   );

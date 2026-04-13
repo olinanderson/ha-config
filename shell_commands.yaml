@@ -27,7 +27,7 @@ start_osrm_proxy: >
   /bin/sh -c 'PROXY_PID=$(ps aux | awk '\''/osrm_proxy/{print $1}'\''); if [ -z "$PROXY_PID" ]; then
     python3 -c "import subprocess; subprocess.Popen([\"python3\",\"/config/www/vanlife-panel/osrm_proxy.py\"],
       stdout=open(\"/config/www/vanlife-panel/osrm_proxy.log\",\"w\"),
-      stderr=__import__(\"subprocess\").STDOUT, close_fds=True)";
+      stderr=__import__(\"subprocess\").STDOUT, close_fds=True, start_new_session=True)";
     echo "Routing proxy started";
   else
     echo "Routing proxy already running (PID $PROXY_PID)";
@@ -52,7 +52,7 @@ start_gps_filter: >
     if [ -z "$TOKEN" ]; then echo "No token file at /config/.gps_filter_token"; exit 1; fi;
     python3 -c "import subprocess; subprocess.Popen([\"python3\",\"/config/www/vanlife-panel/gps_filter.py\",\"--token\",\"$TOKEN\"],
       stdout=open(\"/config/www/vanlife-panel/gps_filter.log\",\"a\"),
-      stderr=__import__(\"subprocess\").STDOUT, close_fds=True)";
+      stderr=__import__(\"subprocess\").STDOUT, close_fds=True, start_new_session=True)";
     echo "GPS filter daemon started";
   else
     echo "GPS filter daemon already running";
@@ -63,7 +63,7 @@ start_dvr_proxy: >
   /bin/sh -c 'if ! pgrep -f "dvr_proxy.py" > /dev/null 2>&1; then
     python3 -c "import subprocess; subprocess.Popen([\"python3\",\"/config/www/react-dashboard/dvr_proxy.py\"],
       stdout=open(\"/config/www/react-dashboard/dvr_proxy.log\",\"w\"),
-      stderr=__import__(\"subprocess\").STDOUT, close_fds=True)";
+      stderr=__import__(\"subprocess\").STDOUT, close_fds=True, start_new_session=True)";
     echo "DVR proxy started";
   else
     echo "DVR proxy already running";
