@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, type ComponentType } from 'react';
 import { HassProvider, useHassStore } from '@/context/HomeAssistantContext';
 import { HistoryDialogProvider } from '@/components/EntityHistoryDialog';
+import { PortalProvider } from '@/context/PortalContext';
 import { cn } from '@/lib/utils';
 import {
   Home as HomeIcon,
@@ -10,6 +11,7 @@ import {
   Truck,
   Settings,
   Camera,
+  Map,
   type LucideIcon,
 } from 'lucide-react';
 import Home from '@/pages/Home';
@@ -19,6 +21,7 @@ import Water from '@/pages/Water';
 import Van from '@/pages/Van';
 import System from '@/pages/System';
 import Cameras from '@/pages/Cameras';
+import VanlifeMap from '@/pages/VanlifeMap';
 
 const pages: Record<string, ComponentType> = {
   home: Home,
@@ -28,6 +31,7 @@ const pages: Record<string, ComponentType> = {
   van: Van,
   system: System,
   cameras: Cameras,
+  map: VanlifeMap,
 };
 
 interface NavItem {
@@ -43,6 +47,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'water', label: 'Water', icon: Droplets },
   { id: 'van', label: 'Van', icon: Truck },
   { id: 'cameras', label: 'Cameras', icon: Camera },
+  { id: 'map', label: 'Map', icon: Map },
   { id: 'system', label: 'System', icon: Settings },
 ];
 
@@ -114,6 +119,7 @@ export default function App() {
     <HassProvider>
       <AutoVanNav navigate={navigate} />
       <div className={`van-dash-root ${isDark ? 'dark' : ''}`} style={{ position: 'relative' }}>
+        <PortalProvider>
         <HistoryDialogProvider>
         <div className="h-screen flex flex-col bg-background text-foreground">
           {/* Tab navbar */}
@@ -137,7 +143,7 @@ export default function App() {
             </div>
           </nav>
           {/* Page content */}
-          <div className="flex-1 overflow-auto">
+          <div className={`flex-1 ${page === 'map' ? 'overflow-hidden' : 'overflow-auto'}`}>
             {/* Cameras always mounted — hidden when not active to preserve WebRTC */}
             <div className={page === 'cameras' ? '' : 'hidden'}>
               <Cameras />
@@ -146,6 +152,7 @@ export default function App() {
           </div>
         </div>
         </HistoryDialogProvider>
+        </PortalProvider>
       </div>
     </HassProvider>
   );
