@@ -482,6 +482,12 @@ The WiCAN Pro connects via **HTTP webhooks** (not MQTT). All entities are create
 | Entity | PID | Expression | Description |
 |---|---|---|---|
 | `sensor.192_168_10_90_map` | `22F404` | `[B4:B5]/256` | Manifold Absolute Pressure (kPa) — Ford Mode 22; enables speed-density fuel calculation |
+| `sensor.192_168_10_90_stft_b1` | `0x06` | standard | Short-term fuel trim Bank 1 (%) |
+| `sensor.192_168_10_90_ltft_b1` | `0x07` | standard | Long-term fuel trim Bank 1 (%) |
+| `sensor.192_168_10_90_stft_b2` | `0x08` | standard | Short-term fuel trim Bank 2 (%) |
+| `sensor.192_168_10_90_ltft_b2` | `0x09` | standard | Long-term fuel trim Bank 2 (%) |
+| `sensor.192_168_10_90_lambda` | `0x44` | standard | Commanded equivalence ratio (lambda); 1.0 = stoich, <1 = rich, >1 = lean |
+| `sensor.192_168_10_90_inj_pw` | `22F44A` | `[B4:B5]` | Injector pulse width Bank 1 (raw µs; divide by 1000 for ms). Idle ~5000–6000 |
 
 **NOT supported by this ECU** (tested, returns "no positive response" or "NO DATA"):
 - `FUEL_RATE` (Mode 22, PID 22F49D) — fuel consumption rate
@@ -490,6 +496,8 @@ The WiCAN Pro connects via **HTTP webhooks** (not MQTT). All entities are create
 - Standard PID 0x0B (MAP) — not exposed via standard OBD (but Ford Mode 22 `22F404` **works**)
 - Standard PID 0x5E (Engine Fuel Rate) — NO DATA
 - Ford Mode 22 MAF (`22F410`) — no positive response
+- Ford Mode 22 IPW Bank 2 (`22F44B`) — no positive response (V6 uses shared injection timing)
+- Ford Mode 22 Barometric Pressure (`22F402`) — no positive response
 
 **WiCAN device entities:**
 | Entity | Description |
@@ -510,8 +518,11 @@ The WiCAN Pro connects via **HTTP webhooks** (not MQTT). All entities are create
 | `sensor.gear_display` | Gear as text: Park/Reverse/Neutral/1-6 |
 | `sensor.tire_pressure_min` | Min tire pressure across all 4 (psi, with kPa÷2 correction) |
 | `sensor.dtc_count` | Number of active DTCs (from PID 0x01) |
-| `sensor.estimated_fuel_rate` | Speed-density fuel rate (L/h) from MAP × RPM × IAT × VE |
+| `sensor.estimated_fuel_rate` | Speed-density fuel rate (L/h) — MAP × RPM × IAT × VE with 3 corrections: RPM-based VE curve, fuel trim avg, lambda AFR. Attributes: map_kpa, ve_base, rpm, ve_effective, fuel_trim_avg, lambda |
 | `sensor.estimated_fuel_consumption` | Fuel economy (L/100km) — only when speed > 5 km/h |
+| `sensor.injector_pulse_width_ms` | Injector pulse width (ms) — raw WiCAN µs ÷ 1000. Idle ~5 ms |
+| `sensor.average_fuel_trim` | Averaged fuel trim across both banks: (STFT+LTFT B1 + STFT+LTFT B2) / 2. Attributes: per-bank breakdowns |
+| `sensor.commanded_afr` | Commanded air-fuel ratio (14.7 × lambda). Falls back to 14.7 if lambda unavailable |
 | `binary_sensor.check_engine_light` | MIL/CEL on/off (from PID 0x01 bit 7 ≥ 128) |
 | `binary_sensor.low_tire_pressure` | Any tire < 35 psi (has fl/fr/rl/rr_psi attributes) |
 
@@ -825,8 +836,14 @@ Used in `old_home.yaml`:
 - **Fuel consumption uses speed-density estimation** — via Ford Mode 22 MAP PID (`22F404`)
   combined with RPM + IAT. The formula uses a volumetric efficiency (VE) correction factor
   (`input_number.fuel_ve_correction`, default 0.55) that should be calibrated against
-  fill-to-fill measurements. Overestimates at idle, most accurate at cruise. MAF (0x10,
-  `22F410`), fuel rate (`22F49D`, 0x5E), and MAP (0x0B) via standard OBD all don't work.
+  fill-to-fill measurements. Three correction layers: (1) RPM-based VE curve (0.60× at idle
+  → 1.0× at 3000+ RPM), (2) fuel trim averaging across both banks, (3) lambda-based
+  commanded AFR instead of fixed 14.7. Overestimates at idle, most accurate at cruise.
+  MAF (0x10, `22F410`), fuel rate (`22F49D`, 0x5E), and MAP (0x0B) via standard OBD all
+  don't work.
+- **Jinja2 pipe + math precedence**: `states(x) | float(0) * N` parses as `float(0 * N)`.
+  Always use parentheses: `(states(x) | float(0)) * N`. Same for `* N | round(M)` →
+  use `(expr * N) | round(M)`.
 - **Jinja2 pipe + math precedence**: `states(x) | float(0) * N` parses as `float(0 * N)`.
   Always use parentheses: `(states(x) | float(0)) * N`. Same for `* N | round(M)` →
   use `(expr * N) | round(M)`.
