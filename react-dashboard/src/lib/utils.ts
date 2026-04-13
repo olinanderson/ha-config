@@ -56,7 +56,7 @@ export function batteryEstimate(
   capacity = 8700,
 ): string {
   if (current == null || power == null || stored == null) return '';
-  if (Math.abs(current) < 0.5 || !Number.isFinite(power) || !Number.isFinite(stored)) return '';
+  if (Math.abs(current) < 0.1 || !Number.isFinite(power) || !Number.isFinite(stored)) return '';
   const hours =
     current > 0
       ? (capacity - stored) / Math.abs(power)
@@ -65,4 +65,13 @@ export function batteryEstimate(
   const h = Math.floor(hours);
   const m = Math.round((hours - h) * 60);
   return current > 0 ? `${h}h ${m}m to full` : `${h}h ${m}m left`;
+}
+
+/** Check if an entity's last_updated is within maxAgeSec seconds of now */
+export function isFresh(
+  lastUpdated: string | undefined | null,
+  maxAgeSec = 300,
+): boolean {
+  if (!lastUpdated) return false;
+  return (Date.now() - new Date(lastUpdated).getTime()) / 1000 < maxAgeSec;
 }

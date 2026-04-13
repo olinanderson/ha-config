@@ -7,21 +7,17 @@ import { Switch } from '@/components/ui/switch';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useToggle, useService } from '@/hooks/useService';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
-import { fmt, cn } from '@/lib/utils';
+import { fmt } from '@/lib/utils';
 import {
-  Wifi,
   Globe,
   BatteryLow,
   Moon,
   ShowerHead,
-  Lightbulb,
   Monitor,
   Bed,
   Flame,
   Music,
-  Satellite,
-  Wind,
-  Thermometer,
+  Loader2,
 } from 'lucide-react';
 
 function StarlinkCard() {
@@ -31,8 +27,16 @@ function StarlinkCard() {
   const { value: ulSpeed } = useEntityNumeric('sensor.speedtest_upload');
   const { value: ping } = useEntityNumeric('sensor.speedtest_ping');
   const ethernet = useEntity('binary_sensor.starlink_ethernet_speeds');
+  const speedtestRunning = useEntity('input_boolean.speedtest_running');
+  const callService = useService();
 
   const ethOk = ethernet?.state === 'off'; // off = OK
+  const isRunning = speedtestRunning?.state === 'on';
+
+  const runSpeedtest = () => {
+    if (isRunning) return;
+    callService('script', 'turn_on', undefined, { entity_id: 'script.update_speedtest' });
+  };
   const { open } = useHistoryDialog();
 
   return (
@@ -71,6 +75,20 @@ function StarlinkCard() {
             value={ethOk ? 'OK' : 'Issues'}
           />
         </div>
+        <button
+          onClick={runSpeedtest}
+          disabled={isRunning}
+          className="w-full rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed text-white text-sm font-medium py-2 px-3 flex items-center justify-center gap-2 transition-colors"
+        >
+          {isRunning ? (
+            <>
+              <Loader2 className="h-4 w-4 animate-spin" />
+              Running…
+            </>
+          ) : (
+            'Run Speedtest'
+          )}
+        </button>
       </CardContent>
     </Card>
   );
@@ -108,70 +126,6 @@ function ModesCard() {
   );
 }
 
-function LightsCard() {
-  const callService = useService();
-
-  const lights = [
-    { id: 'light.led_controller_cct_1', name: 'Main', color: true },
-    { id: 'light.led_controller_cct_2', name: 'Under Cabinet', color: true },
-    { id: 'light.led_controller_sc_1', name: 'Shower', color: false },
-    { id: 'light.led_controller_sc_2', name: 'Accent', color: false },
-  ];
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Lightbulb className="h-4 w-4" />
-          Lights
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-3">
-        {lights.map((light) => (
-          <LightRow key={light.id} entityId={light.id} name={light.name} />
-        ))}
-      </CardContent>
-    </Card>
-  );
-}
-
-function LightRow({ entityId, name }: { entityId: string; name: string }) {
-  const entity = useEntity(entityId);
-  const toggle = useToggle(entityId);
-  const callService = useService();
-  const isOn = entity?.state === 'on';
-  const brightness = entity?.attributes?.brightness ?? 0;
-  const pct = Math.round((brightness / 255) * 100);
-
-  return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between">
-        <span className="text-sm">{name}</span>
-        <div className="flex items-center gap-2">
-          {isOn && <span className="text-xs text-muted-foreground tabular-nums">{pct}%</span>}
-          <Switch checked={isOn} onCheckedChange={toggle} />
-        </div>
-      </div>
-      {isOn && (
-        <input
-          type="range"
-          min={0}
-          max={100}
-          value={pct}
-          onChange={(e) =>
-            callService('light', 'turn_on', { brightness_pct: Number(e.target.value) }, {
-              entity_id: entityId,
-            })
-          }
-          className="w-full h-1.5 rounded-full appearance-none cursor-pointer bg-secondary
-            [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4
-            [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-primary"
-        />
-      )}
-    </div>
-  );
-}
-
 function SwitchesCard() {
   return (
     <Card>
@@ -204,43 +158,11 @@ function SwitchesCard() {
             icon={Flame}
             activeColor="red"
           />
-          <ToggleButton
-            entityId="switch.a32_pro_switch26_starlink_power_supply"
-            name="Starlink"
-            icon={Satellite}
-            activeColor="blue"
-          />
-          <ToggleButton
-            entityId="switch.a32_pro_air_fryer_ventilation_enable"
-            name="Air Fryer Vent"
-            icon={Wind}
-            activeColor="cyan"
-          />
         </div>
       </CardContent>
     </Card>
   );
 }
-
-function AirFryerCard() {
-  const { value: temp } = useEntityNumeric('sensor.a32_pro_s5140_channel_37_temperature_air_fryer_compartment');
-
-  return (
-    <Card>
-      <CardContent className="pt-4">
-        <SparklineStat
-          entityId="sensor.a32_pro_s5140_channel_37_temperature_air_fryer_compartment"
-          label="Air Fryer Compartment"
-          value={fmt(temp, 1)}
-          unit="°C"
-          icon={Thermometer}
-          color="#f97316"
-        />
-      </CardContent>
-    </Card>
-  );
-}
-
 function AudioCard() {
   const audioStream = useEntity('input_boolean.windows_audio_stream');
   const toggleAudio = useToggle('input_boolean.windows_audio_stream');
@@ -266,15 +188,11 @@ export default function System() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="space-y-4">
           <StarlinkCard />
-          <AirFryerCard />
           <AudioCard />
         </div>
         <div className="space-y-4">
           <ModesCard />
           <SwitchesCard />
-        </div>
-        <div className="space-y-4">
-          <LightsCard />
         </div>
       </div>
     </PageContainer>

@@ -1,5 +1,4 @@
 import { PageContainer } from '@/components/layout/PageContainer';
-import { ClimateCard } from '@/components/ClimateCard';
 import { HeatingControls } from '@/components/HeatingControls';
 import { TemperatureCard } from '@/components/TemperatureCard';
 import { FanControl } from '@/components/FanControl';
@@ -9,7 +8,7 @@ import { Switch } from '@/components/ui/switch';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useToggle } from '@/hooks/useService';
 import { fmt } from '@/lib/utils';
-import { Thermometer, ToggleLeft, Battery } from 'lucide-react';
+import { Thermometer, ToggleLeft, Battery, Wind } from 'lucide-react';
 
 const zones = [
   {
@@ -89,13 +88,40 @@ function BlowerModeCard() {
   );
 }
 
+function AirFryerCard() {
+  const { value: temp } = useEntityNumeric('sensor.a32_pro_s5140_channel_37_temperature_air_fryer_compartment');
+  const vent = useEntity('switch.a32_pro_air_fryer_ventilation_enable');
+  const toggleVent = useToggle('switch.a32_pro_air_fryer_ventilation_enable');
+
+  return (
+    <Card>
+      <CardContent className="pt-4 space-y-2">
+        <SparklineStat
+          entityId="sensor.a32_pro_s5140_channel_37_temperature_air_fryer_compartment"
+          label="Air Fryer Compartment"
+          value={fmt(temp, 1)}
+          unit="°C"
+          icon={Thermometer}
+          color="#f97316"
+        />
+        <div className="flex items-center justify-between">
+          <span className="text-sm flex items-center gap-1.5">
+            <Wind className="h-3.5 w-3.5" />
+            Ventilation Fan
+          </span>
+          <Switch checked={vent?.state === 'on'} onCheckedChange={toggleVent} />
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
 export default function Climate() {
   return (
     <PageContainer title="Climate & Heating">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {/* Column 1: Thermostat + Heating */}
+        {/* Column 1: Heating */}
         <div className="space-y-4">
-          <ClimateCard />
           <HeatingControls />
         </div>
 
@@ -115,6 +141,7 @@ export default function Climate() {
             ))}
           </div>
           <BatteryHeaterCard />
+          <AirFryerCard />
         </div>
 
         {/* Column 3: Fan + Controls */}

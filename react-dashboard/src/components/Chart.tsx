@@ -112,13 +112,19 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
   const stateRef = useRef({ data, width });
   stateRef.current = { data, width };
 
-  // Reset zoom when data changes (e.g. time range button)
-  const dataId = data.length > 0 ? `${data[0].t}-${data[data.length - 1].t}` : '';
+  // Reset zoom only when the historical fetch range changes (time range button),
+  // NOT when live points are appended (which changes the last timestamp).
+  const dataId = data.length > 0 ? `${data[0].t}-${data.length}` : '';
   const prevDataId = useRef(dataId);
+  const prevDataLen = useRef(data.length);
   if (dataId !== prevDataId.current) {
+    // Only reset zoom if data shrank or first point changed (= new fetch), not if points were appended
+    const firstChanged = data.length > 0 && prevDataId.current !== '' && !prevDataId.current.startsWith(`${data[0].t}-`);
+    const dataShrunk = data.length < prevDataLen.current;
+    if ((firstChanged || dataShrunk) && viewRange) setViewRangeLive(null);
     prevDataId.current = dataId;
-    if (viewRange) setViewRangeLive(null);
   }
+  prevDataLen.current = data.length;
 
   // Filter data to view range
   const visibleData = useMemo(() => {

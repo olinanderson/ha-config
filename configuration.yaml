@@ -64,4 +64,5 @@ sensor: !include integrations/sensor.yaml
 
 # --- MQTT device tracker ---
 mqtt:
+  sensor: !include mqtt/sensors.yaml
   device_tracker: !include mqtt/device_tracker.yaml

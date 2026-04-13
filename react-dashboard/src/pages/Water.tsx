@@ -5,7 +5,7 @@ import { SparklineStat } from '@/components/ClickableValue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
-import { useToggle } from '@/hooks/useService';
+import { useToggle, useService } from '@/hooks/useService';
 import { fmt, cn } from '@/lib/utils';
 import { Droplets, Waves, ShowerHead, Flame, Trash2, CircleDot, Thermometer } from 'lucide-react';
 
@@ -64,6 +64,12 @@ function ValveStatus() {
   );
 }
 
+const WATER_MODES = [
+  { id: 'main', label: 'Main', entityId: 'switch.a32_pro_water_system_state_main' },
+  { id: 'recirc', label: 'Recirculating Shower', entityId: 'switch.a32_pro_water_system_state_recirculating_shower' },
+  { id: 'flush', label: 'Recirculating Flush', entityId: 'switch.a32_pro_water_system_state_recirculating_shower_flush' },
+] as const;
+
 function WaterControls() {
   const master = useEntity('switch.a32_pro_water_system_master_switch');
   const main = useEntity('switch.a32_pro_water_system_state_main');
@@ -71,9 +77,17 @@ function WaterControls() {
   const flush = useEntity('switch.a32_pro_water_system_state_recirculating_shower_flush');
 
   const toggleMaster = useToggle('switch.a32_pro_water_system_master_switch');
-  const toggleMain = useToggle('switch.a32_pro_water_system_state_main');
-  const toggleRecirc = useToggle('switch.a32_pro_water_system_state_recirculating_shower');
-  const toggleFlush = useToggle('switch.a32_pro_water_system_state_recirculating_shower_flush');
+  const callService = useService();
+
+  const masterOn = master?.state === 'on';
+  const activeMode =
+    main?.state === 'on' ? 'main' :
+    recirc?.state === 'on' ? 'recirc' :
+    flush?.state === 'on' ? 'flush' : null;
+
+  const selectMode = (entityId: string) => {
+    callService('switch', 'turn_on', undefined, { entity_id: entityId });
+  };
 
   return (
     <Card>
@@ -86,23 +100,30 @@ function WaterControls() {
       <CardContent className="space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">Master Switch</span>
-          <Switch checked={master?.state === 'on'} onCheckedChange={toggleMaster} />
+          <Switch checked={masterOn} onCheckedChange={toggleMaster} />
         </div>
-        <div className="flex items-center justify-between">
-          <span className="text-sm">Main Mode</span>
-          <Switch checked={main?.state === 'on'} onCheckedChange={toggleMain} />
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-sm flex items-center gap-1.5">
-            <ShowerHead className="h-3.5 w-3.5" />
-            Recirc Shower
-          </span>
-          <Switch checked={recirc?.state === 'on'} onCheckedChange={toggleRecirc} />
-        </div>
-        <div className="flex items-center justify-between">
-          <span className="text-sm">Recirc Flush</span>
-          <Switch checked={flush?.state === 'on'} onCheckedChange={toggleFlush} />
-        </div>
+        {masterOn && (
+          <div className="space-y-1.5">
+            <span className="text-xs text-muted-foreground">Mode</span>
+            <div className="flex flex-col gap-1.5">
+              {WATER_MODES.map((m) => (
+                <button
+                  key={m.id}
+                  onClick={() => selectMode(m.entityId)}
+                  className={cn(
+                    'flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-medium transition-colors text-left',
+                    activeMode === m.id
+                      ? 'bg-blue-500/15 text-blue-400 border border-blue-500/30'
+                      : 'bg-muted/50 text-muted-foreground border border-transparent hover:bg-muted hover:text-foreground',
+                  )}
+                >
+                  {m.id === 'recirc' && <ShowerHead className="h-3.5 w-3.5 shrink-0" />}
+                  {m.label}
+                </button>
+              ))}
+            </div>
+          </div>
+        )}
       </CardContent>
     </Card>
   );
@@ -169,10 +190,14 @@ function TankTemps() {
   const toggleGreyHeater = useToggle('switch.a32_pro_grey_water_tank_heater_enable');
   const toggleShowerHeater = useToggle('switch.a32_pro_shower_water_tank_heater_enable');
 
+  const freshThermostat = useEntity('climate.a32_pro_fresh_water_tank_thermostat');
+  const greyThermostat = useEntity('climate.a32_pro_grey_water_tank_thermostat');
+  const showerThermostat = useEntity('climate.a32_pro_shower_water_tank_thermostat');
+
   const tanks = [
-    { name: 'Fresh', temp: freshTemp, entityId: 'sensor.a32_pro_s5140_channel_38_temperature_fresh_water_tank', heater: freshHeater, toggleHeater: toggleFreshHeater },
-    { name: 'Grey', temp: greyTemp, entityId: 'sensor.a32_pro_s5140_channel_39_temperature_grey_water_tank', heater: greyHeater, toggleHeater: toggleGreyHeater },
-    { name: 'Shower', temp: showerTemp, entityId: 'sensor.a32_pro_s5140_channel_40_temperature_shower_water_tank', heater: showerHeater, toggleHeater: toggleShowerHeater },
+    { name: 'Fresh', temp: freshTemp, entityId: 'sensor.a32_pro_s5140_channel_38_temperature_fresh_water_tank', heater: freshHeater, toggleHeater: toggleFreshHeater, thermostat: freshThermostat },
+    { name: 'Grey', temp: greyTemp, entityId: 'sensor.a32_pro_s5140_channel_39_temperature_grey_water_tank', heater: greyHeater, toggleHeater: toggleGreyHeater, thermostat: greyThermostat },
+    { name: 'Shower', temp: showerTemp, entityId: 'sensor.a32_pro_s5140_channel_40_temperature_shower_water_tank', heater: showerHeater, toggleHeater: toggleShowerHeater, thermostat: showerThermostat },
   ];
 
   return (
@@ -184,25 +209,41 @@ function TankTemps() {
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-2">
-        {tanks.map((t) => (
-          <div key={t.name} className="flex items-center justify-between">
-            <SparklineStat
-              entityId={t.entityId}
-              label={t.name}
-              value={fmt(t.temp, 1)}
-              unit="°C"
-              color={t.temp != null && t.temp < 3 ? '#ef4444' : '#3b82f6'}
-              className="flex-1"
-            />
-            <div className="flex items-center gap-1.5 ml-2 shrink-0">
-              <span className="text-[10px] text-muted-foreground">Heat</span>
-              <Switch
-                checked={t.heater?.state === 'on'}
-                onCheckedChange={t.toggleHeater}
-              />
+        {tanks.map((t) => {
+          const targetHigh = t.thermostat?.attributes?.target_temp_high;
+          const isHeating = t.thermostat?.state === 'heat';
+          return (
+            <div key={t.name} className="space-y-0.5">
+              <div className="flex items-center justify-between">
+                <SparklineStat
+                  entityId={t.entityId}
+                  label={t.name}
+                  value={fmt(t.temp, 1)}
+                  unit="°C"
+                  color={t.temp != null && t.temp < 3 ? '#ef4444' : '#3b82f6'}
+                  className="flex-1"
+                />
+                <div className="flex items-center gap-1.5 ml-2 shrink-0">
+                  <span className="text-[10px] text-muted-foreground">Heat</span>
+                  <Switch
+                    checked={t.heater?.state === 'on'}
+                    onCheckedChange={t.toggleHeater}
+                  />
+                </div>
+              </div>
+              {t.heater?.state === 'on' && targetHigh != null && (
+                <div className="flex items-center gap-1 ml-1 text-[10px]">
+                  <span className={cn(
+                    'font-medium',
+                    isHeating ? 'text-orange-400' : 'text-muted-foreground',
+                  )}>
+                    {isHeating ? 'Heating' : 'Idle'} → {targetHigh}°C
+                  </span>
+                </div>
+              )}
             </div>
-          </div>
-        ))}
+          );
+        })}
       </CardContent>
     </Card>
   );

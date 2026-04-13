@@ -6,7 +6,7 @@ import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useHistory } from '@/hooks/useHistory';
 import { Sparkline } from '@/components/Chart';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
-import { fmt, cn } from '@/lib/utils';
+import { fmt, cn, isFresh } from '@/lib/utils';
 import {
   Gauge,
   Fuel,
@@ -27,12 +27,14 @@ function EngineCard() {
   const { value: ecuV } = useEntityNumeric('sensor.192_168_10_90_42_controlmodulevolt');
   const moving = useEntity('binary_sensor.vehicle_is_moving');
   const engine = useEntity('binary_sensor.engine_is_running');
+  const ecuStatus = useEntity('binary_sensor.meatpi_pro_ecu_status');
 
   const { data: speedHistory } = useHistory('sensor.192_168_10_90_0d_vehiclespeed', 6);
   const { open } = useHistoryDialog();
 
-  const isMoving = moving?.state === 'on';
-  const engineOn = engine?.state === 'on';
+  const wicanConnected = ecuStatus?.state === 'on' && isFresh(ecuStatus?.last_updated);
+  const isMoving = moving?.state === 'on' && wicanConnected;
+  const engineOn = engine?.state === 'on' && wicanConnected;
   const gearText = gear?.state ?? '—';
 
   return (
@@ -42,6 +44,11 @@ function EngineCard() {
           <Car className="h-4 w-4" />
           Engine
           <div className="ml-auto flex gap-1.5">
+            {!wicanConnected && (
+              <Badge variant="outline" className="text-[10px] text-muted-foreground border-muted-foreground/30">
+                Disconnected
+              </Badge>
+            )}
             {engineOn && (
               <Badge variant="default" className="text-[10px] bg-green-500">
                 Running
@@ -222,6 +229,7 @@ function DiagnosticsCard() {
   const { value: injPw } = useEntityNumeric('sensor.injector_pulse_width_ms');
   const { value: fuelTrim } = useEntityNumeric('sensor.average_fuel_trim');
   const { value: afr } = useEntityNumeric('sensor.commanded_afr');
+  const { value: altDuty } = useEntityNumeric('sensor.wican_alternator_duty');
   const cel = useEntity('binary_sensor.check_engine_light');
   const { value: dtcCount } = useEntityNumeric('sensor.dtc_count');
   const isCel = cel?.state === 'on';
@@ -250,6 +258,7 @@ function DiagnosticsCard() {
         <SparklineStat entityId="sensor.injector_pulse_width_ms" label="Injector PW" value={fmt(injPw, 2)} unit="ms" color="#e879f9" />
         <SparklineStat entityId="sensor.average_fuel_trim" label="Fuel Trim" value={fmt(fuelTrim, 1)} unit="%" color="#fb923c" />
         <SparklineStat entityId="sensor.commanded_afr" label="AFR" value={fmt(afr, 1)} unit=":1" color="#a78bfa" />
+        <SparklineStat entityId="sensor.wican_alternator_duty" label="Alt Duty" value={fmt(altDuty, 0)} unit="%" color="#facc15" />
       </CardContent>
     </Card>
   );

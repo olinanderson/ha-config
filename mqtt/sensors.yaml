@@ -1,5 +1,30 @@
 # ================================
 # mqtt/sensors.yaml
 # ================================
-# WiCAN MQTT sensors removed — now using native ha-wican integration (HTTP webhooks).
-# All WiCAN OBD data flows through sensor.192_168_10_90_* entities.
+# Most WiCAN OBD data uses native ha-wican integration (HTTP webhooks) → sensor.192_168_10_90_*
+# A few PIDs only come through MQTT (not webhook) and are defined here.
+
+# Alternator duty cycle — published to wican/alt_duty as {"ALT_DUTY": value}
+# 0% = alternator not charging, 100% = full charge. Useful for monitoring alternator load.
+- name: "WiCAN Alternator Duty"
+  unique_id: wican_alt_duty
+  state_topic: "wican/alt_duty"
+  value_template: "{{ value_json.ALT_DUTY | round(1) }}"
+  unit_of_measurement: "%"
+  icon: mdi:car-battery
+  state_class: measurement
+  device_class: power_factor
+  expire_after: 120
+
+# Fuel rate — published to wican/fuel_rate as {"FUEL_RATE": value}
+# From Ford Vehicle Specific profile (Mode 22), expression [B4:B5]*2/100.
+# Unit assumed L/h — compare against speed-density estimate to verify accuracy.
+# Showed ~8.66 at idle (high vs ~2.6 L/h speed-density estimate — may need formula correction).
+- name: "WiCAN Fuel Rate"
+  unique_id: wican_fuel_rate
+  state_topic: "wican/fuel_rate"
+  value_template: "{{ value_json.FUEL_RATE | round(2) }}"
+  unit_of_measurement: "L/h"
+  icon: mdi:gas-station
+  state_class: measurement
+  expire_after: 120

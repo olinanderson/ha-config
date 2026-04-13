@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { useEntity } from '@/hooks/useEntity';
 import { useToggle } from '@/hooks/useService';
@@ -13,6 +13,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Play,
+  Pause,
 } from 'lucide-react';
 
 const CAMERAS = [
@@ -24,14 +25,44 @@ const CAMERAS = [
 
 type StreamState = 'connecting' | 'playing' | 'error';
 
+// ─── Network Detection ───
+
+/** True when page is served over HTTPS (e.g. Nabu Casa) */
+const IS_HTTPS = window.location.protocol === 'https:';
+
+/** True when accessing HA on the van's local network (not over Tailscale) */
+const IS_LOCAL = /^192\.168\.10\./.test(window.location.hostname);
+
 // ─── DVR Proxy ───
 
-const DVR_PROXY = (() => {
-  // Proxy runs on port 8766 on the HA host
-  const loc = window.location;
-  const host = loc.hostname;
-  return `http://${host}:8766`;
-})();
+/** Direct proxy URL — only reachable on HTTP (local/Tailscale) */
+const DVR_PROXY = `http://${window.location.hostname}:8766`;
+
+/**
+ * Build the MSE stream URL. On HTTPS (Nabu Casa), use HA's built-in go2rtc proxy
+ * at the same origin. On HTTP, use dvr_proxy on port 8766.
+ */
+function getMseUrl(stream: string): string {
+  if (IS_HTTPS) {
+    // HA proxies go2rtc internally: /api/go2rtc/api/stream.mp4
+    const base = (window as unknown as Record<string, unknown>).__HA_BASE_URL__ || '';
+    return `${base}/api/go2rtc/api/stream.mp4?src=${encodeURIComponent(stream)}`;
+  }
+  return `${DVR_PROXY}/api/mse?src=${encodeURIComponent(stream)}`;
+}
+
+/** Get fetch headers — HA go2rtc proxy requires Bearer auth */
+function getMseFetchInit(signal: AbortSignal): RequestInit {
+  const init: RequestInit = { signal };
+  if (IS_HTTPS) {
+    const hass = (window as unknown as Record<string, unknown>).__HASS__ as { auth?: { data?: { access_token?: string } } } | undefined;
+    const token = hass?.auth?.data?.access_token;
+    if (token) {
+      init.headers = { Authorization: `Bearer ${token}` };
+    }
+  }
+  return init;
+}
 
 /**
  * Live camera feed using MSE (Media Source Extensions) over HTTP.
@@ -80,8 +111,8 @@ function MSEFeed({ stream }: { stream: string }) {
     async function start() {
       try {
         const resp = await fetch(
-          `${DVR_PROXY}/api/mse?src=${encodeURIComponent(stream)}`,
-          { signal: abortCtrl.signal },
+          getMseUrl(stream),
+          getMseFetchInit(abortCtrl.signal),
         );
         if (cancelled) return;
         if (!resp.ok || !resp.body) {
@@ -230,19 +261,22 @@ function MSEFeed({ stream }: { stream: string }) {
       if (cancelled || reconnecting) return;
 
       // Seek to live edge if playback falls behind
+      // More tolerant when remote (allow 5s lag vs 3s local)
+      const maxLag = IS_LOCAL ? 3 : 5;
       if (video.buffered.length > 0) {
         const edge = video.buffered.end(video.buffered.length - 1);
-        if (edge - video.currentTime > 3) {
+        if (edge - video.currentTime > maxLag) {
           video.currentTime = edge - 0.5;
         }
       }
 
-      // Stall detection
+      // Stall detection — more patient when remote (4 checks = 12s vs 3 = 9s)
+      const stallThreshold = IS_LOCAL ? 3 : 4;
       const t = video.currentTime;
       if (lastTime >= 0 && t === lastTime && t > 0) {
         if (stallCount === 0) stallStartTime = Date.now();
         stallCount++;
-        if (stallCount >= 3) {
+        if (stallCount >= stallThreshold) {
           const stuckFor = ((Date.now() - stallStartTime) / 1000).toFixed(0);
           console.warn(`[${stream}] Stall detected (stuck ${stuckFor}s at ${t.toFixed(1)}s), reconnecting`);
           stallCount = 0;
@@ -398,9 +432,11 @@ async function dvrFetch(path: string, init?: RequestInit) {
  */
 function PlaybackFeed({
   speed = 1,
+  paused = false,
   onError,
 }: {
   speed?: number;
+  paused?: boolean;
   onError?: () => void;
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
@@ -410,6 +446,17 @@ function PlaybackFeed({
   useEffect(() => {
     if (videoRef.current) videoRef.current.playbackRate = speed;
   }, [speed]);
+
+  // Pause/resume
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    if (paused) {
+      video.pause();
+    } else if (video.readyState >= 2) {
+      video.play().catch(() => {});
+    }
+  }, [paused]);
 
   useEffect(() => {
     const video = videoRef.current;
@@ -601,7 +648,7 @@ function TimelineBar({
       labels.push(
         <span
           key={h}
-          className="absolute text-[9px] text-muted-foreground -bottom-4"
+          className="absolute text-[9px] text-white/50 -bottom-4"
           style={{ left: `${(h / 24) * 100}%`, transform: 'translateX(-50%)' }}
         >
           {h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`}
@@ -612,10 +659,10 @@ function TimelineBar({
   }, []);
 
   return (
-    <div className="relative px-1 pt-1 pb-6">
+    <div className="relative px-1 pt-1 pb-5">
       <div
         ref={barRef}
-        className="relative w-full h-6 bg-muted/50 rounded cursor-pointer border border-border overflow-hidden"
+        className="relative w-full h-5 bg-white/15 rounded cursor-pointer border border-white/20 overflow-hidden"
         onClick={handleClick}
       >
         {/* Recording segments */}
@@ -625,7 +672,7 @@ function TimelineBar({
           return (
             <div
               key={i}
-              className="absolute top-0 bottom-0 bg-blue-500/50"
+              className="absolute top-0 bottom-0 bg-blue-400/50"
               style={{ left: `${left}%`, width: `${right - left}%` }}
             />
           );
@@ -644,17 +691,58 @@ function TimelineBar({
 // ─── Playback Mode ───
 
 function PlaybackMode() {
+  // Playback requires dvr_proxy (port 8766) — unreachable via Nabu Casa HTTPS
+  if (IS_HTTPS) {
+    return (
+      <div className="aspect-video rounded-lg border border-border bg-black flex flex-col items-center justify-center text-muted-foreground gap-2 px-4 text-center">
+        <VideoOff className="h-8 w-8" />
+        <span className="text-sm">Playback requires local or Tailscale access</span>
+        <span className="text-xs opacity-60">Nabu Casa can only proxy live feeds, not DVR recordings</span>
+      </div>
+    );
+  }
+  return <PlaybackModeInner />;
+}
+
+function PlaybackModeInner() {
   const [channel, setChannel] = useState(1);
   const [date, setDate] = useState(() => {
     const d = new Date();
-    return d.toISOString().slice(0, 10);
+    const pad = (n: number) => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
   });
   const [segments, setSegments] = useState<TimelineSegment[]>([]);
   const [selectedTime, setSelectedTime] = useState('');
   const [playbackKey, setPlaybackKey] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [speed, setSpeed] = useState(1);
+  const [paused, setPaused] = useState(false);
   const [dateRange, setDateRange] = useState<{ min: string; max: string } | null>(null);
+  const [showControls, setShowControls] = useState(true);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Auto-hide controls after 3s of inactivity (only when playing & not paused)
+  const resetControlsTimer = useCallback(() => {
+    setShowControls(true);
+    clearTimeout(hideTimerRef.current);
+    // Only auto-hide when actively playing
+    if (playbackKey && !paused) {
+      hideTimerRef.current = setTimeout(() => setShowControls(false), 3000);
+    }
+  }, [playbackKey, paused]);
+
+  // Show controls when paused, stopped, or loading
+  useEffect(() => {
+    if (!playbackKey || paused || loading) {
+      setShowControls(true);
+      clearTimeout(hideTimerRef.current);
+    } else {
+      resetControlsTimer();
+    }
+  }, [playbackKey, paused, loading, resetControlsTimer]);
+
+  // Cleanup timer on unmount
+  useEffect(() => () => clearTimeout(hideTimerRef.current), []);
 
   // Fetch date range on mount
   useEffect(() => {
@@ -668,17 +756,39 @@ function PlaybackMode() {
     }).catch(() => {});
   }, [channel]);
 
-  // Fetch timeline when date or channel changes
+  // Fetch timeline when date or channel changes — auto-play first segment
   useEffect(() => {
     setSegments([]);
     setPlaybackKey(null);
-    dvrFetch(`/api/timeline?channel=${channel}&date=${date}`).then((r) => {
-      setSegments(r.segments || []);
-      // Default selected time to first segment start
-      if (r.segments?.length && !selectedTime) {
-        setSelectedTime(r.segments[0].start);
+    setLoading(true);
+    dvrFetch(`/api/timeline?channel=${channel}&date=${date}`).then(async (r) => {
+      const segs: TimelineSegment[] = r.segments || [];
+      setSegments(segs);
+      if (segs.length) {
+        const firstStart = segs[0].start;
+        setSelectedTime(firstStart);
+        // Auto-start playback
+        const selMs = new Date(firstStart.replace(' ', 'T')).getTime();
+        let endTime = segs[0].end;
+        if (!endTime) {
+          const end = new Date(selMs + 30 * 60000);
+          const pad = (n: number) => String(n).padStart(2, '0');
+          endTime = `${date} ${pad(end.getHours())}:${pad(end.getMinutes())}:${pad(end.getSeconds())}`;
+        }
+        try {
+          await dvrFetch('/api/playback/start', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ channel, startTime: firstStart, endTime, speed }),
+          });
+          setPlaybackKey(Date.now());
+        } catch (err) {
+          console.error('Auto-playback start error:', err);
+        }
       }
-    }).catch(() => {});
+      setLoading(false);
+    }).catch(() => { setLoading(false); });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [date, channel]);
 
   const prevDate = () => {
@@ -726,13 +836,11 @@ function PlaybackMode() {
     }
 
     try {
-      // Wait briefly for go2rtc to register the stream before loading video
       await dvrFetch('/api/playback/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel, startTime: playTime, endTime, speed: playSpeed }),
       });
-      // Bump key to remount the PlaybackFeed video element
       setPlaybackKey(Date.now());
     } catch (err) {
       console.error('Playback start error:', err);
@@ -743,6 +851,7 @@ function PlaybackMode() {
 
   const stopPlayback = () => {
     setPlaybackKey(null);
+    setPaused(false);
     dvrFetch('/api/playback/stop', { method: 'POST' }).catch(() => {});
   };
 
@@ -754,131 +863,175 @@ function PlaybackMode() {
     }
   };
 
-  // When speed changes during playback, restart at current selected time with new speed
   const handleSpeedChange = (newSpeed: number) => {
     setSpeed(newSpeed);
-    // Browser handles speed change via video.playbackRate — no restart needed
   };
 
   const channelLabel = CAMERAS.find((c) => c.channel === channel)?.label ?? `Ch ${channel}`;
 
   return (
-    <div className="space-y-3">
-      {/* Controls */}
-      <div className="flex items-center gap-2 flex-wrap">
-        {/* Channel selector */}
-        <div className="flex gap-1">
-          {CAMERAS.map((cam) => (
-            <button
-              key={cam.channel}
-              onClick={() => {
-                setChannel(cam.channel);
-                setPlaybackKey(null);
-              }}
-              className={`px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
-                channel === cam.channel
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted text-muted-foreground hover:bg-muted/80'
-              }`}
-            >
-              {cam.label}
-            </button>
-          ))}
-        </div>
-
-        {/* Date navigation */}
-        <div className="flex items-center gap-1 ml-auto">
-          <button onClick={prevDate} className="p-1.5 rounded-md hover:bg-muted transition-colors">
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <input
-            type="date"
-            value={date}
-            min={dateRange?.min}
-            max={dateRange?.max}
-            onChange={(e) => {
-              setDate(e.target.value);
-              setSelectedTime('');
-            }}
-            className="bg-muted border border-border rounded-md px-2 py-1 text-sm"
-          />
-          <button onClick={nextDate} className="p-1.5 rounded-md hover:bg-muted transition-colors">
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-      </div>
-
-      {/* Timeline */}
-      {segments.length > 0 ? (
-        <TimelineBar
-          segments={segments}
-          date={date}
-          selectedTime={selectedTime}
-          onSelectTime={handleTimeSelect}
+    <div
+      className="relative aspect-video rounded-lg overflow-hidden border border-border bg-black"
+      onMouseMove={resetControlsTimer}
+      onTouchStart={resetControlsTimer}
+    >
+      {/* Video layer — always present for stable layout */}
+      {playbackKey ? (
+        <PlaybackFeed
+          key={playbackKey}
+          speed={speed}
+          paused={paused}
+          onError={stopPlayback}
         />
       ) : (
-        <div className="text-center text-muted-foreground text-sm py-4">
-          No recordings found for {date}
+        <div className="w-full h-full flex flex-col items-center justify-center text-muted-foreground gap-2">
+          {loading ? (
+            <>
+              <Loader2 className="h-8 w-8 animate-spin" />
+              <span className="text-sm">Loading...</span>
+            </>
+          ) : segments.length === 0 ? (
+            <span className="text-sm">No recordings for {date}</span>
+          ) : (
+            <>
+              <Play className="h-8 w-8 opacity-40" />
+              <span className="text-sm">Select a time on the timeline</span>
+            </>
+          )}
         </div>
       )}
 
-      {/* Play controls & speed selector */}
-      {selectedTime && (
-        <div className="flex items-center gap-3 flex-wrap">
-          <span className="text-sm text-muted-foreground">
-            {channelLabel} · {selectedTime.slice(11)}
-          </span>
-          {playbackKey ? (
-            <button
-              onClick={stopPlayback}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-red-500/20 text-red-400 text-sm font-medium hover:bg-red-500/30 transition-colors"
-            >
-              Stop
-            </button>
-          ) : (
-            <button
-              onClick={() => startPlayback()}
-              disabled={loading}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors disabled:opacity-50"
-            >
-              {loading ? (
-                <Loader2 className="h-4 w-4 animate-spin" />
-              ) : (
-                <Play className="h-4 w-4" />
-              )}
-              Play
-            </button>
-          )}
+      {/* Overlay controls — auto-hide when watching, always visible when paused/stopped */}
+      <div
+        className={`absolute inset-0 flex flex-col justify-between transition-opacity duration-500 ${
+          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
+        }`}
+        onClick={(e) => {
+          // Clicking the video area (not a control) toggles controls
+          if (e.target === e.currentTarget) {
+            if (showControls && playbackKey && !paused) {
+              setShowControls(false);
+              clearTimeout(hideTimerRef.current);
+            } else {
+              resetControlsTimer();
+            }
+          }
+        }}
+      >
+        {/* Top bar: channel + date */}
+        <div className="bg-gradient-to-b from-black/80 via-black/50 to-transparent px-3 py-2.5">
+          <div className="flex items-center gap-2 flex-wrap">
+            {/* Channel selector */}
+            <div className="flex gap-1">
+              {CAMERAS.map((cam) => (
+                <button
+                  key={cam.channel}
+                  onClick={() => {
+                    setChannel(cam.channel);
+                    setPlaybackKey(null);
+                  }}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    channel === cam.channel
+                      ? 'bg-white/25 text-white'
+                      : 'text-white/60 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  {cam.label}
+                </button>
+              ))}
+            </div>
 
-          {/* Speed selector */}
-          <div className="flex items-center gap-0.5 ml-auto">
-            {[1, 2, 4, 8].map((s) => (
-              <button
-                key={s}
-                onClick={() => handleSpeedChange(s)}
-                className={`px-2 py-1 rounded text-xs font-medium transition-colors ${
-                  speed === s
-                    ? 'bg-primary text-primary-foreground'
-                    : 'bg-muted/60 text-muted-foreground hover:bg-muted'
-                }`}
-              >
-                {s}x
+            {/* Date navigation */}
+            <div className="flex items-center gap-1 ml-auto">
+              <button onClick={prevDate} className="p-1 rounded-md hover:bg-white/10 text-white/80 transition-colors">
+                <ChevronLeft className="h-4 w-4" />
               </button>
-            ))}
+              <input
+                type="date"
+                value={date}
+                min={dateRange?.min}
+                max={dateRange?.max}
+                onChange={(e) => {
+                  setDate(e.target.value);
+                  setSelectedTime('');
+                }}
+                className="bg-white/10 border border-white/20 rounded-md px-2 py-0.5 text-xs text-white [color-scheme:dark]"
+              />
+              <button onClick={nextDate} className="p-1 rounded-md hover:bg-white/10 text-white/80 transition-colors">
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
           </div>
         </div>
-      )}
 
-      {/* Video player */}
-      {playbackKey && (
-        <div className="aspect-video rounded-lg overflow-hidden border border-border">
-          <PlaybackFeed
-            key={playbackKey}
-            speed={speed}
-            onError={stopPlayback}
-          />
+        {/* Bottom bar: play controls + timeline */}
+        <div className="bg-gradient-to-t from-black/80 via-black/50 to-transparent px-3 pb-2.5 pt-6">
+          {/* Play controls row */}
+          <div className="flex items-center gap-2 mb-2">
+            {/* Play/Pause button */}
+            {playbackKey ? (
+              <button
+                onClick={() => setPaused((p) => !p)}
+                className="flex items-center justify-center w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors"
+              >
+                {paused ? <Play className="h-4 w-4 ml-0.5" /> : <Pause className="h-4 w-4" />}
+              </button>
+            ) : (
+              <button
+                onClick={() => startPlayback()}
+                disabled={loading || !selectedTime}
+                className="flex items-center justify-center w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors disabled:opacity-30"
+              >
+                {loading ? <Loader2 className="h-4 w-4 animate-spin" /> : <Play className="h-4 w-4 ml-0.5" />}
+              </button>
+            )}
+
+            {/* Stop button (when playing) */}
+            {playbackKey && (
+              <button
+                onClick={stopPlayback}
+                className="px-2 py-1 rounded text-xs font-medium text-red-400 bg-red-500/20 hover:bg-red-500/30 transition-colors"
+              >
+                Stop
+              </button>
+            )}
+
+            {/* Time display */}
+            {selectedTime && (
+              <span className="text-xs text-white/70">
+                {channelLabel} · {selectedTime.slice(11)}
+              </span>
+            )}
+
+            {/* Speed selector */}
+            <div className="flex items-center gap-0.5 ml-auto">
+              {[1, 2, 4, 8].map((s) => (
+                <button
+                  key={s}
+                  onClick={() => handleSpeedChange(s)}
+                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                    speed === s
+                      ? 'bg-white/25 text-white'
+                      : 'text-white/50 hover:text-white hover:bg-white/10'
+                  }`}
+                >
+                  {s}x
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Timeline */}
+          {segments.length > 0 && (
+            <TimelineBar
+              segments={segments}
+              date={date}
+              selectedTime={selectedTime}
+              onSelectTime={handleTimeSelect}
+            />
+          )}
         </div>
-      )}
+      </div>
     </div>
   );
 }
@@ -888,7 +1041,7 @@ function PlaybackMode() {
 export default function Cameras() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [mode, setMode] = useState<'live' | 'playback'>('live');
-  const [quality, setQuality] = useState<'main' | 'sub'>('main');
+  const [quality, setQuality] = useState<'main' | 'sub'>(IS_LOCAL ? 'main' : 'sub');
 
   return (
     <PageContainer title="Cameras">

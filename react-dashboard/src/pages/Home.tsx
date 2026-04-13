@@ -9,10 +9,11 @@ import { HeatingControls } from '@/components/HeatingControls';
 import { FanControl } from '@/components/FanControl';
 import { PresenceBar } from '@/components/PresenceBar';
 import { ToggleButton } from '@/components/ToggleButton';
+import { LightControl } from '@/components/LightControl';
 import { InverterButton } from '@/components/InverterButton';
 import { StatusDot } from '@/components/StatusDot';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
-import { useToggle } from '@/hooks/useService';
+import { useToggle, useService } from '@/hooks/useService';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
 import { cn, fmt } from '@/lib/utils';
 import { useState, useCallback } from 'react';
@@ -86,12 +87,23 @@ function BadgeBar() {
   const { open } = useHistoryDialog();
   const toggleGreyValve = useToggle('switch.a32_pro_switch06_grey_water_tank_valve');
   const toggleEco = useToggle('input_boolean.power_saving_mode');
-  const toggleMainLight = useToggle('light.led_controller_cct_1');
+  const callService = useService();
 
   const inverterOn = inverter?.state === 'on';
   const ecoOn = powerSaving?.state === 'on';
   const greyOpen = greyValve?.state === 'on';
   const lightsOn = [light1, light2, light3, light4].filter((l) => l?.state === 'on').length;
+
+  const toggleAllLights = useCallback(() => {
+    const allIds = [
+      'light.led_controller_cct_1',
+      'light.led_controller_cct_2',
+      'light.led_controller_sc_1',
+      'light.led_controller_sc_2',
+    ];
+    const service = lightsOn > 0 ? 'turn_off' : 'turn_on';
+    callService('light', service, undefined, { entity_id: allIds });
+  }, [callService, lightsOn]);
   const v = (n: number | null) => n ?? 0;
 
   return (
@@ -115,7 +127,7 @@ function BadgeBar() {
         value={lightsOn > 0 ? `${lightsOn} on` : 'Off'}
         color={lightsOn > 0 ? 'text-yellow-500' : 'text-muted-foreground'}
         icon={Lightbulb}
-        onClick={toggleMainLight}
+        onClick={toggleAllLights}
       />
       <BadgeItem
         label="Inverter"
@@ -183,50 +195,71 @@ function BadgeBar() {
 
 function QuickControls() {
   return (
-    <div className="flex flex-wrap gap-2">
-      <ToggleButton
-        entityId="input_boolean.shore_power_charger_enabled"
-        name="Shore"
-        icon={PlugZap}
-        activeColor="green"
-      />
-      <ToggleButton
-        entityId="switch.a32_pro_switch06_grey_water_tank_valve"
-        name="Grey Dump"
-        icon={Trash2}
-        activeColor="orange"
-      />
-      <InverterButton />
-      <ToggleButton
-        entityId="switch.a32_pro_switch21_left_outdoor_lights"
-        name="Left Light"
-        icon={LampDesk}
-        activeColor="yellow"
-      />
-      <ToggleButton
-        entityId="switch.a32_pro_switch22_right_outdoor_lights"
-        name="Right Light"
-        icon={LampDesk}
-        activeColor="yellow"
-      />
-      <ToggleButton
-        entityId="switch.a32_pro_switch23_rear_outdoor_lights"
-        name="Rear Light"
-        icon={LampDesk}
-        activeColor="yellow"
-      />
-      <ToggleButton
-        entityId="switch.a32_pro_switch31_lightbar"
-        name="Lightbar"
-        icon={Lightbulb}
-        activeColor="yellow"
-      />
-      <ToggleButton
-        entityId="switch.a32_pro_switch28_compressor"
-        name="Compressor"
-        icon={AirVent}
-        activeColor="cyan"
-      />
+    <div className="space-y-3">
+      {/* Utility controls */}
+      <div className="flex flex-wrap gap-2">
+        <ToggleButton
+          entityId="input_boolean.shore_power_charger_enabled"
+          name="Shore"
+          icon={PlugZap}
+          activeColor="green"
+        />
+        <ToggleButton
+          entityId="switch.a32_pro_switch06_grey_water_tank_valve"
+          name="Grey Dump"
+          icon={Trash2}
+          activeColor="orange"
+        />
+        <InverterButton />
+        <ToggleButton
+          entityId="switch.a32_pro_switch28_compressor"
+          name="Compressor"
+          icon={AirVent}
+          activeColor="cyan"
+        />
+      </div>
+
+      {/* Indoor lights */}
+      <div>
+        <p className="text-xs text-muted-foreground font-medium mb-1.5">Indoor Lights</p>
+        <div className="grid grid-cols-2 gap-2">
+          <LightControl entityId="light.led_controller_cct_1" name="Main" hasCct />
+          <LightControl entityId="light.led_controller_cct_2" name="Cabinet" hasCct />
+          <LightControl entityId="light.led_controller_sc_1" name="Shower" />
+          <LightControl entityId="light.led_controller_sc_2" name="Accent" />
+        </div>
+      </div>
+
+      {/* Outdoor lights */}
+      <div>
+        <p className="text-xs text-muted-foreground font-medium mb-1.5">Outdoor Lights</p>
+        <div className="flex flex-wrap gap-2">
+          <ToggleButton
+            entityId="switch.a32_pro_switch21_left_outdoor_lights"
+            name="Left"
+            icon={LampDesk}
+            activeColor="yellow"
+          />
+          <ToggleButton
+            entityId="switch.a32_pro_switch22_right_outdoor_lights"
+            name="Right"
+            icon={LampDesk}
+            activeColor="yellow"
+          />
+          <ToggleButton
+            entityId="switch.a32_pro_switch23_rear_outdoor_lights"
+            name="Rear"
+            icon={LampDesk}
+            activeColor="yellow"
+          />
+          <ToggleButton
+            entityId="switch.a32_pro_switch31_lightbar"
+            name="Lightbar"
+            icon={Lightbulb}
+            activeColor="yellow"
+          />
+        </div>
+      </div>
     </div>
   );
 }

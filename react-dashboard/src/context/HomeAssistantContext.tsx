@@ -95,9 +95,19 @@ export function HassProvider({ children }: HassProviderProps) {
     };
 
     window.addEventListener('hass-updated', handler);
+
+    // Also re-sync when browser tab returns from background
+    const onVisibility = () => {
+      if (!document.hidden) handler();
+    };
+    document.addEventListener('visibilitychange', onVisibility);
+
     // Pick up hass if it was already set before React mounted
     handler();
-    return () => window.removeEventListener('hass-updated', handler);
+    return () => {
+      window.removeEventListener('hass-updated', handler);
+      document.removeEventListener('visibilitychange', onVisibility);
+    };
   }, []);
 
   return (

@@ -108,6 +108,7 @@ function DialogContent({
   close: () => void;
 }) {
   const entity = useEntity(state.entityId);
+  const currentValue = entity?.state;
   const lastUpdated = entity?.last_updated || entity?.last_changed;
   const lastUpdatedStr = lastUpdated ? timeAgo(lastUpdated) : null;
 
@@ -116,7 +117,14 @@ function DialogContent({
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold">{state.name}</h2>
+          <div className="flex items-center gap-3">
+            <h2 className="text-lg font-semibold">{state.name}</h2>
+            {currentValue != null && currentValue !== 'unknown' && currentValue !== 'unavailable' && (
+              <span className="text-lg font-bold tabular-nums text-primary">
+                {currentValue}{state.unit && <span className="text-sm text-muted-foreground ml-0.5">{state.unit}</span>}
+              </span>
+            )}
+          </div>
           <div className="flex items-center gap-2">
             <p className="text-xs text-muted-foreground font-mono">{state.entityId}</p>
             {lastUpdatedStr && (

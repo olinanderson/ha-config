@@ -42,6 +42,7 @@ class VanDashboard extends HTMLElement {
     super();
     this._unmount = null;
     this._loaded = false;
+    this._onVisibility = null;
   }
 
   set hass(hass) {
@@ -56,6 +57,9 @@ class VanDashboard extends HTMLElement {
   async connectedCallback() {
     if (this._loaded) return;
     this._loaded = true;
+
+    // Clear any stale children from a previous mount cycle
+    this.innerHTML = '';
 
     // Inject CSS inside this element so it works inside HA's shadow DOM
     const cssText = await getCss();
@@ -73,6 +77,10 @@ class VanDashboard extends HTMLElement {
       if (mod.mount) {
         this._unmount = mod.mount(mountPoint);
       }
+      // Re-dispatch hass in case set hass() fired before React mounted
+      if (window.__HASS__) {
+        window.dispatchEvent(new Event('hass-updated'));
+      }
     } catch (err) {
       console.error('[VanDash] Failed to load:', err);
       mountPoint.innerHTML = `
@@ -82,13 +90,27 @@ class VanDashboard extends HTMLElement {
         </div>
       `;
     }
+
+    // When browser tab returns from background, force a hass refresh
+    this._onVisibility = () => {
+      if (!document.hidden && window.__HASS__) {
+        window.dispatchEvent(new Event('hass-updated'));
+      }
+    };
+    document.addEventListener('visibilitychange', this._onVisibility);
   }
 
   disconnectedCallback() {
+    if (this._onVisibility) {
+      document.removeEventListener('visibilitychange', this._onVisibility);
+      this._onVisibility = null;
+    }
     if (this._unmount) {
       this._unmount();
       this._unmount = null;
     }
+    // Clear DOM so reconnect starts fresh
+    this.innerHTML = '';
     this._loaded = false;
   }
 }

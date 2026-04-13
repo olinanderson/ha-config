@@ -1,5 +1,6 @@
 import { useEntity } from '@/hooks/useEntity';
 import { StatusDot } from '@/components/StatusDot';
+import { isFresh } from '@/lib/utils';
 
 export function PresenceBar() {
   const radar = useEntity('binary_sensor.apollo_msr_2_1731d8_radar_target');
@@ -7,12 +8,14 @@ export function PresenceBar() {
   const powerSave = useEntity('input_boolean.power_saving_mode');
   const sleepMode = useEntity('input_boolean.sleep_mode');
   const engine = useEntity('binary_sensor.engine_is_running');
+  const ecuStatus = useEntity('binary_sensor.meatpi_pro_ecu_status');
 
   const occupied = radar?.state === 'on';
   const slConnected = starlink?.state === 'home';
   const isPowerSave = powerSave?.state === 'on';
   const isSleep = sleepMode?.state === 'on';
-  const engineOn = engine?.state === 'on';
+  const wicanConnected = ecuStatus?.state === 'on' && isFresh(ecuStatus?.last_updated);
+  const engineOn = engine?.state === 'on' && wicanConnected;
 
   return (
     <div className="flex flex-wrap items-center gap-3 px-1">

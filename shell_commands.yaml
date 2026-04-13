@@ -24,18 +24,17 @@ start_scream_receiver: >
 
 # Start routing CORS proxy so the vanlife panel can call GraphHopper without CORS errors
 start_osrm_proxy: >
-  /bin/sh -c 'PROXY_PID=$(ps aux | awk '\''/osrm_proxy/{print $1}'\''); if [ -z "$PROXY_PID" ]; then
-    python3 -c "import subprocess; subprocess.Popen([\"python3\",\"/config/www/vanlife-panel/osrm_proxy.py\"],
-      stdout=open(\"/config/www/vanlife-panel/osrm_proxy.log\",\"w\"),
-      stderr=__import__(\"subprocess\").STDOUT, close_fds=True, start_new_session=True)";
+  /bin/sh -c 'if ! nc -z 127.0.0.1 8765 2>/dev/null; then
+    cd /config/www/vanlife-panel &&
+    nohup python3 osrm_proxy.py > /config/www/vanlife-panel/osrm_proxy.log 2>&1 &
     echo "Routing proxy started";
   else
-    echo "Routing proxy already running (PID $PROXY_PID)";
+    echo "Routing proxy already running";
   fi'
 
 # Start Syncthing for bidirectional config sync with PC over Tailscale
 start_syncthing: >
-  /bin/sh -c 'if ! pgrep -f "syncthing serve" > /dev/null 2>&1; then
+  /bin/sh -c 'if ! nc -z 127.0.0.1 22000 2>/dev/null; then
     nohup /config/.ha-sync/syncthing serve
       --home=/config/.ha-sync/st-config
       --no-browser --no-upgrade
@@ -47,12 +46,12 @@ start_syncthing: >
 
 # Start GPS filter daemon — pre-processes Starlink GPS into filtered segments + routes
 start_gps_filter: >
-  /bin/sh -c 'if ! pgrep -f "gps_filter.py" > /dev/null 2>&1; then
+  /bin/sh -c 'if [ ! -f /tmp/gps_filter.pid ] || ! kill -0 $(cat /tmp/gps_filter.pid) 2>/dev/null; then
     TOKEN=$(cat /config/.gps_filter_token 2>/dev/null);
     if [ -z "$TOKEN" ]; then echo "No token file at /config/.gps_filter_token"; exit 1; fi;
-    python3 -c "import subprocess; subprocess.Popen([\"python3\",\"/config/www/vanlife-panel/gps_filter.py\",\"--token\",\"$TOKEN\"],
-      stdout=open(\"/config/www/vanlife-panel/gps_filter.log\",\"a\"),
-      stderr=__import__(\"subprocess\").STDOUT, close_fds=True, start_new_session=True)";
+    cd /config/www/vanlife-panel &&
+    nohup python3 gps_filter.py --token "$TOKEN" >> /config/www/vanlife-panel/gps_filter.log 2>&1 &
+    echo $! > /tmp/gps_filter.pid;
     echo "GPS filter daemon started";
   else
     echo "GPS filter daemon already running";
@@ -60,10 +59,9 @@ start_gps_filter: >
 
 # Start DVR proxy — camera playback API + RTSP Scale proxy
 start_dvr_proxy: >
-  /bin/sh -c 'if ! pgrep -f "dvr_proxy.py" > /dev/null 2>&1; then
-    python3 -c "import subprocess; subprocess.Popen([\"python3\",\"/config/www/react-dashboard/dvr_proxy.py\"],
-      stdout=open(\"/config/www/react-dashboard/dvr_proxy.log\",\"w\"),
-      stderr=__import__(\"subprocess\").STDOUT, close_fds=True, start_new_session=True)";
+  /bin/sh -c 'if ! nc -z 127.0.0.1 8766 2>/dev/null; then
+    cd /config/www/react-dashboard &&
+    nohup python3 dvr_proxy.py > /config/www/react-dashboard/dvr_proxy.log 2>&1 &
     echo "DVR proxy started";
   else
     echo "DVR proxy already running";

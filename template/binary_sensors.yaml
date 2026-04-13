@@ -38,11 +38,13 @@
       unique_id: engine_is_running
       device_class: running
       state: >
-        {% set rpm_state = states('sensor.192_168_10_90_0c_enginerpm') %}
+        {% set rpm_entity = states.sensor['192_168_10_90_0c_enginerpm'] %}
+        {% set rpm_state = rpm_entity.state if rpm_entity else 'unavailable' %}
         {% if rpm_state in ['unknown', 'unavailable'] %}
           false
         {% else %}
-          {{ rpm_state | float(0) > 0 }}
+          {% set age = (now() - rpm_entity.last_updated).total_seconds() %}
+          {{ rpm_state | float(0) > 0 and age < 300 }}
         {% endif %}
       icon: >
         {% if is_state('binary_sensor.engine_is_running', 'on') %}

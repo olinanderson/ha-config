@@ -145,10 +145,10 @@ interface EdgeLive {
 const edgeAnimStore = new Map<string, AnimState>();
 const edgeLiveStore = new Map<string, EdgeLive>();
 
-function getAnim(id: string): AnimState {
+function getAnim(id: string, dotCount: number): AnimState {
   let s = edgeAnimStore.get(id);
   if (!s) {
-    s = { phases: Array.from({ length: MAX_DOTS }, (_, i) => i / MAX_DOTS), lastTime: 0 };
+    s = { phases: Array.from({ length: MAX_DOTS }, (_, i) => i / Math.max(dotCount, MAX_DOTS)), lastTime: 0 };
     edgeAnimStore.set(id, s);
   }
   return s;
@@ -182,8 +182,8 @@ function startRAF() {
   function animate(now: number) {
     for (const eDef of edgeDefs) {
       const { id } = eDef;
-      const anim = getAnim(id);
       const live = getLive(id);
+      const anim = getAnim(id, live.dotCount);
       const dt = anim.lastTime === 0 ? 0 : Math.min((now - anim.lastTime) / 1000, 0.1);
       anim.lastTime = now;
 
@@ -195,12 +195,20 @@ function startRAF() {
         pathEl.setAttribute('opacity', live.active ? '0.25' : '0.06');
       }
 
-      // Update dots
+      // Update dots — enforce equal spacing from lead dot
       const dots = dotEls.get(id);
       if (!dots || !pathEl) continue;
       const totalLen = pathEl.getTotalLength();
       const increment = live.speed > 0 ? dt / live.speed : 0;
 
+      // Advance only the lead dot; others are derived
+      if (live.active && live.dotCount > 0) {
+        anim.phases[0] = live.reverse
+          ? ((anim.phases[0] - increment) % 1 + 1) % 1
+          : (anim.phases[0] + increment) % 1;
+      }
+
+      const spacing = 1 / Math.max(live.dotCount, 1);
       for (let i = 0; i < MAX_DOTS; i++) {
         const c = dots[i];
         if (!c) continue;
@@ -208,10 +216,8 @@ function startRAF() {
           c.setAttribute('opacity', '0');
           continue;
         }
-        anim.phases[i] = live.reverse
-          ? ((anim.phases[i] - increment) % 1 + 1) % 1
-          : (anim.phases[i] + increment) % 1;
-        const pt = pathEl.getPointAtLength(anim.phases[i] * totalLen);
+        const phase = ((anim.phases[0] + i * spacing) % 1 + 1) % 1;
+        const pt = pathEl.getPointAtLength(phase * totalLen);
         c.setAttribute('cx', String(pt.x));
         c.setAttribute('cy', String(pt.y));
         c.setAttribute('fill', live.color);
@@ -242,21 +248,21 @@ function Chip({ def, val, unit, active, onClick }: {
     >
       <div style={{
         height: '100%', borderRadius: 12,
-        border: `1px solid ${active ? `${def.color}60` : 'hsl(var(--border))'}`,
+        border: `2px solid ${active ? `${def.color}70` : 'hsl(var(--border))'}`,
         padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 10,
         opacity: active ? 1 : 0.5,
-        boxShadow: active ? `0 0 8px ${def.color}15` : 'none',
+        boxShadow: active ? `0 0 10px ${def.color}20` : 'none',
         transition: 'all 0.3s',
       }}>
-        <Icon size={16} style={{ flexShrink: 0, color: active ? def.color : 'hsl(var(--muted-foreground))' }} />
+        <Icon size={18} style={{ flexShrink: 0, color: active ? def.color : 'hsl(var(--muted-foreground))' }} />
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <span style={{
-            fontSize: 10, color: 'hsl(var(--muted-foreground))', lineHeight: 1.2,
-            opacity: active ? 0.8 : 0.5,
+            fontSize: 11, fontWeight: 500, color: 'hsl(var(--muted-foreground))', lineHeight: 1.2,
+            opacity: active ? 0.9 : 0.5,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>{def.label}</span>
           <span style={{
-            fontSize: 14, fontWeight: 600, lineHeight: 1.2,
+            fontSize: 15, fontWeight: 700, lineHeight: 1.2,
             fontVariantNumeric: 'tabular-nums',
             color: active ? def.color : 'hsl(var(--muted-foreground))',
           }}>{val} {unit}</span>
@@ -384,7 +390,7 @@ export function PowerFlow() {
       const dots: SVGCircleElement[] = [];
       for (let i = 0; i < MAX_DOTS; i++) {
         const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        c.setAttribute('r', '3.5');
+        c.setAttribute('r', '4');
         c.setAttribute('fill', 'none');
         c.setAttribute('opacity', '0');
         svg.appendChild(c);
@@ -459,12 +465,12 @@ export function PowerFlow() {
                   width: HUB_SIZE, height: HUB_SIZE, borderRadius: '50%',
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
-                  border: `1.5px solid ${totalHome > threshold ? '#ca8a0450' : 'hsl(var(--border))'}`,
-                  boxShadow: totalHome > threshold ? '0 0 10px #ca8a0415' : 'none',
+                  border: `2px solid ${totalHome > threshold ? '#ca8a0460' : 'hsl(var(--border))'}`,
+                  boxShadow: totalHome > threshold ? '0 0 12px #ca8a0420' : 'none',
                   transition: 'border-color 0.3s, box-shadow 0.3s',
                 }}>
                   <Home size={18} style={{ color: totalHome > threshold ? '#ca8a04' : 'hsl(var(--muted-foreground))' }} />
-                  <span style={{ fontSize: 11, fontWeight: 600, fontVariantNumeric: 'tabular-nums', marginTop: 2, color: 'hsl(var(--foreground))' }}>
+                  <span style={{ fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums', marginTop: 2, color: 'hsl(var(--foreground))' }}>
                     {fmt(totalHome, decimals)} {unit}
                   </span>
                 </div>
@@ -478,7 +484,7 @@ export function PowerFlow() {
                 >
                   <div style={{
                     width: BATT_W, height: BATT_H, borderRadius: '12px 12px 0 0',
-                    border: `1px solid ${socColor}50`,
+                    border: `2px solid ${socColor}60`,
                     display: 'flex', flexDirection: 'column',
                     alignItems: 'center', justifyContent: 'center',
                     boxShadow: `0 0 8px ${socColor}15`,

@@ -65,7 +65,7 @@ export function InverterButton({ name = 'Inverter' }: { name?: string }) {
         )}
       />
       <span className="text-xs font-medium">
-        {pending ? 'Loading…' : isOn ? 'ON' : 'OFF'}
+        {pending ? 'Loading…' : isOn ? 'ON' : 'Inverter'}
       </span>
     </button>
   );
