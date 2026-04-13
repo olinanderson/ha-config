@@ -1,2 +1,11 @@
 # Streams are managed by HA's go2rtc integration (via camera entities).
 # Do NOT define streams here — they create duplicate RTSP connections to the DVR.
+streams:
+  channel_1:
+    - rtsp://admin:***REDACTED***@192.168.10.156:554/cam/realmonitor?channel=1&subtype=0
+  channel_2:
+    - rtsp://admin:***REDACTED***@192.168.10.156:554/cam/realmonitor?channel=2&subtype=0
+  channel_3:
+    - rtsp://admin:***REDACTED***@192.168.10.156:554/cam/realmonitor?channel=3&subtype=0
+  channel_4:
+    - rtsp://admin:***REDACTED***@192.168.10.156:554/cam/realmonitor?channel=4&subtype=0

@@ -1,8 +1,13 @@
 # Copilot Instructions — Home Assistant (Olin's Van)
 
-> **Workspace location**: The primary working copy lives on the **local SSD** at
-> `C:\Users\Olin\Documents\Workspace\ha_config`. Files are synced bidirectionally
-> to the HA host via **Syncthing over Tailscale**. Changes propagate in ~10 seconds.
+> **Workspace location**: The config is synced bidirectionally to local PCs via
+> **Syncthing over Tailscale**. Changes propagate in ~10 seconds.
+>
+> | Machine | Path | Tailscale IP |
+> |---|---|---|
+> | **Asylum** (primary desktop) | `C:\Users\Olin\Documents\Workspace\ha_config` | `100.106.30.112` |
+> | **Satellite** (laptop) | `C:\Users\Olin Anderson\Documents\Workspace\ha_config` | `100.73.225.9` |
+>
 > The old SMB network drive (`H:` / `\\homeassistant\config`) still works but is
 > slow — prefer editing the local copy.
 
@@ -10,7 +15,11 @@
 > running on Windows** (`tasklist | grep -i syncthing`). If not running, start it:
 > `start "" "$(where syncthing)" --no-browser`. Also verify after any deploy that
 > the file actually arrived on HA (`ssh hassio@100.80.15.86 "grep -c 'UNIQUE_STRING' /config/path/to/file"`).
-> Syncthing on Windows does NOT auto-start — it must be launched manually after reboot.
+>
+> | Machine | Auto-start? | Notes |
+> |---|---|---|
+> | **Asylum** | ❌ No | Must launch manually after reboot |
+> | **Satellite** | ✅ Yes | Windows Scheduled Task `Syncthing` runs at logon |
 
 ---
 
@@ -73,21 +82,29 @@ PCs via **Syncthing** over **Tailscale**. This replaces the slow SMB network dri
 ### Architecture
 
 ```
-┌──────────────────────┐         Tailscale VPN         ┌──────────────────┐
-│   Home Assistant     │◄──── tcp://100.80.15.86:22000 ──►│   Windows PC     │
-│   (HA host)          │        Syncthing v2.0.15       │   (Asylum)       │
-│                      │                                │                  │
-│  /config/            │   ◄─── bidirectional sync ──►  │  C:\Users\Olin\  │
-│  (source of truth)   │        ~10 second latency      │  Documents\      │
-│                      │                                │  Workspace\      │
-│  Device: HomeAssist  │                                │  ha_config\      │
-│  ant (7EM6772...)    │                                │                  │
-│                      │                                │  Device: Asylum  │
-│  Binary:             │                                │  (BXJLBZS...)    │
-│  /config/.ha-sync/   │                                │                  │
-│    syncthing         │                                │  Binary: winget  │
-│                      │                                │  (auto-installed)│
-└──────────────────────┘                                └──────────────────┘
+                              Tailscale VPN
+┌──────────────────────┐                        ┌──────────────────────┐
+│   Home Assistant     │◄── tcp://:22000 ──────►│   Asylum (desktop)   │
+│   (HA host)          │    Syncthing v2.0.15   │   100.106.30.112     │
+│                      │                        │                      │
+│  /config/            │   bidirectional sync   │  C:\Users\Olin\      │
+│  (source of truth)   │   ~10 second latency   │  ...\ha_config\      │
+│                      │                        │                      │
+│  Device: HomeAssist  │                        │  Device: Asylum      │
+│  ant (7EM6772...)    │                        │  (BXJLBZS...)        │
+│                      │                        └──────────────────────┘
+│  Binary:             │
+│  /config/.ha-sync/   │                        ┌──────────────────────┐
+│    syncthing         │◄── tcp://:22000 ──────►│   Satellite (laptop) │
+│                      │    Syncthing v2.0.16   │   100.73.225.9       │
+│  100.80.15.86        │                        │                      │
+│                      │   bidirectional sync   │  C:\Users\Olin       │
+│                      │   ~10 second latency   │  Anderson\...\       │
+│                      │                        │  ha_config\          │
+│                      │                        │                      │
+│                      │                        │  Device: Satellite   │
+│                      │                        │  (5JDDCUI...)        │
+└──────────────────────┘                        └──────────────────────┘
 ```
 
 ### Key Details
@@ -108,6 +125,11 @@ PCs via **Syncthing** over **Tailscale**. This replaces the slow SMB network dri
 | **Discovery** | Local only — no global discovery, no relays, no NAT |
 | **Auto-start** | HA automation `syncthing_start_on_boot` (30s delay after HA start) |
 | **Shell command** | `shell_command.start_syncthing` (idempotent, checks if already running) |
+| **Asylum Device ID** | `BXJLBZS-5F3ZA2B-JQYWTXD-JRG3GGQ-ZRBMFYG-FLSAW4M-R32QUTJ-KMOQLQH` |
+| **Asylum Tailscale IP** | `100.106.30.112` |
+| **Satellite Device ID** | `5JDDCUI-QJHPR4P-4LNMWYV-CV7SNL6-BS27DX7-DHOKHZW-CGFIQN7-XFK5QQ6` |
+| **Satellite Tailscale IP** | `100.73.225.9` |
+| **Satellite auto-start** | Windows Scheduled Task `Syncthing` (runs at logon) |
 
 ### `.stignore` (synced files are filtered)
 
@@ -176,6 +198,28 @@ To add another PC to the Syncthing mesh:
 9. **Verify**: files should sync within ~10 seconds. Check `http://127.0.0.1:8384/` for connection status.
 
 10. **Git**: `git init && git remote add origin https://github.com/olinanderson/ha-config.git && git fetch origin main && git reset origin/main && git branch -M main && git branch --set-upstream-to=origin/main`
+
+### Git + Syncthing Workflow
+
+Syncthing updates files but not git history. When another machine pushes commits and
+Syncthing delivers the file changes, the receiving machine sees "uncommitted changes"
+even though the files match the remote. Use the `git sync` alias to reconcile:
+
+```bash
+git sync    # alias for: git fetch origin && git reset origin/main
+```
+
+This moves the branch pointer to match remote without touching files. Since Syncthing
+already updated the files, `git status` will come back clean.
+
+**Setup** (one-time per clone — already configured on Asylum and Satellite):
+```bash
+git config alias.sync '!f() { git fetch origin && git reset origin/main; }; f'
+```
+
+**Typical flow:**
+1. **Asylum**: edit → `git commit` → `git push` → Syncthing propagates files to HA → HA to Satellite
+2. **Satellite**: `git sync` → branch pointer catches up, working tree is clean
 
 ### Troubleshooting
 

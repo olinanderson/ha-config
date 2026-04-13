@@ -2,7 +2,6 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { useEntity } from '@/hooks/useEntity';
 import { useToggle } from '@/hooks/useService';
-import { useHassStore } from '@/context/HomeAssistantContext';
 import {
   Maximize2,
   VideoOff,
@@ -17,10 +16,10 @@ import {
 } from 'lucide-react';
 
 const CAMERAS = [
-  { entityId: 'camera.channel_1', label: 'Left', channel: 1, lightEntityId: 'switch.a32_pro_switch21_left_outdoor_lights' },
-  { entityId: 'camera.channel_2', label: 'Right', channel: 2, lightEntityId: 'switch.a32_pro_switch22_right_outdoor_lights' },
-  { entityId: 'camera.channel_3', label: 'Front', channel: 3, lightEntityId: 'switch.a32_pro_switch31_lightbar' },
-  { entityId: 'camera.channel_4', label: 'Back', channel: 4, lightEntityId: 'switch.a32_pro_switch23_rear_outdoor_lights' },
+  { entityId: 'camera.channel_1', label: 'Left', channel: 1, stream: 'channel_1', lightEntityId: 'switch.a32_pro_switch21_left_outdoor_lights' },
+  { entityId: 'camera.channel_2', label: 'Right', channel: 2, stream: 'channel_2', lightEntityId: 'switch.a32_pro_switch22_right_outdoor_lights' },
+  { entityId: 'camera.channel_3', label: 'Front', channel: 3, stream: 'channel_3', lightEntityId: 'switch.a32_pro_switch31_lightbar' },
+  { entityId: 'camera.channel_4', label: 'Back', channel: 4, stream: 'channel_4', lightEntityId: 'switch.a32_pro_switch23_rear_outdoor_lights' },
 ];
 
 const ICE_SERVERS: RTCIceServer[] = [
@@ -30,19 +29,19 @@ const ICE_SERVERS: RTCIceServer[] = [
 type StreamState = 'connecting' | 'playing' | 'error';
 
 /**
- * WebRTC camera feed using HA's camera/webrtc/offer WebSocket API.
- * This triggers go2rtc's lazy stream registration — no manual setup needed.
- * go2rtc converts the DVR's RTSP stream to WebRTC for the browser.
+ * WebRTC camera feed using direct go2rtc signaling via dvr_proxy.
+ * Bypasses HA entirely — sends SDP offer to dvr_proxy (:8766/api/webrtc),
+ * which forwards to go2rtc's RTSP stream, and returns the SDP answer.
  *
- * Includes auto-reconnect with exponential backoff and video stall detection
- * to recover from frozen streams without user intervention.
+ * Stall recovery strategy (avoids reconnect cascade across 4 channels):
+ *  1. Grace period: ignore stalls for 15s after connection established
+ *  2. Soft recovery first: try pause/play before tearing down the peer connection
+ *  3. Require 2 consecutive stall checks (10s apart) before hard reconnect
+ *  4. Stagger reconnects: add per-channel random delay to avoid thundering herd
  */
-function WebRTCFeed({ entityId }: { entityId: string }) {
-  const store = useHassStore();
+function WebRTCFeed({ stream }: { stream: string }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const pcRef = useRef<RTCPeerConnection | null>(null);
-  const unsubRef = useRef<(() => void) | null>(null);
-  const sessionIdRef = useRef<string | null>(null);
   const [state, setState] = useState<StreamState>('connecting');
   const [retryKey, setRetryKey] = useState(0);
   const retryCountRef = useRef(0);
@@ -52,11 +51,16 @@ function WebRTCFeed({ entityId }: { entityId: string }) {
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let stallTimer: ReturnType<typeof setInterval> | undefined;
     let lastVideoTime = 0;
+    let stallCount = 0; // consecutive stall detections (need 2 to trigger reconnect)
     let isPlaying = false;
+    let playingSince = 0; // timestamp when playback started (for grace period)
 
     function scheduleReconnect() {
       if (cancelled) return;
-      const delay = Math.min(2000 * Math.pow(2, retryCountRef.current), 30000);
+      // Per-channel stagger: hash the stream name to get 0-2s offset
+      const stagger = (stream.charCodeAt(stream.length - 1) % 4) * 500;
+      const base = Math.min(2000 * Math.pow(2, retryCountRef.current), 30000);
+      const delay = base + stagger;
       retryCountRef.current++;
       reconnectTimer = setTimeout(() => {
         if (!cancelled) {
@@ -67,13 +71,6 @@ function WebRTCFeed({ entityId }: { entityId: string }) {
     }
 
     async function connect() {
-      const hass = store.hass;
-      if (!hass) {
-        setState('error');
-        scheduleReconnect();
-        return;
-      }
-
       try {
         const pc = new RTCPeerConnection({
           iceServers: ICE_SERVERS,
@@ -96,90 +93,106 @@ function WebRTCFeed({ entityId }: { entityId: string }) {
           if (s === 'connected') {
             setState('playing');
             isPlaying = true;
+            playingSince = Date.now();
+            stallCount = 0;
             retryCountRef.current = 0;
           } else if (s === 'failed' || s === 'closed') {
             isPlaying = false;
             setState('connecting');
             scheduleReconnect();
           } else if (s === 'disconnected') {
-            // Transient — give 5s grace before reconnecting
+            // Wait 8s before treating disconnected as dead — WebRTC ICE can recover
             isPlaying = false;
             setTimeout(() => {
               if (!cancelled && pc.connectionState === 'disconnected') {
                 setState('connecting');
                 scheduleReconnect();
               }
-            }, 5000);
+            }, 8000);
           }
         };
 
-        // Send browser ICE candidates to HA/go2rtc
-        pc.onicecandidate = (event) => {
-          if (event.candidate && sessionIdRef.current) {
-            hass.connection
-              .sendMessagePromise({
-                type: 'camera/webrtc/candidate',
-                entity_id: entityId,
-                session_id: sessionIdRef.current,
-                candidate: event.candidate.toJSON(),
-              })
-              .catch(() => {});
-          }
-        };
-
+        // Create offer and wait for ICE gathering to complete
         const offer = await pc.createOffer();
         await pc.setLocalDescription(offer);
 
-        // Subscribe to WebRTC signaling via HA WebSocket
-        const unsub = await hass.connection.subscribeMessage<any>(
-          (msg) => {
-            if (cancelled) return;
-            if (msg.type === 'session') {
-              sessionIdRef.current = msg.session_id;
-            } else if (msg.type === 'answer') {
-              pc.setRemoteDescription(
-                new RTCSessionDescription({ type: 'answer', sdp: msg.answer }),
-              );
-            } else if (msg.type === 'candidate') {
-              const c =
-                typeof msg.candidate === 'string'
-                  ? new RTCIceCandidate({ candidate: msg.candidate, sdpMid: '0' })
-                  : new RTCIceCandidate(msg.candidate);
-              pc.addIceCandidate(c).catch(() => {});
-            } else if (msg.type === 'error') {
-              console.error(`WebRTC error for ${entityId}:`, msg.message);
-              setState('connecting');
-              scheduleReconnect();
-            }
-          },
-          {
-            type: 'camera/webrtc/offer',
-            entity_id: entityId,
+        // Wait for ICE candidates to be gathered (needed for HTTP signaling)
+        if (pc.iceGatheringState !== 'complete') {
+          await new Promise<void>((resolve) => {
+            const check = () => {
+              if (pc.iceGatheringState === 'complete') resolve();
+            };
+            pc.addEventListener('icegatheringstatechange', check);
+            // Safety timeout — don't wait forever
+            setTimeout(resolve, 3000);
+          });
+        }
+
+        if (cancelled) return;
+
+        // Exchange SDP via dvr_proxy → go2rtc (no HA involved)
+        const resp = await fetch(`${DVR_PROXY}/api/webrtc`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            stream,
             offer: pc.localDescription!.sdp,
-          },
+          }),
+        });
+
+        if (!resp.ok) {
+          throw new Error(`WebRTC proxy error: ${resp.status}`);
+        }
+
+        const data = await resp.json();
+        if (!data.answer) {
+          throw new Error('No answer in response');
+        }
+
+        await pc.setRemoteDescription(
+          new RTCSessionDescription({ type: 'answer', sdp: data.answer }),
         );
-        unsubRef.current = unsub;
       } catch (err) {
         if (!cancelled) {
-          console.error(`WebRTC connect failed for ${entityId}:`, err);
+          console.error(`WebRTC connect failed for ${stream}:`, err);
           setState('connecting');
           scheduleReconnect();
         }
       }
     }
 
-    // Stall detection: every 5s check if video.currentTime is advancing
+    // Stall detection: check every 10s if video.currentTime is advancing.
+    // - Skip checks during 15s grace period after connection
+    // - First stall: try soft recovery (pause/play)
+    // - Second consecutive stall: hard reconnect
     stallTimer = setInterval(() => {
       const video = videoRef.current;
       if (!video || !isPlaying || video.paused) return;
+      // 15s grace period after connection — DVR needs time to start streaming
+      if (Date.now() - playingSince < 15000) {
+        lastVideoTime = video.currentTime;
+        return;
+      }
       if (video.currentTime > 0 && video.currentTime === lastVideoTime) {
-        console.warn(`Video stalled for ${entityId}, reconnecting`);
-        isPlaying = false;
-        setState('connecting');
-        setRetryKey((k) => k + 1);
+        stallCount++;
+        if (stallCount === 1) {
+          // Soft recovery: try pause/play to unstick the video element
+          console.warn(`[${stream}] Stall detected, attempting soft recovery`);
+          video.pause();
+          video.play().catch(() => {});
+        } else if (stallCount >= 2) {
+          // Hard reconnect after 2 consecutive stalls (20s frozen)
+          console.warn(`[${stream}] Persistent stall (${stallCount}), reconnecting`);
+          isPlaying = false;
+          stallCount = 0;
+          setState('connecting');
+          setRetryKey((k) => k + 1);
+        }
+      } else {
+        stallCount = 0;
       }
       lastVideoTime = video.currentTime;
-    }, 5000);
+    }, 10000);
 
     connect();
 
@@ -188,13 +201,10 @@ function WebRTCFeed({ entityId }: { entityId: string }) {
       isPlaying = false;
       clearTimeout(reconnectTimer);
       clearInterval(stallTimer);
-      unsubRef.current?.();
-      unsubRef.current = null;
       pcRef.current?.close();
       pcRef.current = null;
-      sessionIdRef.current = null;
     };
-  }, [entityId, store, retryKey]);
+  }, [stream, retryKey]);
 
   return (
     <div className="relative w-full h-full bg-black">
@@ -247,7 +257,7 @@ function LightButton({ entityId }: { entityId: string }) {
 }
 
 function CameraCell({
-  entityId,
+  stream,
   label,
   lightEntityId,
   hidden,
@@ -255,7 +265,7 @@ function CameraCell({
   onExpand,
   onCollapse,
 }: {
-  entityId: string;
+  stream: string;
   label: string;
   lightEntityId: string;
   hidden: boolean;
@@ -263,8 +273,6 @@ function CameraCell({
   onExpand: () => void;
   onCollapse: () => void;
 }) {
-  const entity = useEntity(entityId);
-  const isUnavailable = !entity || entity.state === 'unavailable';
 
   return (
     <div
@@ -293,16 +301,7 @@ function CameraCell({
         )}
       </div>
 
-      {isUnavailable ? (
-        <div className={`flex flex-col items-center justify-center h-full text-muted-foreground gap-2 ${
-          expanded ? 'min-h-[400px]' : 'min-h-[180px]'
-        }`}>
-          <VideoOff className={expanded ? 'h-10 w-10' : 'h-8 w-8'} />
-          <span className={expanded ? '' : 'text-sm'}>Camera unavailable</span>
-        </div>
-      ) : (
-        <WebRTCFeed entityId={entityId} />
-      )}
+      <WebRTCFeed stream={stream} />
     </div>
   );
 }
@@ -867,17 +866,17 @@ export default function Cameras() {
           }}
         >
           {CAMERAS.map((cam) => {
-            const isExpanded = expanded === cam.entityId;
+            const isExpanded = expanded === cam.stream;
             const isHidden = expanded !== null && !isExpanded;
             return (
               <CameraCell
-                key={cam.entityId}
-                entityId={cam.entityId}
+                key={cam.stream}
+                stream={cam.stream}
                 label={cam.label}
                 lightEntityId={cam.lightEntityId}
                 hidden={isHidden}
                 expanded={isExpanded}
-                onExpand={() => setExpanded(cam.entityId)}
+                onExpand={() => setExpanded(cam.stream)}
                 onCollapse={() => setExpanded(null)}
               />
             );

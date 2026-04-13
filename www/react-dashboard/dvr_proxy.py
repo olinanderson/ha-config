@@ -1,19 +1,21 @@
 #!/usr/bin/env python3
 """
-DVR Proxy — Bridges the Lorex/Dahua DVR recording API and go2rtc WebRTC
-for the React dashboard's camera playback feature.
+DVR Proxy — Bridges the Lorex/Dahua DVR and go2rtc for the React dashboard.
+Handles both live camera WebRTC signaling and DVR playback.
 
 Runs on the HA host at port 8766.
 
 Endpoints:
-  GET  /api/recordings?channel=N&start=ISO&end=ISO  — Search recordings
+  POST /api/webrtc                                   — Live camera WebRTC (SDP proxy)
+  GET  /api/recordings?channel=N&start=ISO&end=ISO   — Search recordings
   GET  /api/date-range?channel=N                     — Oldest/newest recording dates
   GET  /api/timeline?channel=N&date=YYYY-MM-DD       — Recording segments for a day
   POST /api/playback/start                           — Register go2rtc playback stream
   POST /api/playback/webrtc                          — Proxy WebRTC SDP offer→answer
   POST /api/playback/stop                            — Clean up go2rtc stream
 
-Usage:
+On startup, registers DVRIP streams (channel_1–channel_4) in go2rtc so the
+React dashboard can get WebRTC video without going through Home Assistant.
   python3 dvr_proxy.py &
 """
 
@@ -63,6 +65,14 @@ GO2RTC_BASE = "http://localhost:1984"
 
 LISTEN_PORT = 8766
 RTSP_PROXY_PORT = 8767
+
+# Named streams to register in go2rtc at startup (bypasses HA entirely)
+# Main stream (subtype=0): 960x480 30fps — used when a single camera is expanded
+# Sub stream  (subtype=1): 704x480 15fps — used for the 2x2 grid (lighter decoder load)
+DVRIP_STREAMS = {}
+for _ch in range(1, 5):
+    DVRIP_STREAMS[f"channel_{_ch}"] = f"rtsp://{DVR_USER}:{DVR_PASS}@{DVR_HOST}:554/cam/realmonitor?channel={_ch}&subtype=0"
+    DVRIP_STREAMS[f"channel_{_ch}_sub"] = f"rtsp://{DVR_USER}:{DVR_PASS}@{DVR_HOST}:554/cam/realmonitor?channel={_ch}&subtype=1"
 
 # Shared playback speed for the RTSP proxy (set by /api/playback/start)
 _playback_scale = {"value": 1.0}
@@ -198,6 +208,32 @@ def go2rtc_webrtc(stream_name, sdp_offer):
         return r.read().decode()
     except Exception as e:
         return None
+
+
+def ensure_dvrip_streams():
+    """Register DVRIP streams in go2rtc if they don't already exist."""
+    try:
+        r = urllib.request.urlopen(f"{GO2RTC_BASE}/api/streams", timeout=5)
+        existing = json.loads(r.read().decode())
+    except Exception as e:
+        print(f"[dvr_proxy] go2rtc not ready, will retry: {e}", flush=True)
+        return False
+
+    for name, url in DVRIP_STREAMS.items():
+        if name in existing:
+            continue
+        try:
+            encoded_url = urllib.parse.quote(url, safe="")
+            req = urllib.request.Request(
+                f"{GO2RTC_BASE}/api/streams?name={name}&src={encoded_url}",
+                method="PUT",
+            )
+            urllib.request.urlopen(req, timeout=10)
+            print(f"[dvr_proxy] Registered stream '{name}' (DVRIP)", flush=True)
+        except Exception as e:
+            print(f"[dvr_proxy] Failed to register '{name}': {e}", flush=True)
+            return False
+    return True
 
 
 # ─── RTSP Scale Proxy ───
@@ -518,7 +554,34 @@ class DVRHandler(BaseHTTPRequestHandler):
         path = parsed.path
         body = self._read_body()
 
-        if path == "/api/playback/start":
+        if path == "/api/webrtc":
+            # Live camera WebRTC signaling proxy.
+            # Browser sends {stream: "channel_1", offer: "<SDP>"}.
+            # We forward to go2rtc and return {answer: "<SDP>"}.
+            try:
+                data = json.loads(body)
+            except Exception:
+                self._json_response({"error": "invalid json"}, 400)
+                return
+
+            stream = data.get("stream", "")
+            offer = data.get("offer", "")
+            if not stream or not offer:
+                self._json_response({"error": "stream and offer required"}, 400)
+                return
+
+            # Only allow known stream names
+            if stream not in DVRIP_STREAMS and not stream.startswith("camera."):
+                self._json_response({"error": "unknown stream"}, 400)
+                return
+
+            answer = go2rtc_webrtc(stream, offer)
+            if answer:
+                self._json_response({"answer": answer})
+            else:
+                self._json_response({"error": "WebRTC negotiation failed"}, 502)
+
+        elif path == "/api/playback/start":
             try:
                 data = json.loads(body)
             except:
@@ -593,8 +656,15 @@ def main():
     # Start the RTSP Scale proxy (injects Scale header for playback speed)
     RTSPScaleProxy(RTSP_PROXY_PORT).start()
 
+    # Register DVRIP streams in go2rtc (retry a few times if go2rtc isn't ready)
+    for attempt in range(5):
+        if ensure_dvrip_streams():
+            break
+        print(f"[dvr_proxy] Retrying stream registration ({attempt + 1}/5)...", flush=True)
+        _time.sleep(3)
+
     server = HTTPServer(("0.0.0.0", LISTEN_PORT), DVRHandler)
-    print(f"DVR proxy listening on port {LISTEN_PORT}")
+    print(f"DVR proxy listening on port {LISTEN_PORT}", flush=True)
     server.serve_forever()
 
 
