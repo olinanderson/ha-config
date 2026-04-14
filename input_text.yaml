@@ -9,6 +9,19 @@ previous_speed:
   name: "Previous Speed"
   initial: "0"
 
+# ─── Fill-up tracking + VE correction history ───
+last_fillup_ts:
+  name: "Last Fill-up Timestamp (ms)"
+  icon: mdi:gas-station
+  max: 20
+  initial: "0"
+
+ve_correction_history:
+  name: "VE Correction History"
+  icon: mdi:history
+  max: 255
+  initial: "[]"
+
 # --- Vanlife Tracker journal ---
 vanlife_stop_name:
   name: "Stop Name"

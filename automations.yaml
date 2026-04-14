@@ -573,6 +573,64 @@
         value: "{{ states('sensor.192_168_10_90_0d_vehiclespeed') | default('0') }}"
 
 # ────────────────────────────────────────────────────────────────
+# Fill-up Detection — Auto-update VE Correction
+# ────────────────────────────────────────────────────────────────
+# Fires when sensor.stable_fuel_level rises by more than 15 percentage points
+# (can't happen from normal consumption — must be a fill-up).
+# Calls ve_update.py which:
+#   1. Queries /vanlife/fuel-stats for the period since the last fill-up
+#   2. Computes actual L/100km from GPS distance + OBD tank delta
+#   3. Derives a new VE correction factor and appends it to history
+#   4. Updates input_number.fuel_ve_correction to the rolling average
+- id: fill_up_detected
+  alias: "Fill-up Detected — Auto-Update VE Correction"
+  description: >
+    Detects a fuel fill-up (stable fuel level jumps > 15%) and
+    automatically recalibrates the speed-density VE correction factor.
+  mode: single
+  max_exceeded: silent
+  trigger:
+    - trigger: state
+      entity_id: sensor.stable_fuel_level
+  condition:
+    - condition: template
+      value_template: >
+        {% set new_fuel = trigger.to_state.state   | float(-1) %}
+        {% set old_fuel = trigger.from_state.state | float(-1) %}
+        {{ new_fuel > 0 and old_fuel > 0 and (new_fuel - old_fuel) > 15 }}
+  action:
+    - variables:
+        # from_ts = when was the previous fill-up (epoch ms stored in input_text)
+        from_ts: "{{ states('input_text.last_fillup_ts') | int(0) }}"
+        # to_ts = timestamp of the last stable reading before the jump happened
+        to_ts: "{{ (trigger.from_state.last_updated.timestamp() * 1000) | int }}"
+        fuel_before: "{{ trigger.from_state.state | float(0) | round(1) }}"
+        fuel_after: "{{ trigger.to_state.state | float(0) | round(1) }}"
+    # Run the VE update script (queries GPS API, computes correction, stores history)
+    - action: shell_command.update_ve_from_fillup
+      data:
+        from_ts: "{{ from_ts }}"
+        to_ts: "{{ to_ts }}"
+    # Store the fill-up timestamp for next time (epoch ms at the "tank is now full" point)
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.last_fillup_ts
+      data:
+        value: "{{ (now().timestamp() * 1000) | int }}"
+    # Notify so there's a record
+    - action: persistent_notification.create
+      data:
+        title: "⛽ Fill-up Detected"
+        message: >
+          Tank: {{ fuel_before }}% → {{ fuel_after }}%
+          (+{{ (fuel_after - fuel_before) | round(1) }}%,
+          ~{{ ((fuel_after - fuel_before) / 100 * 94.6) | round(1) }} L)
+
+          VE correction updated from GPS distance + tank delta.
+          Check input_number.fuel_ve_correction for the new value.
+        notification_id: fillup_detected
+
+# ────────────────────────────────────────────────────────────────
 # Auto Power Saving When Driving
 # ────────────────────────────────────────────────────────────────
 - id: auto_power_saving_when_driving

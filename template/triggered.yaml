@@ -123,22 +123,63 @@
         {% else %} mdi:minus
         {% endif %}
 
-# ─── Fuel level • "sticky" mean (trigger-based) ───
+# ─── Vehicle Acceleration (triggered, km/h per second) ───────────────────────
+# Fires on every OBD speed update and computes (Δspeed / Δt).
+# Positive = accelerating, negative = braking. Falls back to 0 on stale data.
 - trigger:
     - trigger: state
-      entity_id: sensor.wican_fuel_5_min_mean
+      entity_id: sensor.192_168_10_90_0d_vehiclespeed
+  sensor:
+    - name: "Vehicle Acceleration"
+      unique_id: vehicle_acceleration
+      unit_of_measurement: "km/h/s"
+      state_class: measurement
+      icon: mdi:speedometer
+      state: >
+        {% set prev = trigger.from_state.state | float(-1) %}
+        {% set curr = trigger.to_state.state | float(-1) %}
+        {% if prev < 0 or curr < 0
+              or trigger.from_state.state in ['unknown','unavailable']
+              or trigger.to_state.state   in ['unknown','unavailable'] %}
+          {{ this.state if this.state not in ['unknown','unavailable'] else 0 }}
+        {% else %}
+          {% set dt = (trigger.to_state.last_updated - trigger.from_state.last_updated).total_seconds() %}
+          {% if dt > 0 and dt < 30 %}
+            {{ ((curr - prev) / dt) | round(2) }}
+          {% else %}
+            0
+          {% endif %}
+        {% endif %}
+      availability: "true"
+
+# ─── Stable Fuel Level (grade + acceleration gated) ──────────────────────────
+# Only latches a new OBD fuel reading when:
+#   • The raw OBD value has been unchanged for 3 seconds  (no rapid sloshing)
+#   • Road grade ≤ 1.5° absolute              (no gravity-driven tilt)
+#   • |acceleration| ≤ stability threshold   (no inertial slosh from braking/accel)
+# Also refreshes every 10 minutes as a keep-alive while conditions are already met.
+- trigger:
+    - trigger: state
+      entity_id: sensor.192_168_10_90_2f_fueltanklevel
+      for: "00:00:03"
     - trigger: time_pattern
-      minutes: "/1"
+      minutes: "/10"
   sensor:
     - name: Stable Fuel Level
       unique_id: stable_fuel_level
       unit_of_measurement: "%"
       state_class: measurement
       state: >
-        {% set mean = states('sensor.wican_fuel_5_min_mean') %}
-        {% if mean not in ['unavailable', 'unknown', 'none'] %}
-          {{ mean | float | round(2) }}
+        {% set raw = states('sensor.192_168_10_90_2f_fueltanklevel') | float(-1) %}
+        {% set wican_ok = states('sensor.192_168_10_90_2f_fueltanklevel')
+                          not in ['unknown','unavailable'] %}
+        {% set grade  = states('sensor.road_grade_deg') | float(0) | abs %}
+        {% set accel  = states('sensor.vehicle_acceleration') | float(0) | abs %}
+        {% set thresh = states('input_number.acceleration_stability_threshold') | float(0.5) %}
+        {% set stable = grade <= 1.5 and accel <= thresh %}
+        {% if wican_ok and stable %}
+          {{ raw | round(2) }}
         {% else %}
-          {{ this.state }}
+          {{ this.state if this.state not in ['unknown', 'unavailable'] else 0 }}
         {% endif %}
       availability: "true"

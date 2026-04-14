@@ -74,3 +74,9 @@ restart_dvr_proxy: >
     cd /config/www/react-dashboard &&
     nohup python3 dvr_proxy.py > /config/www/react-dashboard/dvr_proxy.log 2>&1 &
     echo "DVR proxy restarted"'
+
+# Called after a fill-up is detected — queries fuel-stats API to compute the
+# actual L/100km, updates input_number.fuel_ve_correction, and appends an
+# entry to input_text.ve_correction_history.
+# Arguments: from_ts (epoch ms of previous fill-up), to_ts (epoch ms of now)
+update_ve_from_fillup: "python3 /config/ve_update.py {{ from_ts }} {{ to_ts }}"
