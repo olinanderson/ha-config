@@ -439,6 +439,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self._json(500, {"error": str(e)})
             return
 
+        if self.path.startswith('/vanlife/fuel-stats'):
+            self._handle_fuel_stats()
+            return
+
         pts = parse_osrm_coords(self.path)
         if not pts or len(pts) < 2:
             self._json(400, {"code": "Error", "message": "bad path"})
@@ -458,6 +462,142 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self._cors()
             self.end_headers()
             self.wfile.write(str(e).encode())
+
+
+    # ── GET /vanlife/fuel-stats?from_ts=MS[&to_ts=MS] ──────────────────────
+    # Returns distance driven + fuel used between two timestamps so the VE
+    # correction factor can be calibrated from fill-to-fill measurements.
+    #
+    # Params:
+    #   from_ts  Epoch ms — start of period (last fill-up). Default: 7 days ago.
+    #   to_ts    Epoch ms — end of period. Default: now.
+    #
+    # Response fields:
+    #   distance_km             GPS-summed distance from segments table
+    #   segment_count           Number of driving segments in the window
+    #   fuel_start_pct          wican_fuel_5_min_mean nearest to from_ts
+    #   fuel_end_pct            wican_fuel_5_min_mean nearest to to_ts
+    #   fuel_used_pct/l         Delta x 94.6 L tank
+    #   fuel_economy_l100km     Actual L/100km (tank method)
+    #   estimated_avg_l100km    Mean of sensor.estimated_fuel_consumption
+    #   current_ve_correction   input_number.fuel_ve_correction current value
+    #   suggested_ve_correction current_ve * actual / estimated
+    def _handle_fuel_stats(self):
+        import os
+        HA_DB  = "/config/home-assistant_v2.db"
+        TANK_L = 94.6   # Ford Transit T-350 25 US gal
+
+        qs      = parse_qs(urlparse(self.path).query)
+        now_ms  = time.time() * 1000
+        from_ms = float(qs.get("from_ts", [now_ms - 7 * 86400 * 1000])[0])
+        to_ms   = float(qs.get("to_ts",   [now_ms])[0])
+
+        # ── Distance from GPS segments ────────────────────────────────────────
+        gps_con = sqlite3.connect(FILTERED_DB)
+        seg_row = gps_con.execute(
+            "SELECT COUNT(*), COALESCE(SUM(distance_m), 0) FROM segments "
+            "WHERE start_ts >= ? AND end_ts <= ?",
+            (from_ms, to_ms)
+        ).fetchone()
+        gps_con.close()
+
+        result = {
+            "from_ts":         from_ms,
+            "to_ts":           to_ms,
+            "distance_km":     round((seg_row[1] or 0) / 1000, 2),
+            "segment_count":   seg_row[0] or 0,
+            "tank_capacity_l": TANK_L,
+        }
+
+        if not os.path.exists(HA_DB):
+            result["error"] = "HA database not accessible"
+            self._json(200, result)
+            return
+
+        try:
+            ha_con = sqlite3.connect("file:" + HA_DB + "?mode=ro", uri=True)
+
+            def _fuel_near(target_ms, before_only=False):
+                target_s = target_ms / 1000
+                if before_only:
+                    row = ha_con.execute(
+                        "SELECT s.state, s.last_updated_ts FROM states s "
+                        "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
+                        "WHERE sm.entity_id = ? AND s.state != ? AND s.state != ? "
+                        "AND s.last_updated_ts <= ? "
+                        "ORDER BY s.last_updated_ts DESC LIMIT 1",
+                        ("sensor.wican_fuel_5_min_mean", "unknown", "unavailable", target_s)
+                    ).fetchone()
+                else:
+                    row = ha_con.execute(
+                        "SELECT s.state, s.last_updated_ts FROM states s "
+                        "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
+                        "WHERE sm.entity_id = ? AND s.state != ? AND s.state != ? "
+                        "ORDER BY ABS(s.last_updated_ts - ?) LIMIT 1",
+                        ("sensor.wican_fuel_5_min_mean", "unknown", "unavailable", target_s)
+                    ).fetchone()
+                return row
+
+            fuel_start_row = _fuel_near(from_ms, before_only=False)
+            fuel_end_row   = _fuel_near(to_ms,   before_only=True)
+
+            fuel_start = round(float(fuel_start_row[0]), 2) if fuel_start_row else None
+            fuel_end   = round(float(fuel_end_row[0]),   2) if fuel_end_row   else None
+
+            result["fuel_start_pct"] = fuel_start
+            result["fuel_start_ts"]  = fuel_start_row[1] if fuel_start_row else None
+            result["fuel_end_pct"]   = fuel_end
+            result["fuel_end_ts"]    = fuel_end_row[1]   if fuel_end_row   else None
+
+            if fuel_start is not None and fuel_end is not None:
+                used_pct = round(fuel_start - fuel_end, 2)
+                used_l   = round(used_pct / 100 * TANK_L, 2)
+                result["fuel_used_pct"] = used_pct
+                result["fuel_used_l"]   = used_l
+                if result["distance_km"] > 0 and used_l > 0:
+                    result["fuel_economy_l100km"] = round(
+                        used_l / result["distance_km"] * 100, 1
+                    )
+
+            # ── Average estimated fuel consumption (template sensor) ──────────
+            from_s = from_ms / 1000
+            to_s   = to_ms   / 1000
+            est_rows = ha_con.execute(
+                "SELECT s.state FROM states s "
+                "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
+                "WHERE sm.entity_id = ? AND s.state != ? AND s.state != ? "
+                "AND s.last_updated_ts >= ? AND s.last_updated_ts <= ? "
+                "AND CAST(s.state AS REAL) > 0 AND CAST(s.state AS REAL) < 200",
+                ("sensor.estimated_fuel_consumption", "unknown", "unavailable", from_s, to_s)
+            ).fetchall()
+            if est_rows:
+                vals = [float(r[0]) for r in est_rows]
+                result["estimated_avg_l100km"]    = round(sum(vals) / len(vals), 1)
+                result["estimated_reading_count"] = len(vals)
+
+            # ── Current + suggested VE correction ────────────────────────────
+            ve_row = ha_con.execute(
+                "SELECT s.state FROM states s "
+                "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
+                "WHERE sm.entity_id = ? AND s.state != ? AND s.state != ? "
+                "ORDER BY s.last_updated_ts DESC LIMIT 1",
+                ("input_number.fuel_ve_correction", "unknown", "unavailable")
+            ).fetchone()
+            current_ve = round(float(ve_row[0]), 3) if ve_row else 0.55
+            result["current_ve_correction"] = current_ve
+
+            actual    = result.get("fuel_economy_l100km")
+            estimated = result.get("estimated_avg_l100km")
+            if actual and estimated and estimated > 0:
+                result["suggested_ve_correction"] = round(
+                    current_ve * actual / estimated, 3
+                )
+
+            ha_con.close()
+        except Exception as e:
+            result["ha_db_error"] = str(e)
+
+        self._json(200, result)
 
     def log_message(self, fmt, *args):
         pass   # suppress per-request access log
