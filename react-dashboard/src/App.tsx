@@ -12,6 +12,7 @@ import {
   Settings,
   Camera,
   Map,
+  CalendarClock,
   type LucideIcon,
 } from 'lucide-react';
 import Home from '@/pages/Home';
@@ -22,6 +23,7 @@ import Van from '@/pages/Van';
 import System from '@/pages/System';
 import Cameras from '@/pages/Cameras';
 import VanlifeMap from '@/pages/VanlifeMap';
+import Schedule from '@/pages/Schedule';
 
 const pages: Record<string, ComponentType> = {
   home: Home,
@@ -29,9 +31,10 @@ const pages: Record<string, ComponentType> = {
   climate: Climate,
   water: Water,
   van: Van,
-  system: System,
+  schedule: Schedule,
   cameras: Cameras,
   map: VanlifeMap,
+  system: System,
 };
 
 interface NavItem {
@@ -46,6 +49,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'climate', label: 'Climate', icon: Thermometer },
   { id: 'water', label: 'Water', icon: Droplets },
   { id: 'van', label: 'Van', icon: Truck },
+  { id: 'schedule', label: 'Schedule', icon: CalendarClock },
   { id: 'cameras', label: 'Cameras', icon: Camera },
   { id: 'map', label: 'Map', icon: Map },
   { id: 'system', label: 'System', icon: Settings },

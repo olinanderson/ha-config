@@ -77,10 +77,14 @@ class VanDashboard extends HTMLElement {
       if (mod.mount) {
         this._unmount = mod.mount(mountPoint);
       }
-      // Re-dispatch hass in case set hass() fired before React mounted
-      if (window.__HASS__) {
-        window.dispatchEvent(new Event('hass-updated'));
-      }
+      // Dispatch hass-updated via requestAnimationFrame so React's
+      // useLayoutEffect listener is registered before the event fires.
+      // (useLayoutEffect runs synchronously after DOM commit, before RAF)
+      requestAnimationFrame(() => {
+        if (window.__HASS__) {
+          window.dispatchEvent(new Event('hass-updated'));
+        }
+      });
     } catch (err) {
       console.error('[VanDash] Failed to load:', err);
       mountPoint.innerHTML = `

@@ -2,7 +2,7 @@ import {
   createContext,
   useContext,
   useRef,
-  useEffect,
+  useLayoutEffect,
   useSyncExternalStore,
   type ReactNode,
 } from 'react';
@@ -88,7 +88,10 @@ interface HassProviderProps {
 export function HassProvider({ children }: HassProviderProps) {
   const storeRef = useRef(new HassStore());
 
-  useEffect(() => {
+  // useLayoutEffect fires synchronously after React commits to the DOM and
+  // before the browser paints. This guarantees the 'hass-updated' listener
+  // is registered before requestAnimationFrame in panel-loader.js fires.
+  useLayoutEffect(() => {
     const handler = () => {
       const hass = (window as any).__HASS__ as HomeAssistant | undefined;
       if (hass) storeRef.current.update(hass);
