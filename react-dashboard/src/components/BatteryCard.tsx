@@ -24,7 +24,12 @@ export function BatteryCard({ compact = false }: { compact?: boolean }) {
 
   const charging = (current ?? 0) > 0;
   const estimate = estimateEntity?.state;
-  const showEstimate = estimate && estimate !== 'Idle' && estimate !== 'unknown' && estimate !== 'unavailable';
+  const estimateDisplay =
+    !estimate || estimate === 'unknown' || estimate === 'unavailable'
+      ? '—'
+      : estimate === 'Idle'
+        ? 'Idle'
+        : estimate;
   const socNum = soc ?? 0;
   const socColor = socNum < 30 ? 'text-red-500' : socNum < 65 ? 'text-orange-500' : 'text-green-500';
   const barColor =
@@ -65,16 +70,18 @@ export function BatteryCard({ compact = false }: { compact?: boolean }) {
             </>
           )}
         </div>
-        {showEstimate && (
-          <p
-            className={cn(
-              'text-xs font-medium text-center',
-              charging ? 'text-green-500' : 'text-orange-500',
-            )}
-          >
-            {estimate}
-          </p>
-        )}
+        <p
+          className={cn(
+            'text-xs font-medium text-center',
+            estimateDisplay === 'Idle' || estimateDisplay === '—'
+              ? 'text-muted-foreground'
+              : charging
+                ? 'text-green-500'
+                : 'text-orange-500',
+          )}
+        >
+          {estimateDisplay}
+        </p>
       </CardContent>
     </Card>
   );

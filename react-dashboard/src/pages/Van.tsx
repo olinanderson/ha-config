@@ -287,7 +287,12 @@ function PowerHeroCard() {
   const battColor = battCurrentVal > 0 ? 'text-green-400' : battCurrentVal < -5 ? 'text-orange-400' : 'text-foreground';
   const solarColor = (solarW ?? 0) > 50 ? 'text-yellow-400' : 'text-muted-foreground';
   const estimate = estimateEntity?.state;
-  const showEstimate = estimate && estimate !== 'Idle' && estimate !== 'unknown' && estimate !== 'unavailable';
+  const estimateDisplay =
+    !estimate || estimate === 'unknown' || estimate === 'unavailable'
+      ? '—'
+      : estimate === 'Idle'
+        ? 'Idle'
+        : estimate;
 
   return (
     <Card>
@@ -310,9 +315,7 @@ function PowerHeroCard() {
         </div>
 
         {/* Estimate */}
-        {showEstimate && (
-          <p className="text-center text-sm font-medium text-muted-foreground mt-1.5">{estimate}</p>
-        )}
+        <p className="text-center text-sm font-medium text-muted-foreground mt-1.5">{estimateDisplay}</p>
 
         {/* Bottom row: Solar, Alternator, Eco */}
         <div className="grid grid-cols-3 gap-3 mt-2">
