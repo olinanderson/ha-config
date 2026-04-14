@@ -520,7 +520,7 @@ The WiCAN Pro connects via **HTTP webhooks** (not MQTT). All entities are create
 | `sensor.dtc_count` | Number of active DTCs (from PID 0x01) |
 | `sensor.estimated_fuel_rate` | Speed-density fuel rate (L/h) — MAP × RPM × IAT × VE with 3 corrections: RPM-based VE curve, fuel trim avg, lambda AFR. Attributes: map_kpa, ve_base, rpm, ve_effective, fuel_trim_avg, lambda |
 | `sensor.estimated_fuel_consumption` | Fuel economy (L/100km) — only when speed > 5 km/h |
-| `sensor.injector_pulse_width_ms` | Injector pulse width (ms) — raw WiCAN µs ÷ 1000. Idle ~5 ms |
+| `sensor.injector_pulse_width` | Injector pulse width (ms) — raw WiCAN µs ÷ 1000. Idle ~5 ms |
 | `sensor.average_fuel_trim` | Averaged fuel trim across both banks: (STFT+LTFT B1 + STFT+LTFT B2) / 2. Attributes: per-bank breakdowns |
 | `sensor.commanded_afr` | Commanded air-fuel ratio (14.7 × lambda). Falls back to 14.7 if lambda unavailable |
 | `binary_sensor.check_engine_light` | MIL/CEL on/off (from PID 0x01 bit 7 ≥ 128) |

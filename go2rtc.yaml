@@ -17,3 +17,4 @@ streams:
     - rtsp://admin:***REDACTED***@192.168.10.156:554/cam/realmonitor?channel=3&subtype=1
   channel_4_sub:
     - rtsp://admin:***REDACTED***@192.168.10.156:554/cam/realmonitor?channel=4&subtype=1
+

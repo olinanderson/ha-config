@@ -11,9 +11,9 @@ Endpoints:
   GET  /api/recordings?channel=N&start=ISO&end=ISO   — Search recordings
   GET  /api/date-range?channel=N                     — Oldest/newest recording dates
   GET  /api/timeline?channel=N&date=YYYY-MM-DD       — Recording segments for a day
-  POST /api/playback/start                           — Register go2rtc playback stream
+  POST /api/playback/start                           — Start ffmpeg playback (RTSP Scale proxy for speed)
   POST /api/playback/webrtc                          — Proxy WebRTC SDP offer→answer
-  POST /api/playback/stop                            — Clean up go2rtc stream
+  POST /api/playback/stop                            — Kill ffmpeg playback process
 
 On startup, registers DVRIP streams (channel_1–channel_4) in go2rtc so the
 React dashboard can get WebRTC video without going through Home Assistant.
@@ -260,6 +260,7 @@ class RTSPScaleProxy(threading.Thread):
     def run(self):
         srv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        srv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
         srv.bind(("0.0.0.0", self.port))
         srv.listen(5)
         print(f"RTSP Scale proxy listening on port {self.port}", flush=True)
@@ -387,8 +388,8 @@ def _start_ffmpeg(channel, rtsp_start, rtsp_end):
     minimize startup latency.
     """
     rtsp_url = (
-        f"rtsp://{DVR_USER}:{DVR_PASS}@{DVR_HOST}:554"
-        f"/cam/playback?channel={channel}&subtype=1"
+        f"rtsp://{DVR_USER}:{DVR_PASS}@127.0.0.1:{RTSP_PROXY_PORT}"
+        f"/cam/playback?channel={channel}&subtype=0"
         f"&starttime={rtsp_start}&endtime={rtsp_end}"
     )
     cmd = [
@@ -429,7 +430,7 @@ class DVRHandler(BaseHTTPRequestHandler):
     def _cors(self):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS, DELETE")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type")
+        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization")
 
     def _json_response(self, data, status=200):
         body = json.dumps(data).encode()
@@ -591,7 +592,7 @@ class DVRHandler(BaseHTTPRequestHandler):
 
         elif path == "/api/mse":
             src = qs.get("src", "")
-            if not src or (src not in DVRIP_STREAMS and not src.startswith("camera.")):
+            if not src or (src not in DVRIP_STREAMS and not src.startswith("camera.") and src != "playback"):
                 self._json_response({"error": "unknown stream"}, 400)
                 return
             self._proxy_mse_stream(src)
@@ -600,6 +601,9 @@ class DVRHandler(BaseHTTPRequestHandler):
             self._json_response({"status": "ok"})
 
         elif path == "/api/playback/stream":
+            # Stream ffmpeg fMP4 directly — no go2rtc involved.
+            # ffmpeg was pre-started by /api/playback/start via the RTSP Scale proxy
+            # (port 8767) which injects Scale: N into the DVR's RTSP PLAY command.
             self._proxy_mp4_stream()
 
         else:
@@ -656,24 +660,33 @@ class DVRHandler(BaseHTTPRequestHandler):
             rtsp_start = start_time.replace("-", "_").replace(" ", "_").replace(":", "_")
             rtsp_end = end_time.replace("-", "_").replace(" ", "_").replace(":", "_")
 
-            # Set the Scale value for the RTSP proxy.
-            _playback_scale["value"] = float(speed) / 2.0 if speed else 0.5
+            # Set Scale value for the RTSP proxy (port 8767).
+            # The proxy injects "Scale: N.000" into the DVR's RTSP PLAY command
+            # so the DVR delivers frames N× faster (true server-side speed control).
+            _playback_scale["value"] = float(speed) if speed else 1.0
 
-            # Pre-start ffmpeg so the RTSP handshake + DVR seek happens
-            # while the browser is mounting the PlaybackFeed component.
-            # By the time /api/playback/stream is requested, ffmpeg is
-            # already connected and buffering output.
+            # Kill any existing ffmpeg, then pre-start a new one.
+            # ffmpeg connects through the RTSP Scale proxy on 127.0.0.1:8767.
+            # The frontend then fetches /api/playback/stream which pipes ffmpeg stdout.
             with _lock:
                 _kill_ffmpeg()
                 _playback_state["channel"] = channel
                 _playback_state["rtsp_start"] = rtsp_start
                 _playback_state["rtsp_end"] = rtsp_end
-                _playback_state["proc"] = _start_ffmpeg(
-                    channel, rtsp_start, rtsp_end
-                )
+                _playback_state["proc"] = None
+
+            try:
+                proc = _start_ffmpeg(channel, rtsp_start, rtsp_end)
+                with _lock:
+                    _playback_state["proc"] = proc
+                print(f"[dvr_proxy] Started playback (ch{channel} {start_time}\u2192{end_time} speed={speed}x)", flush=True)
+            except Exception as e:
+                print(f"[dvr_proxy] Failed to start ffmpeg: {e}", flush=True)
+                self._json_response({"error": f"ffmpeg start failed: {e}"}, 502)
+                return
 
             self._json_response({
-                "stream": "playback",
+                "ok": True,
                 "channel": channel,
                 "startTime": start_time,
                 "endTime": end_time,
@@ -719,7 +732,17 @@ def main():
         print(f"[dvr_proxy] Retrying stream registration ({attempt + 1}/5)...", flush=True)
         _time.sleep(3)
 
-    server = ThreadingHTTPServer(("0.0.0.0", LISTEN_PORT), DVRHandler)
+    class ReusableHTTPServer(ThreadingHTTPServer):
+        allow_reuse_address = True
+        allow_reuse_port = True
+        def server_bind(self):
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+            try:
+                self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEPORT, 1)
+            except (AttributeError, OSError):
+                pass
+            super().server_bind()
+    server = ReusableHTTPServer(("0.0.0.0", LISTEN_PORT), DVRHandler)
     print(f"DVR proxy listening on port {LISTEN_PORT}", flush=True)
     server.serve_forever()
 

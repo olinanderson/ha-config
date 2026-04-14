@@ -1,6 +1,43 @@
 /** Vanlife map API client — talks to osrm_proxy.py on port 8765 */
 
-const API_BASE = () => `${location.protocol}//${location.hostname}:8765`;
+const IS_LOCAL = /^(192\.168\.|10\.|100\.|172\.(1[6-9]|2\d|3[01])\.|localhost$)/.test(
+  location.hostname,
+);
+
+/** Local: direct to osrm_proxy. Remote (Nabu Casa): proxy through HA's HTTP API */
+const API_BASE = () =>
+  IS_LOCAL
+    ? `${location.protocol}//${location.hostname}:8765`
+    : `${location.origin}/api`;
+
+/** Get HA auth token — waits up to 5s for __HASS__ to be available */
+async function getAuthToken(): Promise<string | null> {
+  const hass = () => (window as any).__HASS__;
+  const token = () => hass()?.auth?.data?.access_token as string | undefined;
+  if (token()) return token()!;
+  // Wait for hass-updated event
+  return new Promise<string | null>((resolve) => {
+    const timeout = setTimeout(() => {
+      window.removeEventListener('hass-updated', handler);
+      resolve(token() || null);
+    }, 5000);
+    const handler = () => {
+      if (token()) {
+        clearTimeout(timeout);
+        window.removeEventListener('hass-updated', handler);
+        resolve(token()!);
+      }
+    };
+    window.addEventListener('hass-updated', handler);
+  });
+}
+
+/** Auth headers — needed when routing through HA's API proxy */
+async function authHeaders(): Promise<Record<string, string>> {
+  if (IS_LOCAL) return {};
+  const token = await getAuthToken();
+  return token ? { Authorization: `Bearer ${token}` } : {};
+};
 
 /* ── Types ─────────────────────────────────────────────────────────── */
 
@@ -58,7 +95,7 @@ export async function fetchFilteredGps(
   signal?: AbortSignal,
 ): Promise<FilteredGpsResponse | null> {
   const url = `${API_BASE()}/vanlife/filtered-gps?start=${start.getTime()}&end=${end.getTime()}`;
-  const r = await fetch(url, { signal });
+  const r = await fetch(url, { signal, headers: await authHeaders() });
   if (!r.ok) return null;
   const d = await r.json();
   if (!d.ready || !d.segments || d.segments.length === 0) return null;
@@ -66,14 +103,14 @@ export async function fetchFilteredGps(
 }
 
 export async function fetchNamedPlaces(signal?: AbortSignal): Promise<NamedPlace[]> {
-  const r = await fetch(`${API_BASE()}/vanlife/named-places`, { signal });
+  const r = await fetch(`${API_BASE()}/vanlife/named-places`, { signal, headers: await authHeaders() });
   if (!r.ok) return [];
   const d = await r.json();
   return d.places ?? [];
 }
 
 export async function fetchDataRange(signal?: AbortSignal): Promise<DataRange | null> {
-  const r = await fetch(`${API_BASE()}/vanlife/data-range`, { signal });
+  const r = await fetch(`${API_BASE()}/vanlife/data-range`, { signal, headers: await authHeaders() });
   if (!r.ok) return null;
   return r.json();
 }
@@ -84,7 +121,7 @@ export async function createNamedPlace(
 ): Promise<{ id: string; name: string } | null> {
   const r = await fetch(`${API_BASE()}/vanlife/named-places`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...await authHeaders() },
     body: JSON.stringify(place),
     signal,
   });
@@ -99,7 +136,7 @@ export async function updateNamedPlace(
 ): Promise<boolean> {
   const r = await fetch(`${API_BASE()}/vanlife/named-places/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', ...await authHeaders() },
     body: JSON.stringify(data),
     signal,
   });
@@ -110,6 +147,7 @@ export async function deleteNamedPlace(id: string, signal?: AbortSignal): Promis
   const r = await fetch(`${API_BASE()}/vanlife/named-places/${id}`, {
     method: 'DELETE',
     signal,
+    headers: await authHeaders(),
   });
   return r.ok;
 }

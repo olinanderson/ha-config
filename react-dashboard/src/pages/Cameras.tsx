@@ -14,6 +14,8 @@ import {
   ChevronRight,
   Play,
   Pause,
+  Undo2,
+  Redo2,
 } from 'lucide-react';
 
 const CAMERAS = [
@@ -23,7 +25,31 @@ const CAMERAS = [
   { entityId: 'camera.channel_4', label: 'Back', channel: 4, stream: 'channel_4', lightEntityId: 'switch.a32_pro_switch23_rear_outdoor_lights' },
 ];
 
-type StreamState = 'connecting' | 'playing' | 'error';
+type StreamState = 'connecting' | 'playing' | 'error' | 'unsupported';
+
+/**
+ * Resolve the best available MSE class.
+ * Safari 17.1+ (including iOS WKWebView / HA companion app) provides
+ * ManagedMediaSource instead of (or in addition to) MediaSource.
+ */
+const MSEClass: typeof MediaSource | undefined =
+  (window as any).ManagedMediaSource ?? window.MediaSource;
+
+/** Whether this browser supports MSE (desktop Chrome, etc.) or not (iOS WKWebView). */
+const HAS_MSE = !!MSEClass;
+
+/**
+ * Build HLS stream URL through our go2rtc proxy.
+ * go2rtc serves HLS at /api/stream.m3u8?src=X — we proxy it through HA's HTTP
+ * server so it works over Nabu Casa HTTPS.
+ */
+function getHlsUrl(stream: string): string {
+  if (IS_HTTPS) {
+    const base = (window as unknown as Record<string, unknown>).__HA_BASE_URL__ || '';
+    return `${base}/api/go2rtc/api/stream.m3u8?src=${encodeURIComponent(stream)}`;
+  }
+  return `http://${window.location.hostname}:1984/api/stream.m3u8?src=${encodeURIComponent(stream)}`;
+}
 
 // ─── Network Detection ───
 
@@ -38,27 +64,70 @@ const IS_LOCAL = /^192\.168\.10\./.test(window.location.hostname);
 /** Direct proxy URL — only reachable on HTTP (local/Tailscale) */
 const DVR_PROXY = `http://${window.location.hostname}:8766`;
 
+/** DVR JSON API base — routes through HA proxy on HTTPS for Nabu Casa */
+function dvrApiBase(): string {
+  if (IS_HTTPS) {
+    const base = (window as unknown as Record<string, unknown>).__HA_BASE_URL__ || '';
+    return `${base}/api/dvr`;
+  }
+  return `${DVR_PROXY}/api`;
+}
+
+/** DVR streaming base — routes through HA proxy on HTTPS for Nabu Casa */
+function dvrStreamBase(): string {
+  if (IS_HTTPS) {
+    const base = (window as unknown as Record<string, unknown>).__HA_BASE_URL__ || '';
+    return `${base}/api/dvr-stream`;
+  }
+  return `${DVR_PROXY}/api`;
+}
+
+/** Get auth headers for DVR requests through HA */
+async function dvrAuthHeaders(): Promise<Record<string, string>> {
+  const hass = (window as unknown as Record<string, unknown>).__HASS__ as { auth?: { data?: { access_token?: string } } } | undefined;
+  let token = hass?.auth?.data?.access_token;
+  if (!token) {
+    // Wait for hass to be available
+    token = await new Promise<string | undefined>((resolve) => {
+      const timeout = setTimeout(() => {
+        window.removeEventListener('hass-updated', handler);
+        const h = (window as unknown as Record<string, unknown>).__HASS__ as any;
+        resolve(h?.auth?.data?.access_token);
+      }, 5000);
+      const handler = () => {
+        const h = (window as unknown as Record<string, unknown>).__HASS__ as any;
+        const t = h?.auth?.data?.access_token;
+        if (t) {
+          clearTimeout(timeout);
+          window.removeEventListener('hass-updated', handler);
+          resolve(t);
+        }
+      };
+      window.addEventListener('hass-updated', handler);
+    });
+  }
+  return token ? { Authorization: `Bearer ${token}` } : {};
+}
+
 /**
- * Build the MSE stream URL. On HTTPS (Nabu Casa), use HA's built-in go2rtc proxy
- * at the same origin. On HTTP, use dvr_proxy on port 8766.
+ * Build the MSE stream URL. On HTTPS (Nabu Casa), use our DVR stream proxy
+ * which routes through HA's HTTP server. On HTTP, use dvr_proxy directly.
  */
 function getMseUrl(stream: string): string {
   if (IS_HTTPS) {
-    // HA proxies go2rtc internally: /api/go2rtc/api/stream.mp4
     const base = (window as unknown as Record<string, unknown>).__HA_BASE_URL__ || '';
-    return `${base}/api/go2rtc/api/stream.mp4?src=${encodeURIComponent(stream)}`;
+    return `${base}/api/dvr-stream/mse?src=${encodeURIComponent(stream)}`;
   }
   return `${DVR_PROXY}/api/mse?src=${encodeURIComponent(stream)}`;
 }
 
 /** Get fetch headers — HA go2rtc proxy requires Bearer auth */
-function getMseFetchInit(signal: AbortSignal): RequestInit {
+async function getMseFetchInit(signal: AbortSignal): Promise<RequestInit> {
   const init: RequestInit = { signal };
   if (IS_HTTPS) {
-    const hass = (window as unknown as Record<string, unknown>).__HASS__ as { auth?: { data?: { access_token?: string } } } | undefined;
-    const token = hass?.auth?.data?.access_token;
-    if (token) {
-      init.headers = { Authorization: `Bearer ${token}` };
+    const headers = await dvrAuthHeaders();
+    if (headers.Authorization) {
+      init.headers = headers;
     }
   }
   return init;
@@ -75,13 +144,17 @@ function getMseFetchInit(signal: AbortSignal): RequestInit {
  *
  * Auto-reconnects with exponential backoff on stream errors.
  */
-function MSEFeed({ stream }: { stream: string }) {
+function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [state, setState] = useState<StreamState>('connecting');
   const [retryKey, setRetryKey] = useState(0);
   const retryCountRef = useRef(0);
 
   useEffect(() => {
+    if (paused) {
+      setState('connecting');
+      return;
+    }
     if (!videoRef.current) return;
     const video = videoRef.current;
 
@@ -110,9 +183,15 @@ function MSEFeed({ stream }: { stream: string }) {
 
     async function start() {
       try {
+        if (!MSEClass) {
+          console.error(`[${stream}] MSE not supported in this browser`);
+          setState('unsupported');
+          return;
+        }
+
         const resp = await fetch(
           getMseUrl(stream),
-          getMseFetchInit(abortCtrl.signal),
+          await getMseFetchInit(abortCtrl.signal),
         );
         if (cancelled) return;
         if (!resp.ok || !resp.body) {
@@ -126,15 +205,15 @@ function MSEFeed({ stream }: { stream: string }) {
           .split(';')
           .map((s) => s.trim())
           .join('; ');
-        if (!MediaSource.isTypeSupported(mimeType)) {
+        if (!MSEClass.isTypeSupported(mimeType)) {
           mimeType = 'video/mp4; codecs="avc1.640028"';
         }
-        if (!MediaSource.isTypeSupported(mimeType)) {
+        if (!MSEClass.isTypeSupported(mimeType)) {
           throw new Error('No supported MSE codec');
         }
 
-        // Create MediaSource
-        const ms = new MediaSource();
+        // Create MediaSource (or ManagedMediaSource on iOS Safari)
+        const ms = new MSEClass();
         objectUrl = URL.createObjectURL(ms);
         video.src = objectUrl;
 
@@ -303,7 +382,7 @@ function MSEFeed({ stream }: { stream: string }) {
       video.load();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [stream, retryKey]);
+  }, [stream, retryKey, paused]);
 
   return (
     <div className="relative w-full h-full bg-black">
@@ -325,6 +404,116 @@ function MSEFeed({ stream }: { stream: string }) {
         <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground gap-2">
           <VideoOff className="h-6 w-6" />
           <span className="text-xs">Reconnecting…</span>
+        </div>
+      )}
+      {state === 'unsupported' && (
+        <div className="absolute inset-0 flex flex-col items-center justify-center text-muted-foreground gap-2">
+          <VideoOff className="h-6 w-6" />
+          <span className="text-xs">MSE not supported</span>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── HLS Feed (iOS WKWebView fallback) ───
+
+/**
+ * Live camera feed using HLS — for iOS WKWebView (HA companion app) where
+ * MediaSource is unavailable. WKWebView handles HLS natively via <video src>.
+ * Higher latency (~3-6s) than MSE but universally supported.
+ */
+function HLSFeed({ stream, paused }: { stream: string; paused?: boolean }) {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const [state, setState] = useState<StreamState>('connecting');
+  const retryCountRef = useRef(0);
+  const [retryKey, setRetryKey] = useState(0);
+
+  useEffect(() => {
+    if (paused) {
+      setState('connecting');
+      return;
+    }
+    const video = videoRef.current!;
+
+    let cancelled = false;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+
+    function scheduleReconnect() {
+      if (cancelled) return;
+      const base = Math.min(2000 * Math.pow(2, retryCountRef.current), 30000);
+      retryCountRef.current++;
+      reconnectTimer = setTimeout(() => {
+        if (!cancelled) {
+          setState('connecting');
+          setRetryKey((k) => k + 1);
+        }
+      }, base);
+    }
+
+    async function start() {
+      try {
+        const url = getHlsUrl(stream);
+        video.src = url;
+        video.load();
+        video.play().catch(() => {});
+      } catch (err) {
+        if (!cancelled) {
+          console.error(`[${stream}] HLS error:`, err);
+          scheduleReconnect();
+        }
+      }
+    }
+
+    const onPlaying = () => {
+      if (!cancelled) {
+        setState('playing');
+        retryCountRef.current = 0;
+      }
+    };
+    const onError = () => {
+      if (!cancelled) {
+        console.error(`[${stream}] HLS video error:`, video.error);
+        setState('connecting');
+        scheduleReconnect();
+      }
+    };
+    const onLoadedData = () => {
+      if (!cancelled) setState('playing');
+    };
+
+    video.addEventListener('playing', onPlaying);
+    video.addEventListener('error', onError);
+    video.addEventListener('loadeddata', onLoadedData);
+
+    start();
+
+    return () => {
+      cancelled = true;
+      clearTimeout(reconnectTimer);
+      video!.removeEventListener('playing', onPlaying);
+      video!.removeEventListener('error', onError);
+      video!.removeEventListener('loadeddata', onLoadedData);
+      video!.pause();
+      video!.removeAttribute('src');
+      video!.load();
+    };
+  }, [stream, retryKey, paused]);
+
+  return (
+    <div className="relative w-full h-full bg-black">
+      <video
+        ref={videoRef}
+        autoPlay
+        playsInline
+        muted
+        className={`w-full h-full object-contain transition-opacity duration-300 ${
+          state === 'playing' ? 'opacity-100' : 'opacity-0'
+        }`}
+      />
+      {state === 'connecting' && (
+        <div className="absolute inset-0 flex items-center justify-center text-muted-foreground">
+          <Loader2 className="h-6 w-6 animate-spin" />
         </div>
       )}
     </div>
@@ -362,6 +551,7 @@ function CameraCell({
   hidden,
   expanded,
   quality,
+  paused,
   onExpand,
   onCollapse,
 }: {
@@ -371,6 +561,7 @@ function CameraCell({
   hidden: boolean;
   expanded: boolean;
   quality: 'main' | 'sub';
+  paused?: boolean;
   onExpand: () => void;
   onCollapse: () => void;
 }) {
@@ -403,7 +594,11 @@ function CameraCell({
         )}
       </div>
 
-      <MSEFeed stream={activeStream} />
+      {HAS_MSE ? (
+        <MSEFeed stream={activeStream} paused={paused} />
+      ) : (
+        <HLSFeed stream={activeStream} paused={paused} />
+      )}
     </div>
   );
 }
@@ -417,18 +612,37 @@ interface TimelineSegment {
 }
 
 async function dvrFetch(path: string, init?: RequestInit) {
-  const r = await fetch(`${DVR_PROXY}${path}`, init);
+  const url = `${dvrApiBase()}${path}`;
+  const headers = { ...await dvrAuthHeaders(), ...(init?.headers as Record<string, string> || {}) };
+  const r = await fetch(url, { ...init, headers });
   if (!r.ok) throw new Error(`DVR proxy error: ${r.status}`);
   return r.json();
 }
 
-// ─── Playback MP4 Feed ───
+// ─── Playback Feed (via go2rtc) ───
 
 /**
- * Plays DVR recordings via go2rtc's fMP4 stream proxied through dvr_proxy.
- * Uses MSE (Media Source Extensions) because go2rtc outputs fragmented MP4
- * which has duration=0 — Chrome can't play this via plain <video src>.
- * MSE lets us append fMP4 fragments as they arrive from the fetch stream.
+ * Build the playback stream URL — dvr_proxy's ffmpeg pipe endpoint.
+ * go2rtc is not involved; _proxy_mp4_stream() pipes ffmpeg stdout directly.
+ * The RTSP Scale proxy (port 8767) handles server-side speed control.
+ */
+function getPlaybackStreamUrl(): string {
+  if (IS_HTTPS) {
+    const base = (window as unknown as Record<string, unknown>).__HA_BASE_URL__ as string || '';
+    return `${base}/api/dvr-stream/playback/stream`;
+  }
+  return `${DVR_PROXY}/api/playback/stream`;
+}
+
+/**
+ * Plays DVR recordings via go2rtc's fMP4 stream.
+ *
+ * Streams through HA's native go2rtc proxy (not dvr_proxy) for maximum
+ * throughput. Data arrives ~1.8× faster than real-time (DVR sends as fast as
+ * possible). Key optimizations:
+ * - Batch-concatenate queued chunks → single appendBuffer call (reduces async overhead)
+ * - Buffer 500ms of data before starting playback
+ * - Trim only on QuotaExceededError or every 15s (minimize trim-related stalls)
  */
 function PlaybackFeed({
   speed = 1,
@@ -441,11 +655,8 @@ function PlaybackFeed({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [state, setState] = useState<StreamState>('connecting');
-
-  // Update playbackRate when speed changes (no remount needed)
-  useEffect(() => {
-    if (videoRef.current) videoRef.current.playbackRate = speed;
-  }, [speed]);
+  const onErrorRef = useRef(onError);
+  onErrorRef.current = onError;
 
   // Pause/resume
   useEffect(() => {
@@ -460,43 +671,54 @@ function PlaybackFeed({
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !MSEClass) return;
 
     let cancelled = false;
     let objectUrl: string | null = null;
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
+    let trimInterval: ReturnType<typeof setInterval> | undefined;
+    let stallWatchdog: ReturnType<typeof setInterval> | undefined;
+    const abortCtrl = new AbortController();
 
     async function start() {
-      if (!video) return;
+      if (!video || !MSEClass) return;
       try {
-        // 1. Fetch the fMP4 stream
-        const resp = await fetch(`${DVR_PROXY}/api/playback/stream`);
+        // Fetch the ffmpeg fMP4 pipe from dvr_proxy.
+        // Auth only needed on HTTPS (getMseFetchInit is a no-op on HTTP).
+        const resp = await fetch(
+          getPlaybackStreamUrl(),
+          await getMseFetchInit(abortCtrl.signal),
+        );
         if (cancelled) return;
         if (!resp.ok || !resp.body) {
           console.error('Playback stream:', resp.status);
           setState('error');
-          onError?.();
+          onErrorRef.current?.();
           return;
         }
 
-        // 2. Determine MSE codec
-        const ct = resp.headers.get('Content-Type') || 'video/mp4; codecs="hvc1"';
-        let mimeType = ct.split(';').map(s => s.trim()).join('; ');
-        if (!MediaSource.isTypeSupported(mimeType)) {
-          mimeType = 'video/mp4; codecs="hvc1"';
+        // Determine MSE codec — HA go2rtc proxy may strip codecs from Content-Type
+        let mimeType = '';
+        const ct = resp.headers.get('Content-Type') || '';
+        if (ct) {
+          const normalized = ct.split(';').map(s => s.trim()).join('; ');
+          if (MSEClass.isTypeSupported(normalized)) mimeType = normalized;
         }
-        if (!MediaSource.isTypeSupported(mimeType)) {
+        if (!mimeType && MSEClass.isTypeSupported('video/mp4; codecs="avc1.640028"')) {
           mimeType = 'video/mp4; codecs="avc1.640028"';
         }
-        if (!MediaSource.isTypeSupported(mimeType)) {
-          console.error('No supported MSE codec');
+        if (!mimeType && MSEClass.isTypeSupported('video/mp4; codecs="hvc1"')) {
+          mimeType = 'video/mp4; codecs="hvc1"';
+        }
+        if (!mimeType) {
+          console.error('No supported MSE codec for playback');
           setState('error');
-          onError?.();
+          onErrorRef.current?.();
           return;
         }
 
-        // 3. Create MediaSource
-        const ms = new MediaSource();
+        // Create MediaSource
+        const ms = new MSEClass();
         objectUrl = URL.createObjectURL(ms);
         video.src = objectUrl;
 
@@ -506,43 +728,167 @@ function PlaybackFeed({
         if (cancelled) return;
 
         const sb = ms.addSourceBuffer(mimeType);
+        // Sequence mode handles timestamp discontinuities from DVR playback
+        try { sb.mode = 'sequence'; } catch { /* some browsers don't allow changing mode */ }
         reader = resp.body.getReader();
 
-        // Queue: when SourceBuffer is busy, queue chunks for later
+        // --- Batched buffer management ---
+        // Key optimization: concatenate ALL queued chunks into one appendBuffer
+        // call instead of appending one-by-one. This dramatically reduces async
+        // overhead when data arrives faster than real-time (~50 fragments/sec).
         const queue: Uint8Array[] = [];
+        let queueBytes = 0;
+        let trimPending = false;
 
-        const drain = () => {
-          if (queue.length > 0 && !sb.updating && ms.readyState === 'open') {
-            const chunk = queue.shift()!;
-            sb.appendBuffer(chunk.buffer as ArrayBuffer);
+        function drainQueue() {
+          if (sb.updating || ms.readyState !== 'open') return;
+
+          if (queue.length > 0) {
+            // Merge all queued chunks into a single buffer
+            let merged: Uint8Array;
+            if (queue.length === 1) {
+              merged = queue[0];
+            } else {
+              merged = new Uint8Array(queueBytes);
+              let offset = 0;
+              for (const chunk of queue) {
+                merged.set(chunk, offset);
+                offset += chunk.byteLength;
+              }
+            }
+            queue.length = 0;
+            queueBytes = 0;
+            try {
+              sb.appendBuffer(merged.buffer as ArrayBuffer);
+            } catch {
+              // QuotaExceededError — force trim
+              trimPending = true;
+              // Re-queue the merged data so it's not lost
+              queue.push(merged);
+              queueBytes = merged.byteLength;
+              if (!sb.updating) doTrim();
+            }
+            return;
           }
-        };
-        sb.addEventListener('updateend', drain);
 
-        // 4. Pump fetch stream → SourceBuffer
+          if (trimPending) doTrim();
+        }
+
+        function doTrim() {
+          if (sb.updating || ms.readyState !== 'open' || sb.buffered.length === 0) return;
+          const bufStart = sb.buffered.start(0);
+          const bufEnd = sb.buffered.end(sb.buffered.length - 1);
+          if (bufEnd - bufStart > 90) {
+            try {
+              sb.remove(bufStart, bufEnd - 30);
+              trimPending = false;
+            } catch { /* ignore */ }
+          } else {
+            trimPending = false;
+          }
+        }
+
+        sb.addEventListener('updateend', drainQueue);
+
+        // Trim periodically (every 15s) — less aggressive than before
+        trimInterval = setInterval(() => {
+          if (cancelled) return;
+          if (sb.buffered.length > 0) {
+            const range = sb.buffered.end(sb.buffered.length - 1) - sb.buffered.start(0);
+            if (range > 90) {
+              trimPending = true;
+              drainQueue();
+            }
+          }
+        }, 15000);
+
+        // --- Stall watchdog ---
+        let lastTime = 0;
+        let stallCount = 0;
+
+        stallWatchdog = setInterval(() => {
+          if (cancelled || !video || video.paused) return;
+          if (sb.buffered.length === 0) return;
+
+          const ct = video.currentTime;
+
+          // Stall detection: currentTime not advancing for 2 checks (~6s)
+          if (Math.abs(ct - lastTime) < 0.1 && ct > 0) {
+            stallCount++;
+            if (stallCount >= 2) {
+              const bufEnd = sb.buffered.end(sb.buffered.length - 1);
+              if (bufEnd > ct + 0.5) {
+                console.warn(`[playback] Stall at ${ct.toFixed(1)}s, seeking to ${(ct + 0.5).toFixed(1)}s (buf end: ${bufEnd.toFixed(1)}s)`);
+                video.currentTime = ct + 0.5;
+                video.play().catch(() => {});
+              }
+              stallCount = 0;
+            }
+          } else {
+            stallCount = 0;
+          }
+          lastTime = ct;
+        }, 3000);
+
+        // Pump fetch stream → SourceBuffer (with initial buffering)
         let started = false;
+        let initialBytes = 0;
+        const INITIAL_BUFFER_BYTES = 100_000; // ~0.6s of video at 155 KB/s
+
         while (!cancelled) {
           const { done, value } = await reader.read();
           if (done || !value) break;
+          if (ms.readyState !== 'open') break;
 
           if (sb.updating || queue.length > 0) {
             queue.push(value);
+            queueBytes += value.byteLength;
           } else {
-            sb.appendBuffer(value.buffer as ArrayBuffer);
+            try {
+              sb.appendBuffer(value.buffer as ArrayBuffer);
+            } catch {
+              queue.push(value);
+              queueBytes += value.byteLength;
+            }
           }
 
-          // Start playback once we have some data buffered
+          // Buffer some data before starting playback to avoid immediate stall
           if (!started) {
-            started = true;
-            video.playbackRate = speed;
-            video.play().catch(() => {});
+            initialBytes += value.byteLength;
+            if (initialBytes >= INITIAL_BUFFER_BYTES) {
+              started = true;
+              video.playbackRate = speed;
+              video.play().catch(() => {});
+            }
           }
+        }
+
+        // End of stream
+        if (!cancelled && ms.readyState === 'open') {
+          // Drain remaining queue before ending
+          if (queue.length > 0) {
+            const merged = new Uint8Array(queueBytes);
+            let offset = 0;
+            for (const chunk of queue) {
+              merged.set(chunk, offset);
+              offset += chunk.byteLength;
+            }
+            queue.length = 0;
+            queueBytes = 0;
+            try {
+              sb.appendBuffer(merged.buffer as ArrayBuffer);
+              await new Promise<void>(r => sb.addEventListener('updateend', () => r(), { once: true }));
+            } catch { /* ignore */ }
+          }
+          try { ms.endOfStream(); } catch { /* ignore */ }
         }
       } catch (err) {
         if (!cancelled) {
+          // AbortError = component unmounted or speed changed — not an error.
+          if (err instanceof DOMException && err.name === 'AbortError') return;
           console.error('Playback MSE error:', err);
           setState('error');
-          onError?.();
+          onErrorRef.current?.();
         }
       }
     }
@@ -552,7 +898,7 @@ function PlaybackFeed({
       if (!cancelled) {
         console.error('Playback video error:', video.error);
         setState('error');
-        onError?.();
+        onErrorRef.current?.();
       }
     };
 
@@ -563,6 +909,9 @@ function PlaybackFeed({
 
     return () => {
       cancelled = true;
+      abortCtrl.abort();
+      clearInterval(trimInterval);
+      clearInterval(stallWatchdog);
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('error', onVideoError);
       reader?.cancel().catch(() => {});
@@ -572,7 +921,7 @@ function PlaybackFeed({
       if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [onError]);
+  }, []);
 
   return (
     <div className="relative w-full h-full bg-black rounded-lg overflow-hidden">
@@ -691,16 +1040,6 @@ function TimelineBar({
 // ─── Playback Mode ───
 
 function PlaybackMode() {
-  // Playback requires dvr_proxy (port 8766) — unreachable via Nabu Casa HTTPS
-  if (IS_HTTPS) {
-    return (
-      <div className="aspect-video rounded-lg border border-border bg-black flex flex-col items-center justify-center text-muted-foreground gap-2 px-4 text-center">
-        <VideoOff className="h-8 w-8" />
-        <span className="text-sm">Playback requires local or Tailscale access</span>
-        <span className="text-xs opacity-60">Nabu Casa can only proxy live feeds, not DVR recordings</span>
-      </div>
-    );
-  }
   return <PlaybackModeInner />;
 }
 
@@ -720,6 +1059,9 @@ function PlaybackModeInner() {
   const [dateRange, setDateRange] = useState<{ min: string; max: string } | null>(null);
   const [showControls, setShowControls] = useState(true);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+  // Track pending resume state for channel switches
+  const pendingResumeRef = useRef<{ time: string; wasPlaying: boolean } | null>(null);
 
   // Auto-hide controls after 3s of inactivity (only when playing & not paused)
   const resetControlsTimer = useCallback(() => {
@@ -746,7 +1088,7 @@ function PlaybackModeInner() {
 
   // Fetch date range on mount
   useEffect(() => {
-    dvrFetch(`/api/date-range?channel=${channel}`).then((r) => {
+    dvrFetch(`/date-range?channel=${channel}`).then((r) => {
       if (r.min_date && r.max_date) {
         setDateRange({
           min: r.min_date.slice(0, 10),
@@ -756,34 +1098,54 @@ function PlaybackModeInner() {
     }).catch(() => {});
   }, [channel]);
 
-  // Fetch timeline when date or channel changes — auto-play first segment
+  // Fetch timeline when date or channel changes — auto-play at resumed time or first segment
   useEffect(() => {
+    const resume = pendingResumeRef.current;
+    pendingResumeRef.current = null;
+
     setSegments([]);
     setPlaybackKey(null);
     setLoading(true);
-    dvrFetch(`/api/timeline?channel=${channel}&date=${date}`).then(async (r) => {
+    dvrFetch(`/timeline?channel=${channel}&date=${date}`).then(async (r) => {
       const segs: TimelineSegment[] = r.segments || [];
       setSegments(segs);
       if (segs.length) {
-        const firstStart = segs[0].start;
-        setSelectedTime(firstStart);
-        // Auto-start playback
-        const selMs = new Date(firstStart.replace(' ', 'T')).getTime();
-        let endTime = segs[0].end;
-        if (!endTime) {
-          const end = new Date(selMs + 30 * 60000);
-          const pad = (n: number) => String(n).padStart(2, '0');
-          endTime = `${date} ${pad(end.getHours())}:${pad(end.getMinutes())}:${pad(end.getSeconds())}`;
-        }
-        try {
-          await dvrFetch('/api/playback/start', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ channel, startTime: firstStart, endTime, speed }),
-          });
-          setPlaybackKey(Date.now());
-        } catch (err) {
-          console.error('Auto-playback start error:', err);
+        // Use resumed time if available (channel switch), otherwise first segment
+        const startTime = resume?.time ?? segs[0].start;
+        setSelectedTime(startTime);
+
+        // Auto-start if resuming from playing state, or on initial load
+        if (!resume || resume.wasPlaying) {
+          const selMs = new Date(startTime.replace(' ', 'T')).getTime();
+          let endTime = '';
+          for (const seg of segs) {
+            const segStart = new Date(seg.start.replace(' ', 'T')).getTime();
+            const segEnd = new Date(seg.end.replace(' ', 'T')).getTime();
+            if (selMs >= segStart && selMs < segEnd) {
+              endTime = seg.end;
+              break;
+            }
+          }
+          if (!endTime) {
+            // Default to end of first segment or +30min
+            if (segs[0].end) {
+              endTime = segs[0].end;
+            } else {
+              const end = new Date(selMs + 30 * 60000);
+              const pad = (n: number) => String(n).padStart(2, '0');
+              endTime = `${date} ${pad(end.getHours())}:${pad(end.getMinutes())}:${pad(end.getSeconds())}`;
+            }
+          }
+          try {
+            await dvrFetch('/playback/start', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ channel, startTime, endTime, speed }),
+            });
+            setPlaybackKey(Date.now());
+          } catch (err) {
+            console.error('Auto-playback start error:', err);
+          }
         }
       }
       setLoading(false);
@@ -836,7 +1198,7 @@ function PlaybackModeInner() {
     }
 
     try {
-      await dvrFetch('/api/playback/start', {
+      await dvrFetch('/playback/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel, startTime: playTime, endTime, speed: playSpeed }),
@@ -852,7 +1214,7 @@ function PlaybackModeInner() {
   const stopPlayback = () => {
     setPlaybackKey(null);
     setPaused(false);
-    dvrFetch('/api/playback/stop', { method: 'POST' }).catch(() => {});
+    dvrFetch('/playback/stop', { method: 'POST' }).catch(() => {});
   };
 
   // When timeline is clicked during playback, auto-restart at the new time
@@ -865,6 +1227,10 @@ function PlaybackModeInner() {
 
   const handleSpeedChange = (newSpeed: number) => {
     setSpeed(newSpeed);
+    // If playing, restart at current position with new speed (DVR needs server-side speed)
+    if (playbackKey && selectedTime) {
+      startPlayback(selectedTime, newSpeed);
+    }
   };
 
   const channelLabel = CAMERAS.find((c) => c.channel === channel)?.label ?? `Ch ${channel}`;
@@ -927,6 +1293,11 @@ function PlaybackModeInner() {
                 <button
                   key={cam.channel}
                   onClick={() => {
+                    if (cam.channel === channel) return;
+                    // Remember playback state for smart resume on new channel
+                    if (playbackKey && selectedTime) {
+                      pendingResumeRef.current = { time: selectedTime, wasPlaying: !paused };
+                    }
                     setChannel(cam.channel);
                     setPlaybackKey(null);
                   }}
@@ -986,6 +1357,28 @@ function PlaybackModeInner() {
               </button>
             )}
 
+            {/* Skip back 10s */}
+            {playbackKey && (
+              <button
+                onClick={() => { if (selectedTime) { const d = new Date(selectedTime.replace(' ', 'T')); d.setSeconds(d.getSeconds() - 10); const pad = (n: number) => String(n).padStart(2, '0'); const t = `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; startPlayback(t); } }}
+                className="flex items-center justify-center w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 text-white/80 transition-colors"
+                title="Back 10s"
+              >
+                <Undo2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+
+            {/* Skip forward 10s */}
+            {playbackKey && (
+              <button
+                onClick={() => { if (selectedTime) { const d = new Date(selectedTime.replace(' ', 'T')); d.setSeconds(d.getSeconds() + 10); const pad = (n: number) => String(n).padStart(2, '0'); const t = `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; startPlayback(t); } }}
+                className="flex items-center justify-center w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 text-white/80 transition-colors"
+                title="Forward 10s"
+              >
+                <Redo2 className="h-3.5 w-3.5" />
+              </button>
+            )}
+
             {/* Stop button (when playing) */}
             {playbackKey && (
               <button
@@ -1041,7 +1434,7 @@ function PlaybackModeInner() {
 export default function Cameras() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [mode, setMode] = useState<'live' | 'playback'>('live');
-  const [quality, setQuality] = useState<'main' | 'sub'>(IS_LOCAL ? 'main' : 'sub');
+  const [quality, setQuality] = useState<'main' | 'sub'>('sub');
 
   return (
     <PageContainer title="Cameras">
@@ -1097,11 +1490,10 @@ export default function Cameras() {
       {/* Live camera grid — always mounted, hidden when playback */}
       <div className={mode === 'live' ? '' : 'hidden'}>
         <div
-          className="grid gap-3"
+          className={`grid gap-3 ${expanded ? 'grid-cols-1' : 'grid-cols-1 sm:grid-cols-2'}`}
           style={{
             minHeight: 'calc(100vh - 180px)',
-            gridTemplateColumns: expanded ? '1fr' : 'repeat(2, 1fr)',
-            gridTemplateRows: expanded ? '1fr' : 'repeat(2, 1fr)',
+            ...(expanded ? {} : {}),
           }}
         >
           {CAMERAS.map((cam) => {
@@ -1116,6 +1508,7 @@ export default function Cameras() {
                 hidden={isHidden}
                 expanded={isExpanded}
                 quality={quality}
+                paused={mode === 'playback'}
                 onExpand={() => setExpanded(cam.stream)}
                 onCollapse={() => setExpanded(null)}
               />

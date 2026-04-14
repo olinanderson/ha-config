@@ -50,10 +50,9 @@ export function Sparkline({
 
   return (
     <svg
-      width={width}
-      height={height}
       viewBox={`0 0 ${width} ${height}`}
       className={cn('shrink-0', onClick && 'cursor-pointer hover:opacity-80', className)}
+      style={{ width: className?.includes('w-full') ? '100%' : width, height }}
       onClick={onClick}
     >
       <path d={path} fill="none" stroke={color} strokeWidth={1.5} strokeLinejoin="round" />

@@ -2,10 +2,12 @@ import { PageContainer } from '@/components/layout/PageContainer';
 import { SparklineStat, ClickableValue } from '@/components/ClickableValue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
+import { Progress } from '@/components/ui/progress';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useHistory } from '@/hooks/useHistory';
 import { Sparkline } from '@/components/Chart';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
+import { useToggle } from '@/hooks/useService';
 import { fmt, cn, isFresh } from '@/lib/utils';
 import {
   Gauge,
@@ -15,6 +17,10 @@ import {
   CircleDot,
   AlertTriangle,
   Mountain,
+  Battery,
+  BatteryLow,
+  Zap,
+  Sun,
 } from 'lucide-react';
 
 function EngineCard() {
@@ -82,7 +88,7 @@ function EngineCard() {
           <SparklineStat entityId="sensor.192_168_10_90_11_throttleposition" label="Throttle" value={fmt(throttle, 0)} unit="%" color="#f59e0b" />
           <SparklineStat entityId="sensor.192_168_10_90_04_calcengineload" label="Engine Load" value={fmt(load, 0)} unit="%" color="#ef4444" />
           <SparklineStat entityId="sensor.192_168_10_90_05_enginecoolanttemp" label="Coolant Temp" value={fmt(coolant, 0)} unit="°C" color="#ef4444" />
-          <SparklineStat entityId="sensor.192_168_10_90_42_controlmodulevolt" label="ECU Voltage" value={fmt(ecuV, 1)} unit="V" color="#6366f1" />
+          <SparklineStat entityId="sensor.192_168_10_90_42_controlmodulevolt" label="ECU Voltage" value={fmt(ecuV, 2)} unit="V" color="#6366f1" />
         </div>
       </CardContent>
     </Card>
@@ -226,7 +232,7 @@ function DiagnosticsCard() {
   const { value: ambientAir } = useEntityNumeric('sensor.192_168_10_90_46_ambientairtemp');
   const { value: fuelPressure } = useEntityNumeric('sensor.192_168_10_90_fuel_pressure');
   const { value: mapKpa } = useEntityNumeric('sensor.192_168_10_90_map');
-  const { value: injPw } = useEntityNumeric('sensor.injector_pulse_width_ms');
+  const { value: injPw } = useEntityNumeric('sensor.injector_pulse_width');
   const { value: fuelTrim } = useEntityNumeric('sensor.average_fuel_trim');
   const { value: afr } = useEntityNumeric('sensor.commanded_afr');
   const { value: altDuty } = useEntityNumeric('sensor.wican_alternator_duty');
@@ -255,7 +261,7 @@ function DiagnosticsCard() {
         <SparklineStat entityId="sensor.192_168_10_90_46_ambientairtemp" label="Ambient Air" value={fmt(ambientAir, 0)} unit="°C" color="#3b82f6" />
         <SparklineStat entityId="sensor.192_168_10_90_fuel_pressure" label="Fuel Pressure" value={fmt(fuelPressure, 0)} unit="kPa" color="#8b5cf6" />
         <SparklineStat entityId="sensor.192_168_10_90_map" label="MAP" value={fmt(mapKpa, 0)} unit="kPa" color="#14b8a6" />
-        <SparklineStat entityId="sensor.injector_pulse_width_ms" label="Injector PW" value={fmt(injPw, 2)} unit="ms" color="#e879f9" />
+        <SparklineStat entityId="sensor.injector_pulse_width" label="Injector PW" value={fmt(injPw, 2)} unit="ms" color="#e879f9" />
         <SparklineStat entityId="sensor.average_fuel_trim" label="Fuel Trim" value={fmt(fuelTrim, 1)} unit="%" color="#fb923c" />
         <SparklineStat entityId="sensor.commanded_afr" label="AFR" value={fmt(afr, 1)} unit=":1" color="#a78bfa" />
         <SparklineStat entityId="sensor.wican_alternator_duty" label="Alt Duty" value={fmt(altDuty, 0)} unit="%" color="#facc15" />
@@ -264,7 +270,85 @@ function DiagnosticsCard() {
   );
 }
 
-/** Big at-a-glance driving stats — always visible at the top on mobile */
+/** Power at-a-glance — battery, solar, alternator, eco */
+function PowerHeroCard() {
+  const { value: soc } = useEntityNumeric('sensor.olins_van_bms_battery');
+  const { value: battCurrent } = useEntityNumeric('sensor.olins_van_bms_current');
+  const estimateEntity = useEntity('sensor.battery_time_estimate');
+  const { value: solarW } = useEntityNumeric('sensor.total_mppt_pv_power');
+  const { value: altCurrent } = useEntityNumeric('sensor.a32_pro_s5140_channel_8_current_24v_alternator_charger');
+  const ecoEntity = useEntity('input_boolean.power_saving_mode');
+  const toggleEco = useToggle('input_boolean.power_saving_mode');
+  const ecoOn = ecoEntity?.state === 'on';
+  const { open } = useHistoryDialog();
+
+  const socColor = (soc ?? 0) < 20 ? 'text-red-500' : (soc ?? 0) < 40 ? 'text-orange-400' : 'text-green-400';
+  const battCurrentVal = battCurrent ?? 0;
+  const battColor = battCurrentVal > 0 ? 'text-green-400' : battCurrentVal < -5 ? 'text-orange-400' : 'text-foreground';
+  const solarColor = (solarW ?? 0) > 50 ? 'text-yellow-400' : 'text-muted-foreground';
+  const estimate = estimateEntity?.state;
+  const showEstimate = estimate && estimate !== 'Idle' && estimate !== 'unknown' && estimate !== 'unavailable';
+
+  return (
+    <Card>
+      <CardContent className="pt-4 pb-3">
+        {/* Top row: Battery SOC + Current */}
+        <div className="grid grid-cols-2 gap-3">
+          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.olins_van_bms_battery', 'Battery', '%')}>
+            <p className={cn('text-3xl font-bold tabular-nums', socColor)}>{fmt(soc, 0)}%</p>
+            <p className="text-[10px] text-muted-foreground">Battery</p>
+          </div>
+          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.olins_van_bms_current', 'Battery Current', 'A')}>
+            <p className={cn('text-3xl font-bold tabular-nums', battColor)}>{fmt(battCurrent, 1)} A</p>
+            <p className="text-[10px] text-muted-foreground">Batt Current</p>
+          </div>
+        </div>
+
+        {/* SOC bar */}
+        <div className="mt-2 px-1">
+          <Progress value={soc ?? 0} className="h-2.5" indicatorClassName={(soc ?? 0) < 20 ? 'bg-red-500' : (soc ?? 0) < 40 ? 'bg-orange-400' : 'bg-green-500'} />
+        </div>
+
+        {/* Estimate */}
+        {showEstimate && (
+          <p className="text-center text-sm font-medium text-muted-foreground mt-1.5">{estimate}</p>
+        )}
+
+        {/* Bottom row: Solar, Alternator, Eco */}
+        <div className="grid grid-cols-3 gap-3 mt-2">
+          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.total_mppt_pv_power', 'Solar', 'W')}>
+            <div className="flex items-center justify-center gap-1">
+              <Sun className={cn('h-3.5 w-3.5', solarColor)} />
+              <span className={cn('text-2xl font-bold tabular-nums', solarColor)}>{fmt(solarW, 0)}</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Solar W</p>
+          </div>
+          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.a32_pro_s5140_channel_8_current_24v_alternator_charger', 'Alternator', 'A')}>
+            <div className="flex items-center justify-center gap-1">
+              <Zap className="h-3.5 w-3.5 text-yellow-500" />
+              <span className="text-2xl font-bold tabular-nums">{fmt(altCurrent, 1)}</span>
+            </div>
+            <p className="text-[10px] text-muted-foreground">Alt A</p>
+          </div>
+          <button
+            onClick={toggleEco}
+            className={cn(
+              'rounded-lg p-2 text-center transition-colors border',
+              ecoOn
+                ? 'bg-yellow-500/15 border-yellow-500/50 text-yellow-400'
+                : 'bg-muted/30 border-border text-muted-foreground hover:bg-muted/50',
+            )}
+          >
+            <BatteryLow className="h-5 w-5 mx-auto" />
+            <p className="text-[10px] font-medium mt-0.5">Eco</p>
+          </button>
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+/** Driving vitals — RPM, voltage, temps, grade */
 function DrivingHeroCard() {
   const { value: rpm } = useEntityNumeric('sensor.192_168_10_90_0c_enginerpm');
   const { value: ecuV } = useEntityNumeric('sensor.192_168_10_90_42_controlmodulevolt');
@@ -285,16 +369,16 @@ function DrivingHeroCard() {
             <p className="text-3xl font-bold tabular-nums">{fmt(rpm, 0)}</p>
             <p className="text-[10px] text-muted-foreground">RPM</p>
           </div>
-          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.192_168_10_90_42_controlmodulevolt', 'Battery Voltage', 'V')}>
+          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.192_168_10_90_42_controlmodulevolt', 'ECU Voltage', 'V')}>
             <p className="text-3xl font-bold tabular-nums">{fmt(ecuV, 2)}</p>
-            <p className="text-[10px] text-muted-foreground">Battery V</p>
+            <p className="text-[10px] text-muted-foreground">ECU V</p>
           </div>
           <div className={cn('cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors')} onClick={() => open('sensor.192_168_10_90_05_enginecoolanttemp', 'Coolant Temp', '°C')}>
-            <p className={cn('text-3xl font-bold tabular-nums', coolantColor)}>{fmt(coolant, 0)}°</p>
+            <p className={cn('text-2xl font-bold tabular-nums', coolantColor)}>{fmt(coolant, 0)}°</p>
             <p className="text-[10px] text-muted-foreground">Coolant</p>
           </div>
           <div className={cn('cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors')} onClick={() => open('sensor.192_168_10_90_tran_f_temp', 'Trans Temp', '°C')}>
-            <p className={cn('text-3xl font-bold tabular-nums', transColor)}>{fmt(transTemp, 0)}°</p>
+            <p className={cn('text-2xl font-bold tabular-nums', transColor)}>{fmt(transTemp, 0)}°</p>
             <p className="text-[10px] text-muted-foreground">Trans</p>
           </div>
         </div>
@@ -311,7 +395,10 @@ function DrivingHeroCard() {
 export default function Van() {
   return (
     <PageContainer title="Van & Vehicle">
-      <DrivingHeroCard />
+      <div className="grid gap-4 md:grid-cols-2">
+        <PowerHeroCard />
+        <DrivingHeroCard />
+      </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mt-4">
         <div className="space-y-4">
           <EngineCard />

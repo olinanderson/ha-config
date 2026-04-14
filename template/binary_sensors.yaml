@@ -40,11 +40,16 @@
       state: >
         {% set rpm_entity = states.sensor['192_168_10_90_0c_enginerpm'] %}
         {% set rpm_state = rpm_entity.state if rpm_entity else 'unavailable' %}
-        {% if rpm_state in ['unknown', 'unavailable'] %}
+        {% set ecu_connected = is_state('binary_sensor.meatpi_pro_ecu_status', 'on') %}
+        {% if not ecu_connected %}
           false
+        {% elif rpm_state in ['unknown', 'unavailable'] %}
+          {# RPM unavailable but ECU connected — fall back to alternator voltage #}
+          {% set ecu_v = states('sensor.192_168_10_90_42_controlmodulevolt') | float(0) %}
+          {{ ecu_v > 13.2 }}
         {% else %}
           {% set age = (now() - rpm_entity.last_updated).total_seconds() %}
-          {{ rpm_state | float(0) > 0 and age < 300 }}
+          {{ rpm_state | float(0) > 0 and age < 120 }}
         {% endif %}
       icon: >
         {% if is_state('binary_sensor.engine_is_running', 'on') %}

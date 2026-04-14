@@ -48,23 +48,43 @@ export function timeAgo(isoString: string | undefined | null): string {
   return `${days}d ago`;
 }
 
-/** Time remaining / time to full estimate */
+/** Time remaining / time to full estimate.
+ *  Accounts for LiFePO4 absorption taper above 80% SOC and 10% floor. */
 export function batteryEstimate(
   current: number | null,
   power: number | null,
   stored: number | null,
   capacity = 8700,
+  soc: number | null = null,
+  voltage: number | null = null,
 ): string {
-  if (current == null || power == null || stored == null) return '';
-  if (Math.abs(current) < 0.1 || !Number.isFinite(power) || !Number.isFinite(stored)) return '';
-  const hours =
-    current > 0
-      ? (capacity - stored) / Math.abs(power)
-      : stored / Math.abs(power);
-  if (!Number.isFinite(hours) || hours > 48) return '';
+  if (current == null || stored == null) return '';
+  if (Math.abs(current) < 0.05) return '';
+  // Use power if valid, otherwise approximate from current × voltage
+  let absPower = power != null && Number.isFinite(power) && Math.abs(power) > 0
+    ? Math.abs(power)
+    : null;
+  if (!absPower && voltage != null && voltage > 0) {
+    absPower = Math.abs(current) * voltage;
+  }
+  if (!absPower || !Number.isFinite(stored)) return '';
+  let hours: number;
+  if (current > 0) {
+    // Charging — LiFePO4 tapers in absorption phase above ~80% SOC
+    const remaining = capacity - stored;
+    const pct = soc ?? (stored / capacity) * 100;
+    const taper = pct > 80 ? 1 + (pct - 80) * 0.03 : 1;
+    hours = (remaining / absPower) * taper;
+  } else {
+    // Discharging — usable energy down to ~10% SOC (LiFePO4 knee)
+    const floor = capacity * 0.10;
+    const usable = Math.max(stored - floor, 0);
+    hours = usable / absPower;
+  }
+  if (!Number.isFinite(hours) || hours > 48 || hours < 0) return '';
   const h = Math.floor(hours);
   const m = Math.round((hours - h) * 60);
-  return current > 0 ? `${h}h ${m}m to full` : `${h}h ${m}m left`;
+  return current > 0 ? `~${h}h ${m}m to full` : `~${h}h ${m}m left`;
 }
 
 /** Check if an entity's last_updated is within maxAgeSec seconds of now */

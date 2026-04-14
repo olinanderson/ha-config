@@ -66,3 +66,6 @@ sensor: !include integrations/sensor.yaml
 mqtt:
   sensor: !include mqtt/sensors.yaml
   device_tracker: !include mqtt/device_tracker.yaml
+
+# --- Vanlife API proxy (for Nabu Casa remote access) ---
+vanlife_api:

@@ -418,3 +418,46 @@
         {% endif %}
       attributes:
         lambda: "{{ states('sensor.192_168_10_90_lambda') }}"
+
+    # ─── Battery time estimate ───
+    - name: "Battery Time Estimate"
+      unique_id: battery_time_estimate
+      icon: mdi:battery-clock-outline
+      state: >
+        {% set current = states('sensor.olins_van_bms_current') | float(0) %}
+        {% set power = states('sensor.olins_van_bms_power') | float(0) %}
+        {% set stored = states('sensor.olins_van_bms_stored_energy') | float(0) %}
+        {% set voltage = states('sensor.olins_van_bms_voltage') | float(0) %}
+        {% set soc = states('sensor.olins_van_bms_battery') | float(0) %}
+        {% set capacity = 8700 %}
+        {% set abs_power = power | abs %}
+        {% if abs_power < 1 and voltage > 0 %}
+          {% set abs_power = (current | abs) * voltage %}
+        {% endif %}
+        {% if (current | abs) < 0.05 or abs_power < 1 %}
+          Idle
+        {% elif current > 0 %}
+          {% set remaining = capacity - stored %}
+          {% set taper = 1 + ((soc - 80) * 0.03) if soc > 80 else 1 %}
+          {% set hours = (remaining / abs_power) * taper %}
+          {% set d = (hours / 24) | int %}
+          {% set h = (hours - d * 24) | int %}
+          {% set m = ((hours - (d * 24) - h) * 60) | round(0) | int %}
+          {% if d > 0 %}
+            ~{{ d }}d {{ h }}h to full
+          {% else %}
+            ~{{ h }}h {{ m }}m to full
+          {% endif %}
+        {% else %}
+          {% set floor = capacity * 0.10 %}
+          {% set usable = [stored - floor, 0] | max %}
+          {% set hours = usable / abs_power %}
+          {% set d = (hours / 24) | int %}
+          {% set h = (hours - d * 24) | int %}
+          {% set m = ((hours - (d * 24) - h) * 60) | round(0) | int %}
+          {% if d > 0 %}
+            ~{{ d }}d {{ h }}h until depleted
+          {% else %}
+            ~{{ h }}h {{ m }}m until depleted
+          {% endif %}
+        {% endif %}

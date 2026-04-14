@@ -175,6 +175,15 @@ export default function VanlifeMap() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Invalidate map size when sidebar toggles so Leaflet fills the container
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map) return;
+    // Small delay so the DOM flex layout has finished reflowing
+    const timer = setTimeout(() => map.invalidateSize(), 50);
+    return () => clearTimeout(timer);
+  }, [sidebarOpen]);
+
   /* ── Fetch data range ────────────────────────────────────────────── */
 
   useEffect(() => {
@@ -212,14 +221,14 @@ export default function VanlifeMap() {
     relevantPlaces.forEach(place => {
       const icon = PLACE_CATEGORY_ICONS[place.category] || '📌';
       const divIcon = L.divIcon({
-        html: `<div style="position:absolute;left:-16px;top:-16px;display:inline-flex;flex-direction:column;align-items:center;opacity:0.85;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.25))">
+        html: `<div style="position:absolute;bottom:0;left:0;width:32px;transform:translateX(-50%);display:inline-flex;flex-direction:column;align-items:center;opacity:0.85;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.25))">
           <div style="background:#7c3aed;color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #6d28d9">${icon}</div>
           <div style="background:#7c3aed;color:white;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:-1px">${place.name}</div>
         </div>`,
         className: '',
         iconSize: [0, 0],
         iconAnchor: [0, 0],
-        popupAnchor: [0, -16],
+        popupAnchor: [0, -52],
       });
 
       const marker = L.marker([place.lat, place.lon], { icon: divIcon })
@@ -268,12 +277,13 @@ export default function VanlifeMap() {
     if (!vanPos) return;
 
     const icon = L.divIcon({
-      html: `<div style="display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.4))">
+      html: `<div style="position:absolute;bottom:0;left:0;width:36px;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;filter:drop-shadow(0 3px 6px rgba(0,0,0,0.4))">
         <div style="background:#e53935;color:white;border-radius:50%;width:36px;height:36px;display:flex;align-items:center;justify-content:center;font-size:20px;border:3px solid #b71c1c">🚐</div>
         <div style="background:#e53935;color:white;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:700;white-space:nowrap;margin-top:1px">Van</div>
       </div>`,
       className: '',
-      iconAnchor: [18, 52],
+      iconSize: [0, 0],
+      iconAnchor: [0, 0],
       popupAnchor: [0, -54],
     });
 
@@ -337,7 +347,7 @@ export default function VanlifeMap() {
       : '';
     m.setIcon(
       L.divIcon({
-        html: `<div style="position:absolute;left:-16px;top:-16px;display:inline-flex;flex-direction:column;align-items:center;opacity:0.85;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.25))">
+        html: `<div style="position:absolute;bottom:0;left:0;width:32px;transform:translateX(-50%);display:inline-flex;flex-direction:column;align-items:center;opacity:0.85;filter:drop-shadow(0 1px 3px rgba(0,0,0,0.25))">
           ${badge}
           <div style="background:#7c3aed;color:white;border-radius:50%;width:32px;height:32px;display:flex;align-items:center;justify-content:center;font-size:16px;border:2px solid #6d28d9">${icon}</div>
           <div style="background:#7c3aed;color:white;border-radius:4px;padding:2px 6px;font-size:10px;font-weight:600;white-space:nowrap;margin-top:-1px">${place.name}</div>
@@ -345,7 +355,7 @@ export default function VanlifeMap() {
         className: '',
         iconSize: [0, 0],
         iconAnchor: [0, 0],
-        popupAnchor: [0, -16],
+        popupAnchor: [0, -52],
       }),
     );
   }
@@ -519,7 +529,11 @@ export default function VanlifeMap() {
 
       // Fit bounds
       if (allCoords.length > 1) {
-        map.flyToBounds(L.latLngBounds(allCoords), { padding: [40, 40], duration: 0.8 });
+        map.flyToBounds(L.latLngBounds(allCoords), {
+          paddingTopLeft: [40, 40],
+          paddingBottomRight: [sidebarOpen ? 320 : 40, 40],
+          duration: 0.8,
+        });
       }
 
       const totalDistKm = newTravels.reduce((s, t) => s + t.distanceM, 0) / 1000;
@@ -559,7 +573,11 @@ export default function VanlifeMap() {
     L.polyline(travel.geom, { color: '#00e5ff', weight: 6, opacity: 0.95, interactive: false }).addTo(hl);
     highlightRef.current = hl;
 
-    map.flyToBounds(L.latLngBounds(travel.geom), { padding: [50, 50], duration: 0.6 });
+    map.flyToBounds(L.latLngBounds(travel.geom), {
+      paddingTopLeft: [50, 50],
+      paddingBottomRight: [sidebarOpen ? 320 : 50, 50],
+      duration: 0.6,
+    });
   }, [selectedIdx, travels]);
 
   /* ── Date navigation ─────────────────────────────────────────────── */
@@ -628,7 +646,7 @@ export default function VanlifeMap() {
   return (
     <div className="h-full flex flex-col relative" style={{ minHeight: 0 }}>
       {/* Top bar */}
-      <div className="flex-none flex items-center gap-2 px-3 py-2 border-b border-border bg-card/80 backdrop-blur-sm text-sm z-[1002] relative overflow-x-auto">
+      <div className="flex-none flex items-center gap-2 px-2 sm:px-3 py-2 border-b border-border bg-card/80 backdrop-blur-sm text-xs sm:text-sm z-[1002] relative overflow-x-auto">
         {/* Mode buttons */}
         {(['daily', 'weekly', 'range'] as const).map(mode => (
           <button
@@ -756,7 +774,7 @@ export default function VanlifeMap() {
           {vanPos && (
             <button
               onClick={centerOnVan}
-              className="absolute bottom-4 left-4 z-[500] bg-card border border-border rounded-full p-2.5 shadow-md hover:bg-muted"
+              className="absolute bottom-14 left-4 z-[500] bg-card border border-border rounded-full p-2.5 shadow-md hover:bg-muted"
               title="Center on van"
             >
               <Navigation className="h-5 w-5 text-red-500" />
@@ -842,9 +860,9 @@ export default function VanlifeMap() {
           )}
         </div>
 
-        {/* Sidebar (right side) */}
+        {/* Sidebar (always absolute overlay so map never resizes) */}
         {sidebarOpen && (
-          <div className="w-[300px] flex-none border-l border-border bg-card flex flex-col z-[1001]">
+          <div className="absolute right-0 top-0 bottom-0 w-[280px] sm:w-[300px] border-l border-border bg-card flex flex-col z-[1001] shadow-xl">
             <div className="flex-none flex items-center justify-between px-3 py-2 border-b border-border overflow-visible">
               <span className="font-semibold text-sm">
                 {travels.length} Trip{travels.length !== 1 ? 's' : ''}

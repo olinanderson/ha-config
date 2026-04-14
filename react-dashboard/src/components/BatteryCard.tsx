@@ -1,8 +1,8 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Progress } from '@/components/ui/progress';
-import { useEntityNumeric } from '@/hooks/useEntity';
+import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useHistory } from '@/hooks/useHistory';
-import { batteryEstimate, fmt, cn } from '@/lib/utils';
+import { fmt, cn } from '@/lib/utils';
 import { Battery } from 'lucide-react';
 import { SparklineStat } from '@/components/ClickableValue';
 import { Sparkline } from '@/components/Chart';
@@ -17,12 +17,14 @@ export function BatteryCard({ compact = false }: { compact?: boolean }) {
   const { value: temp } = useEntityNumeric('sensor.olins_van_bms_temperature');
   const { value: cycles } = useEntityNumeric('sensor.olins_van_bms_cycles');
   const { value: delta } = useEntityNumeric('sensor.olins_van_bms_delta_voltage');
+  const estimateEntity = useEntity('sensor.battery_time_estimate');
 
   const { data: socHistory } = useHistory('sensor.olins_van_bms_battery', 12);
   const { open } = useHistoryDialog();
 
   const charging = (current ?? 0) > 0;
-  const estimate = batteryEstimate(current, power, stored);
+  const estimate = estimateEntity?.state;
+  const showEstimate = estimate && estimate !== 'Idle' && estimate !== 'unknown' && estimate !== 'unavailable';
   const socNum = soc ?? 0;
   const socColor = socNum < 30 ? 'text-red-500' : socNum < 65 ? 'text-orange-500' : 'text-green-500';
   const barColor =
@@ -63,7 +65,7 @@ export function BatteryCard({ compact = false }: { compact?: boolean }) {
             </>
           )}
         </div>
-        {estimate && (
+        {showEstimate && (
           <p
             className={cn(
               'text-xs font-medium text-center',

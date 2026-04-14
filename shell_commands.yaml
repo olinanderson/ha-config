@@ -66,3 +66,11 @@ start_dvr_proxy: >
   else
     echo "DVR proxy already running";
   fi'
+
+# Restart DVR proxy — kill existing and start fresh
+restart_dvr_proxy: >
+  /bin/sh -c 'pkill -f "python3.*dvr_proxy" 2>/dev/null;
+    sleep 2;
+    cd /config/www/react-dashboard &&
+    nohup python3 dvr_proxy.py > /config/www/react-dashboard/dvr_proxy.log 2>&1 &
+    echo "DVR proxy restarted"'

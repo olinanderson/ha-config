@@ -1,2 +1,7 @@
 RTSP Scale proxy listening on port 8767
 DVR proxy listening on port 8766
+[dvr_proxy] Started playback (ch1 2026-04-13 00:00:00→2026-04-13 00:30:00 speed=1x)
+[dvr_proxy] Started playback (ch1 2026-04-13 15:00:32→2026-04-13 15:01:07 speed=1x)
+[dvr_proxy] Started playback (ch1 2026-04-14 00:00:00→2026-04-14 00:15:31 speed=1x)
+[dvr_proxy] Started playback (ch3 2026-04-14 00:00:00→2026-04-14 00:15:38 speed=1x)
+[dvr_proxy] Started playback (ch4 2026-04-14 00:00:00→2026-04-14 00:15:39 speed=1x)
