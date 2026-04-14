@@ -1303,7 +1303,7 @@ over HTTP (TCP)**, proxied through `dvr_proxy.py` → go2rtc → RTSP → DVR.
 | **Model** | Lorex D231A41B (Dahua XVR5104C-X1, 4-channel, 1TB HDD) |
 | **IP** | `192.168.10.156` |
 | **RTSP port** | 554 |
-| **Credentials** | `admin` / `***REDACTED***` |
+| **Credentials** | `admin` / *(in go2rtc.yaml on HA host — not in git)* |
 | **Main stream** (`subtype=0`) | H.264 High, 960×480, 30fps, 768kbps VBR |
 | **Sub stream** (`subtype=1`) | H.264, 704×480, 15fps, 512kbps CBR |
 | **RTSP URL format** | `rtsp://admin:PASSWORD@192.168.10.156:554/cam/realmonitor?channel=N&subtype=S` |

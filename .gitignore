@@ -24,6 +24,14 @@ secrets.yaml
 ssh_keys/
 .dvr_credentials
 
+# --- DVR config (contains credentials in RTSP URLs) ---
+go2rtc.yaml
+diag.py
+dvr_probe.py
+patch_streams.py
+react-dashboard/diag_streams.py
+react-dashboard/patch_streams.py
+
 # --- HA runtime / internal ---
 .cloud/
 .storage/
