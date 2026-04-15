@@ -18,6 +18,23 @@
 const BASE = '/local/react-dashboard';
 const CACHE_VER = Date.now(); // always fresh — no manual bumping needed
 
+// ─── Global safety net ───────────────────────────────────────────────────
+// Chrome surfaces HA's WebSocket "message channel closed" as an unhandled
+// promise rejection when the browser tab is backgrounded or minimised.
+// We suppress it here so it never reaches React's error boundary or the
+// browser's default "uncaught" handling (which can take the page down).
+window.addEventListener('unhandledrejection', (evt) => {
+  const msg = String(evt.reason?.message ?? evt.reason ?? '');
+  if (
+    msg.includes('message channel closed') ||
+    msg.includes('The message channel is closed') ||
+    msg.includes('asynchronous response by returning true')
+  ) {
+    evt.preventDefault();
+  }
+});
+// ─────────────────────────────────────────────────────────────────────────
+
 // Load module fresh each page load
 let _modulePromise = null;
 function getModule() {
@@ -42,6 +59,7 @@ class VanDashboard extends HTMLElement {
     super();
     this._unmount = null;
     this._loaded = false;
+    this._mountGen = 0; // incremented on every disconnect; cancels in-flight connectedCallback
     this._onVisibility = null;
   }
 
@@ -58,11 +76,18 @@ class VanDashboard extends HTMLElement {
     if (this._loaded) return;
     this._loaded = true;
 
+    // Capture the current generation. If disconnectedCallback fires while we
+    // are awaiting below, _mountGen is incremented and we abort early so we
+    // don't mount React into a stale / already-cleared container.
+    const gen = ++this._mountGen;
+
     // Clear any stale children from a previous mount cycle
     this.innerHTML = '';
 
     // Inject CSS inside this element so it works inside HA's shadow DOM
     const cssText = await getCss();
+    if (this._mountGen !== gen) return; // disconnected mid-flight — abort
+
     const style = document.createElement('style');
     style.textContent = cssText;
     this.appendChild(style);
@@ -74,6 +99,8 @@ class VanDashboard extends HTMLElement {
 
     try {
       const mod = await getModule();
+      if (this._mountGen !== gen) return; // disconnected mid-flight — abort
+
       if (mod.mount) {
         this._unmount = mod.mount(mountPoint);
       }
@@ -81,11 +108,12 @@ class VanDashboard extends HTMLElement {
       // useLayoutEffect listener is registered before the event fires.
       // (useLayoutEffect runs synchronously after DOM commit, before RAF)
       requestAnimationFrame(() => {
-        if (window.__HASS__) {
+        if (this._mountGen === gen && window.__HASS__) {
           window.dispatchEvent(new Event('hass-updated'));
         }
       });
     } catch (err) {
+      if (this._mountGen !== gen) return;
       console.error('[VanDash] Failed to load:', err);
       mountPoint.innerHTML = `
         <div style="padding: 2rem; color: red;">
@@ -105,6 +133,9 @@ class VanDashboard extends HTMLElement {
   }
 
   disconnectedCallback() {
+    // Invalidate any in-flight connectedCallback awaits
+    this._mountGen++;
+
     if (this._onVisibility) {
       document.removeEventListener('visibilitychange', this._onVisibility);
       this._onVisibility = null;

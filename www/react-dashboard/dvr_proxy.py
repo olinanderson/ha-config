@@ -22,6 +22,7 @@ React dashboard can get WebRTC video without going through Home Assistant.
 
 import json
 import os
+import queue as _queue
 import socket
 import time as _time
 import urllib.request
@@ -444,19 +445,63 @@ class DVRHandler(BaseHTTPRequestHandler):
     def _proxy_mse_stream(self, stream_name):
         """Proxy go2rtc's fMP4 live stream to the browser.
 
-        go2rtc blocks external access (local_auth), so we proxy from localhost.
-        Uses http.client for unbuffered streaming reads.
+        Uses a producer-consumer queue to decouple reading from go2rtc and
+        writing to the browser.  Without this, a slow browser (JS busy) backs
+        up the browser TCP socket → dvr_proxy write() blocks → can't read from
+        go2rtc → go2rtc overfills its output queue and drops H.264 packets.
+
+        The reader thread drains go2rtc as fast as possible (localhost speed)
+        into a bounded queue (~128 × 65 KB = ~8 MB).  The main thread drains
+        the queue to the browser at browser speed.  If the browser falls too
+        far behind, the reader blocks up to 2 s before dropping a chunk.
+        Blocking (not immediate drop) prevents fMP4 stream corruption: a dropped
+        65 KB raw chunk straddles atom boundaries, sending malformed data to MSE
+        which triggers MediaError → reconnect.  The 2 s window absorbs typical
+        VBR spikes without propagating backpressure to go2rtc.
         """
+        stop_event = threading.Event()
+        buf = _queue.Queue(maxsize=128)  # ~8 MB headroom at 65 KB/chunk; absorbs VBR spikes
+        conn = None
+
+        def reader():
+            nonlocal conn
+            try:
+                conn = _httplib.HTTPConnection("localhost", 1984, timeout=10)
+                encoded = urllib.parse.quote(stream_name, safe="")
+                conn.request("GET", f"/api/stream.mp4?src={encoded}")
+                resp = conn.getresponse()
+                if resp.status != 200:
+                    buf.put(None)  # signal: header error
+                    return
+                buf.put(("headers", resp.getheader("Content-Type", 'video/mp4; codecs="avc1.640028"')))
+                while not stop_event.is_set():
+                    chunk = resp.read(65536)
+                    if not chunk:
+                        break
+                    try:
+                        buf.put(chunk, timeout=2.0)  # allow brief backpressure before dropping
+                    except _queue.Full:
+                        pass  # drop only if browser stalled >2s — prevents fMP4 corruption from mid-chunk drops
+            except Exception:
+                pass
+            finally:
+                buf.put(None)  # sentinel: stream ended
+                try:
+                    conn.close()
+                except Exception:
+                    pass
+
+        t = threading.Thread(target=reader, daemon=True)
+        t.start()
+
         try:
-            conn = _httplib.HTTPConnection("localhost", 1984, timeout=10)
-            encoded = urllib.parse.quote(stream_name, safe="")
-            conn.request("GET", f"/api/stream.mp4?src={encoded}")
-            resp = conn.getresponse()
-            if resp.status != 200:
-                self._json_response({"error": f"go2rtc: {resp.status}"}, 502)
+            first = buf.get(timeout=10)
+            if first is None or not isinstance(first, tuple):
+                self._json_response({"error": "go2rtc stream failed"}, 502)
+                stop_event.set()
                 return
 
-            ct = resp.getheader("Content-Type", 'video/mp4; codecs="avc1.640028"')
+            _, ct = first
             self.send_response(200)
             self._cors()
             self.send_header("Content-Type", ct)
@@ -466,8 +511,8 @@ class DVRHandler(BaseHTTPRequestHandler):
             self.wfile.flush()
 
             while True:
-                chunk = resp.read(65536)
-                if not chunk:
+                chunk = buf.get(timeout=30)
+                if chunk is None:
                     break
                 self.wfile.write(chunk)
                 self.wfile.flush()
@@ -479,10 +524,8 @@ class DVRHandler(BaseHTTPRequestHandler):
             except Exception:
                 pass
         finally:
-            try:
-                conn.close()
-            except Exception:
-                pass
+            stop_event.set()
+            t.join(timeout=2)
 
     def _proxy_mp4_stream(self):
         """Stream DVR playback as fMP4 directly to the HTTP response.

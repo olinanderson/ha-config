@@ -12,7 +12,12 @@ export function useService() {
       service: string,
       data?: Record<string, any>,
       target?: { entity_id?: string | string[] },
-    ) => store.callService(domain, service, data, target),
+    ) => {
+      // Always attach a .catch so the caller returning void never creates
+      // an unhandled promise rejection (errors are already handled in
+      // HassStore.callService, this is just the safety net).
+      store.callService(domain, service, data, target).catch(() => {});
+    },
     [store],
   );
 }

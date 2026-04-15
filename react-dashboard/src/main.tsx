@@ -1,5 +1,6 @@
 import { createRoot, type Root } from 'react-dom/client';
 import App from './App';
+import { ErrorBoundary } from '@/components/ErrorBoundary';
 import './index.css';
 
 // Re-export WS helpers so test.html can use them from the bundle
@@ -18,7 +19,11 @@ export {
  */
 export function mount(container: HTMLElement): () => void {
   const root = createRoot(container);
-  root.render(<App />);
+  root.render(
+    <ErrorBoundary>
+      <App />
+    </ErrorBoundary>,
+  );
   return () => root.unmount();
 }
 

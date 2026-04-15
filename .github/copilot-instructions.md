@@ -1353,18 +1353,64 @@ as a fallback in case `go2rtc.yaml` wasn't loaded.
 The `MSEFeed` React component handles live streaming:
 - Fetches `/api/mse?src=channel_N` via `fetch()` → `ReadableStream`
 - Creates `MediaSource` → `SourceBuffer`, pumps fMP4 chunks into it
-- **Buffer management**: Single `updateend` handler, drain queue before trim, trim on 10s interval (keeps last 20s, trims at 60s)
-- **Live edge seeking**: Every 3s, if playback falls >3s behind buffer edge, seeks forward
+- **Buffer management**: Single `updateend` handler, batch-drain queue before trim, trim on 10s interval (keeps last 20s, trims at 60s buffer)
+- **Live edge — initial snap**: On first `playing` event, snaps `currentTime` to `bufferedEnd - 1.0` to start at live edge instead of buffer start
+- **Live edge — drift maintenance**: Watchdog every 3s; uses `playbackRate = 1.05` to gradually drift toward live (no jarring seek) when lag is 2.5–6s. Hard seek only when lag > 6s (rarely happens). Resets to 1.0 when lag < 1s. Hysteresis band 1–2.5s.
 - **Stall watchdog**: 3 consecutive 3s checks without `currentTime` advancing → force reconnect
 - **Auto-reconnect**: Exponential backoff (2s → 30s cap) with per-channel stagger
-- **Quality toggle**: SD (sub-stream, 15fps) / HD (main stream, 30fps) — defaults to HD
+- **Stream quality — automatic**: Chrome 107+ uses `MediaSource.canConstructInDedicatedWorker` (worker MSE) which moves all SourceBuffer work off the main thread, enabling 4×30fps HD grid. Grid uses main stream (HD 30fps). Expanded single-camera also uses main stream. On older browsers without worker MSE, grid falls back to sub-stream (15fps 512kbps SD) to avoid main-thread JS overload. No manual quality toggle.
+- **Startup stagger**: channel_1 at 0ms, channel_2 at 250ms, channel_3 at 500ms, channel_4 at 750ms. Prevents simultaneous burst overloading go2rtc.
+- **Trim stagger (main-thread fallback only)**: Each channel's periodic trim is offset by (last char % 4) × 2500ms to prevent all 4 trimming simultaneously. Not needed for worker MSE (each worker has its own thread).
+- **currentTime sync to worker**: Watchdog sends `video.currentTime` to worker every 3s via `{ type: 'currentTime', time }`. Worker uses this to prevent trim from cutting ahead of the playhead (which would cause a stall at the trimmed position).
+
+### Measured Latency (verified 2026-04-15)
+
+Measurements taken by comparing DVR OSD timestamp in screenshots against UTC wall clock.
+DVR timestamps are in MDT (UTC-6), which matched wall clock after timezone conversion.
+
+| Condition | Lag |
+|---|---|
+| Steady-state (expanded HD, after reconnect settles) | **~1s** |
+| First few seconds after expand (go2rtc buffered data drains) | 2–4s (catches up via playbackRate) |
+| After MediaError reconnect | 2–3s reconnect + ~5s to live edge |
+| Grid 4-up SD (15fps sub-stream, main-thread MSE fallback) | **~1s** (all 4 cameras within 1s of each other) |
+| Grid 4-up HD (30fps main stream, main-thread MSE only) | **40–70s behind; diverges; Left camera reconnects** — NOT VIABLE |
+| Grid 4-up HD (30fps main stream, worker MSE Chrome 107+) | **~1s** (3/4 cameras locked to live edge; ch_1 reconnects ~90s) |
+
+### go2rtc fMP4 Codec
+
+go2rtc returns `Content-Type: video/mp4; codecs="avc1.64001F"` which is H264 High profile Level 3.1 — exactly what the DVR outputs. The fallback codec string `avc1.640028` (Level 4.0) in MSEFeed is only used if go2rtc header is missing.
+
+### 4-Stream 30fps Grid via MediaSource-in-Worker (Chrome 107+)
+
+**Root cause of original JS failure**: 4 concurrent async `fetch()` reader loops + 4 `SourceBuffer` `appendBuffer/updateend` callbacks = 120 JS events/second on the main thread. Browser can't drain SourceBuffers fast enough; streams fall 40–70s behind and diverge.
+
+**Solution**: `MediaSource.canConstructInDedicatedWorker` (Chrome 107+) moves the entire SourceBuffer pipeline off the main thread. Each camera spawns a `DedicatedWorker` (created from a Blob URL — works in Vite library mode, unlike `?worker` imports). The worker creates a `MediaSource`, transfers its `MediaSourceHandle` to the main thread via `postMessage`, and the main thread does `video.srcObject = handle`. SourceBuffer work then runs on 4 separate worker threads.
+
+**Architecture (worker MSE path)**:
+- Worker: `fetch()` → SourceBuffer (`appendBuffer`, `updateend`, trim) — all off main thread
+- Main thread: `video.srcObject`, `video.play()`, `onPlaying` snap, stall watchdog, `playbackRate` drift — same as before
+- Worker receives `{ type: 'currentTime', time }` every 3s from watchdog to prevent trim from cutting past the current playhead (which would stall playback)
+
+**Measured result (2026-04-15)**: 3/4 cameras locked at live edge (synchronized to within 0s). Channel_1 (Left) reconnects every ~90s — pre-existing ch_1 stream instability unrelated to workers.
+
+**Fallback**: Falls back to main-thread MSE on Chrome < 107, Firefox, Safari. In that case the grid uses sub-streams (15fps 512kbps) for stability.
+
+### dvr_proxy — Producer-Consumer Queue (www/react-dashboard/dvr_proxy.py)
+
+The original `_proxy_mse_stream` was synchronous (read from go2rtc + write to browser in same thread). Browser TCP backpressure propagated to go2rtc, causing 50%+ packet drops on channels 1 and 4 (high-bitrate night-vision). 
+
+**Fixed architecture**: reader thread reads go2rtc at localhost speed → `queue.Queue(maxsize=128)` (~8MB headroom, absorbs VBR spikes). Main thread writes to browser at browser speed. Reader blocks up to 2s before dropping a chunk (`buf.put(chunk, timeout=2.0)`) — **blocking prevents fMP4 stream corruption**: a `put_nowait` drop of a 65KB raw chunk straddles fMP4 atom boundaries, delivering malformed data to the SourceBuffer → MediaError → reconnect. Blocking means a chunk is only dropped if the browser is stalled for >2s continuously (hardware problem). Result: **0 drops** on all channels; MediaErrors eliminated on HD expanded view.
+
+**Hidden-camera MSE feeds were not paused during expand** (fixed 2026-04-15): `paused` was only set for `mode === 'playback'`. When a camera was expanded, the 3 hidden cameras kept active sub-stream MSE fetch loops running, competing with the expanded HD feed for JS cycles. Fixed: `paused={mode === 'playback' || isHidden}`.
 
 ### Critical Notes
 
 - **Both streams are H.264** — main was changed from H.265 to H.264 on the DVR for MSE/WebRTC compatibility.
-- **go2rtc.yaml has 8 streams**: `channel_1-4` (main, subtype=0) + `channel_1-4_sub` (sub, subtype=1).
+- **go2rtc.yaml has 8 streams**: `channel_1-4` (main, subtype=0) + `channel_1-4_sub` (sub, subtype=1). go2rtc returns codec `avc1.64001F` in Content-Type.
 - **Buffer trim was the cause of 30s stalls** — the old code had two competing `updateend`
   listeners that corrupted the SourceBuffer. Fixed with a single unified handler.
+- **Always hard-refresh** (`Ctrl+Shift+R` / `Cmd+Shift+R`) after deploying a new build. Normal refresh serves cached JS and picks up no changes.
 - **Camera entity stream_source** (in `.storage/core.config_entries` under `options`)
   must match the go2rtc.yaml URLs.
 - **go2rtc config entry** is auto-created with `source: "system"` after restart when

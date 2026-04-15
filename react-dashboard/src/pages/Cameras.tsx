@@ -133,14 +133,178 @@ async function getMseFetchInit(signal: AbortSignal): Promise<RequestInit> {
   return init;
 }
 
+// ─── MSE Worker (Chrome 107+) ───
+//
+// Chrome 107 added MediaSource-in-DedicatedWorker: SourceBuffer.appendBuffer()
+// runs entirely off the main thread, eliminating the JS-overhead bottleneck that
+// prevents 4×30fps simultaneous streams.
+//
+// Feature flag: MediaSource.canConstructInDedicatedWorker === true
+// Falls back to the existing main-thread MSE path on older browsers.
+
+/** True when this Chrome supports MediaSource in a dedicated worker (Chrome 107+). */
+const WORKER_MSE_SUPPORTED =
+  typeof MediaSource !== 'undefined' &&
+  (MediaSource as any).canConstructInDedicatedWorker === true;
+
+/**
+ * Worker source — runs fetch + SourceBuffer entirely off the main thread.
+ * Plain ES2020 JS (no imports, no TS) so it can be inlined as a Blob URL,
+ * which works correctly in Vite library mode (unlike ?worker imports).
+ *
+ * Protocol:
+ *   Main → Worker:  { type:'start', url, headers, staggerMs }
+ *                   { type:'stop' }
+ *   Worker → Main:  { type:'handle', handle: MediaSourceHandle }
+ *                   { type:'ready' }   — first chunk appended, call video.play()
+ *                   { type:'done'  }   — EOF, reconnect
+ *                   { type:'error', message }
+ */
+const MSE_WORKER_CODE = `
+'use strict';
+var abortCtrl = null;
+var cancelled  = false;
+var lastKnownCurrentTime = 0;
+
+self.onmessage = function(e) {
+  if (e.data.type === 'start') {
+    cancelled = false;
+    runStream(e.data.url, e.data.headers || {}, e.data.staggerMs || 0);
+  } else if (e.data.type === 'stop') {
+    cancelled = true;
+    if (abortCtrl) { try { abortCtrl.abort(); } catch(x) {} }
+  } else if (e.data.type === 'currentTime') {
+    // Main thread reports video.currentTime every 3s so trim never cuts past playhead
+    lastKnownCurrentTime = e.data.time;
+  }
+};
+
+async function runStream(url, headers, staggerMs) {
+  try {
+    if (staggerMs > 0) await new Promise(function(r) { setTimeout(r, staggerMs); });
+    if (cancelled) return;
+
+    var ms = new MediaSource();
+    // Transfer the handle to the main thread so it can set video.srcObject
+    self.postMessage({ type: 'handle', handle: ms.handle }, [ms.handle]);
+
+    await new Promise(function(resolve) {
+      ms.addEventListener('sourceopen', resolve, { once: true });
+    });
+    if (cancelled) return;
+
+    abortCtrl = new AbortController();
+    var resp = await fetch(url, { signal: abortCtrl.signal, headers: headers });
+    if (cancelled) return;
+    if (!resp.ok || !resp.body) {
+      self.postMessage({ type: 'error', message: 'HTTP ' + resp.status });
+      return;
+    }
+
+    // Detect codec from Content-Type; fall back to H.264 High 4.0
+    var ct       = resp.headers.get('Content-Type') || 'video/mp4; codecs="avc1.640028"';
+    var mimeType = ct.split(';').map(function(s) { return s.trim(); }).join('; ');
+    var sb;
+    try {
+      sb = ms.addSourceBuffer(mimeType);
+    } catch(e1) {
+      mimeType = 'video/mp4; codecs="avc1.640028"';
+      try { sb = ms.addSourceBuffer(mimeType); }
+      catch(e2) { self.postMessage({ type: 'error', message: 'No supported codec' }); return; }
+    }
+
+    // Single unified updateend handler — same as main-thread MSEFeed
+    var queue = [], queueBytes = 0, trimPending = false;
+
+    function processQueue() {
+      if (sb.updating || ms.readyState !== 'open') return;
+      if (queue.length > 0) {
+        var merged;
+        if (queue.length === 1) {
+          merged = queue[0];
+        } else {
+          merged = new Uint8Array(queueBytes);
+          var off = 0;
+          for (var i = 0; i < queue.length; i++) {
+            merged.set(queue[i], off); off += queue[i].byteLength;
+          }
+        }
+        queue.length = 0; queueBytes = 0;
+        try {
+          sb.appendBuffer(merged);
+        } catch(e3) {
+          queue.push(merged); queueBytes = merged.byteLength;
+          trimPending = true;
+          if (!sb.updating) processTrim();
+        }
+        return;
+      }
+      if (trimPending) processTrim();
+    }
+
+    function processTrim() {
+      if (sb.updating || ms.readyState !== 'open' || sb.buffered.length === 0) return;
+      var bs = sb.buffered.start(0);
+      var be = sb.buffered.end(sb.buffered.length - 1);
+      if (be - bs > 60) {
+        // Never trim within 5s of the current playhead — main thread sends currentTime
+        // every 3s via watchdog so this is at most 3s stale.
+        var safeRemoveTo = Math.min(be - 20, lastKnownCurrentTime - 5);
+        if (safeRemoveTo > bs) {
+          try { sb.remove(bs, safeRemoveTo); trimPending = false; }
+          catch(e4) { trimPending = false; }
+        } else { trimPending = false; } // playhead too close to buffer start — skip for now
+      } else { trimPending = false; }
+    }
+
+    sb.addEventListener('updateend', processQueue);
+    var trimId = setInterval(function() {
+      if (!cancelled) { trimPending = true; processQueue(); }
+    }, 10000);
+
+    var reader = resp.body.getReader();
+    var sentReady = false;
+    while (!cancelled) {
+      var result = await reader.read();
+      if (result.done || !result.value) break;
+      var chunk = result.value;
+      if (sb.updating || queue.length > 0) {
+        queue.push(chunk); queueBytes += chunk.byteLength;
+      } else {
+        try { sb.appendBuffer(chunk); }
+        catch(e5) { queue.push(chunk); queueBytes += chunk.byteLength; }
+      }
+      if (!sentReady) { sentReady = true; self.postMessage({ type: 'ready' }); }
+    }
+
+    clearInterval(trimId);
+    if (!cancelled) self.postMessage({ type: 'done' });
+
+  } catch(err) {
+    if (!cancelled) {
+      var msg = err && err.name ? (err.name + ': ' + (err.message || '')) : String(err);
+      if (msg.indexOf('AbortError') >= 0 || msg.indexOf('aborted') >= 0) return;
+      self.postMessage({ type: 'error', message: msg });
+    }
+  }
+}
+`.trim();
+
+function createMseWorker(): Worker {
+  const blob = new Blob([MSE_WORKER_CODE], { type: 'application/javascript' });
+  const burl = URL.createObjectURL(blob);
+  const w = new Worker(burl);
+  URL.revokeObjectURL(burl);
+  return w;
+}
+
 /**
  * Live camera feed using MSE (Media Source Extensions) over HTTP.
  * Fetches go2rtc's fMP4 stream via dvr_proxy (/api/mse?src=...) over TCP.
  *
- * This is far more reliable than WebRTC for security cameras:
- *  - TCP delivery: no UDP packet loss/jitter on WiFi
- *  - Better MSE hardware decode acceleration in Chrome
- *  - ~1s latency (vs ~0.3s WebRTC) — fine for security cameras
+ * Uses MediaSource-in-Worker (Chrome 107+) when available so SourceBuffer work
+ * runs off the main thread — enabling 4×30fps HD grid without JS-thread overload.
+ * Falls back to main-thread MSE on older browsers.
  *
  * Auto-reconnects with exponential backoff on stream errors.
  */
@@ -161,14 +325,17 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
     let cancelled = false;
     let reconnecting = false;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let startTimer: ReturnType<typeof setTimeout> | undefined;
     let objectUrl: string | null = null;
-    const abortCtrl = new AbortController();
+    let abortCtrl: AbortController | null = null;
+    let workerRef: Worker | null = null;
 
     function scheduleReconnect() {
       if (cancelled || reconnecting) return;
       reconnecting = true;
-      // Abort the fetch to fully close the TCP connection / RTSP session in go2rtc
-      abortCtrl.abort();
+      // Stop whichever path is active: abort fetch (main thread) or terminate worker
+      if (workerRef) { workerRef.postMessage({ type: 'stop' }); workerRef.terminate(); workerRef = null; }
+      if (abortCtrl) abortCtrl.abort();
       const stagger = (stream.charCodeAt(stream.length - 1) % 4) * 500;
       const base = Math.min(2000 * Math.pow(2, retryCountRef.current), 30000);
       retryCountRef.current++;
@@ -181,7 +348,7 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
       }, base + stagger);
     }
 
-    async function start() {
+    async function startMainThread() {
       try {
         if (!MSEClass) {
           console.error(`[${stream}] MSE not supported in this browser`);
@@ -189,6 +356,7 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
           return;
         }
 
+        abortCtrl = new AbortController();
         const resp = await fetch(
           getMseUrl(stream),
           await getMseFetchInit(abortCtrl.signal),
@@ -226,20 +394,33 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
         const reader = resp.body.getReader();
 
         // --- Single unified updateend handler ---
-        // Priority: 1) drain queued chunks, 2) trim old buffer
+        // Priority: 1) drain queued chunks (batched), 2) trim old buffer
         const queue: Uint8Array[] = [];
+        let queueBytes = 0;
         let trimPending = false;
 
         function processQueue() {
           if (sb.updating || ms.readyState !== 'open') return;
 
-          // Priority 1: append queued data
+          // Priority 1: batch-append all queued data in one appendBuffer call
+          // (reduces updateend round-trips when chunks back up briefly)
           if (queue.length > 0) {
+            let merged: Uint8Array;
+            if (queue.length === 1) {
+              merged = queue[0];
+            } else {
+              merged = new Uint8Array(queueBytes);
+              let offset = 0;
+              for (const chunk of queue) { merged.set(chunk, offset); offset += chunk.byteLength; }
+            }
+            queue.length = 0;
+            queueBytes = 0;
             try {
-              const chunk = queue.shift()!;
-              sb.appendBuffer(chunk.buffer as ArrayBuffer);
+              sb.appendBuffer(merged);
             } catch {
-              // QuotaExceededError — force a trim next cycle
+              // QuotaExceededError — put data back and force a trim
+              queue.push(merged);
+              queueBytes = merged.byteLength;
               trimPending = true;
               if (!sb.updating) processTrim();
             }
@@ -268,12 +449,15 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
 
         sb.addEventListener('updateend', processQueue);
 
-        // Schedule trims periodically (every 10s) instead of on every append
-        const trimInterval = setInterval(() => {
-          if (cancelled) return;
-          trimPending = true;
-          processQueue();
-        }, 10000);
+        // Schedule trims periodically — stagger by channel to avoid all 4 cameras
+        // trimming simultaneously (each trim briefly pauses appendBuffer).
+        const trimStagger = (stream.charCodeAt(stream.length - 1) % 4) * 2500;
+        let trimIntervalId: ReturnType<typeof setInterval> | undefined;
+        const trimTimeoutId = setTimeout(() => {
+          trimIntervalId = setInterval(() => {
+            if (!cancelled) { trimPending = true; processQueue(); }
+          }, 10000);
+        }, trimStagger);
 
         // Pump fetch stream → SourceBuffer
         let started = false;
@@ -283,11 +467,13 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
 
           if (sb.updating || queue.length > 0) {
             queue.push(value);
+            queueBytes += value.byteLength;
           } else {
             try {
-              sb.appendBuffer(value.buffer as ArrayBuffer);
+              sb.appendBuffer(value);
             } catch {
               queue.push(value);
+              queueBytes += value.byteLength;
             }
           }
 
@@ -297,7 +483,8 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
           }
         }
 
-        clearInterval(trimInterval);
+        clearTimeout(trimTimeoutId);
+        clearInterval(trimIntervalId);
 
         // Stream ended (server closed) — reconnect
         if (!cancelled) {
@@ -315,10 +502,52 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
       }
     }
 
+    // Worker path — SourceBuffer runs entirely off the main thread.
+    // Main thread only handles: video element events, stall watchdog, playbackRate.
+    async function startWorker() {
+      if (!MSEClass) { setState('unsupported'); return; }
+      // Auth headers must be resolved on the main thread (worker has no __HASS__)
+      const headers: Record<string, string> = IS_HTTPS ? await dvrAuthHeaders() : {};
+      if (cancelled) return;
+      const chNum = parseInt(stream.match(/\d/)?.[0] ?? '1', 10);
+      const staggerMs = Math.max(0, chNum - 1) * 250;
+      workerRef = createMseWorker();
+      workerRef.onmessage = (e: MessageEvent) => {
+        if (cancelled) return;
+        const { type } = e.data;
+        if (type === 'handle') {
+          // Attach the worker's MediaSource to the video element
+          try { (video as any).srcObject = e.data.handle; } catch { /* ignore */ }
+        } else if (type === 'ready') {
+          video.play().catch(() => {});
+        } else if (type === 'done' || type === 'error') {
+          if (!reconnecting) {
+            if (type === 'error') console.error(`[${stream}] Worker:`, e.data.message);
+            setState('connecting');
+            scheduleReconnect();
+          }
+        }
+      };
+      workerRef.onerror = () => {
+        if (!cancelled && !reconnecting) { setState('connecting'); scheduleReconnect(); }
+      };
+      workerRef.postMessage({ type: 'start', url: getMseUrl(stream), headers, staggerMs });
+    }
+
+    // One-time snap to live edge on first play — prevents the video from
+    // starting at buffer position 0 (potentially seconds behind live).
+    let didSnapToEdge = false;
     const onPlaying = () => {
       if (!cancelled) {
         setState('playing');
         retryCountRef.current = 0;
+        if (!didSnapToEdge && video.buffered.length > 0) {
+          didSnapToEdge = true;
+          const edge = video.buffered.end(video.buffered.length - 1);
+          if (edge - video.currentTime > 1.5) {
+            video.currentTime = Math.max(0, edge - 1.0);
+          }
+        }
       }
     };
     const onError = () => {
@@ -332,21 +561,39 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
     video.addEventListener('playing', onPlaying);
     video.addEventListener('error', onError);
 
-    // Live edge seeker + stall watchdog (every 3s)
+    // Live edge maintenance + stall watchdog (every 3s)
+    //
+    // Strategy: use playbackRate to *drift* toward live rather than hard-seeking.
+    // A hard seek causes a visible frame jump; playbackRate=1.05 catches up at
+    // ~0.15s per wall-second (lag 2s → live in ~13s) with no perceptible stutter.
+    // Audio is muted so pitch shift is irrelevant.
+    //
+    // Only hard-seek when severely behind (>6s) — e.g. after a stall recovery.
+    //
+    // Hysteresis band (1–2.5s): no rate change to avoid flip-flopping.
     let lastTime = -1;
     let stallCount = 0;
     let stallStartTime = 0;
     const watchdog = setInterval(() => {
       if (cancelled || reconnecting) return;
+      sendCurrentTimeToWorker();
 
-      // Seek to live edge if playback falls behind
-      // More tolerant when remote (allow 5s lag vs 3s local)
-      const maxLag = IS_LOCAL ? 3 : 5;
       if (video.buffered.length > 0) {
         const edge = video.buffered.end(video.buffered.length - 1);
-        if (edge - video.currentTime > maxLag) {
-          video.currentTime = edge - 0.5;
+        const lag = edge - video.currentTime;
+
+        if (lag > 6) {
+          // Way behind — hard seek (stall recovery, very rare with 0 drops)
+          video.currentTime = Math.max(0, edge - 1.5);
+          video.playbackRate = 1.0;
+        } else if (lag > 2.5) {
+          // Behind — gradual catch-up at 1.05× (muted, no audio pitch issue)
+          if (video.playbackRate !== 1.05) video.playbackRate = 1.05;
+        } else if (lag < 1.0) {
+          // At live edge — back to normal
+          if (video.playbackRate !== 1.0) video.playbackRate = 1.0;
         }
+        // 1–2.5s band: hold current rate (hysteresis)
       }
 
       // Stall detection — more patient when remote (4 checks = 12s vs 3 = 9s)
@@ -368,21 +615,43 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
       lastTime = t;
     }, 3000);
 
-    start();
+    // Tell worker the current playhead position so it can trim safely
+    function sendCurrentTimeToWorker() {
+      if (workerRef && !cancelled) {
+        workerRef.postMessage({ type: 'currentTime', time: video.currentTime });
+      }
+    }
+
+    // Dispatch to worker path (Chrome 107+) or main-thread fallback
+    if (WORKER_MSE_SUPPORTED) {
+      startWorker();
+    } else {
+      // Stagger starts so channels don't compete on initial mount
+      const chNum = parseInt(stream.match(/\d/)?.[0] ?? '1', 10);
+      const startDelayMs = Math.max(0, chNum - 1) * 250;
+      startTimer = setTimeout(startMainThread, startDelayMs);
+    }
 
     return () => {
       cancelled = true;
-      abortCtrl.abort();
+      if (workerRef) { workerRef.postMessage({ type: 'stop' }); workerRef.terminate(); workerRef = null; }
+      if (abortCtrl) abortCtrl.abort();
+      clearTimeout(startTimer);
       clearTimeout(reconnectTimer);
       clearInterval(watchdog);
+      video.playbackRate = 1.0;
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('error', onError);
       video.pause();
-      video.removeAttribute('src');
+      if (WORKER_MSE_SUPPORTED) {
+        try { (video as any).srcObject = null; } catch { /* ignore */ }
+      } else {
+        video.removeAttribute('src');
+        if (objectUrl) URL.revokeObjectURL(objectUrl);
+      }
       video.load();
-      if (objectUrl) URL.revokeObjectURL(objectUrl);
     };
-  }, [stream, retryKey, paused]);
+  }, [stream, retryKey, paused]); // eslint-disable-line react-hooks/exhaustive-deps
 
   return (
     <div className="relative w-full h-full bg-black">
@@ -550,7 +819,6 @@ function CameraCell({
   lightEntityId,
   hidden,
   expanded,
-  quality,
   paused,
   onExpand,
   onCollapse,
@@ -560,12 +828,14 @@ function CameraCell({
   lightEntityId: string;
   hidden: boolean;
   expanded: boolean;
-  quality: 'main' | 'sub';
   paused?: boolean;
   onExpand: () => void;
   onCollapse: () => void;
 }) {
-  const activeStream = quality === 'main' ? stream : `${stream}_sub`;
+  // With MediaSource-in-Worker (Chrome 107+), all SourceBuffer work runs off the
+  // main thread — 4×30fps HD grid is viable. Falls back to sub-stream if worker
+  // MSE is unavailable (JS main-thread overhead cannot sustain 4×30fps).
+  const activeStream = (WORKER_MSE_SUPPORTED || expanded) ? stream : `${stream}_sub`;
 
   return (
     <div
@@ -1434,7 +1704,6 @@ function PlaybackModeInner() {
 export default function Cameras() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [mode, setMode] = useState<'live' | 'playback'>('live');
-  const [quality, setQuality] = useState<'main' | 'sub'>('sub');
 
   return (
     <PageContainer title="Cameras">
@@ -1463,28 +1732,12 @@ export default function Cameras() {
           Playback
         </button>
 
-        <div className="ml-auto flex items-center gap-1 bg-muted rounded-md p-0.5">
-          <button
-            onClick={() => setQuality('sub')}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-              quality === 'sub'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            SD
-          </button>
-          <button
-            onClick={() => setQuality('main')}
-            className={`px-2.5 py-1 rounded text-xs font-medium transition-colors ${
-              quality === 'main'
-                ? 'bg-background text-foreground shadow-sm'
-                : 'text-muted-foreground hover:text-foreground'
-            }`}
-          >
-            HD
-          </button>
-        </div>
+        {/* Grid = SD sub-stream (15fps), expanded single camera = HD main (30fps) — automatic */}
+        {mode === 'live' && (
+          <div className="ml-auto text-xs text-muted-foreground">
+            {expanded ? 'HD · 30fps' : WORKER_MSE_SUPPORTED ? 'HD · 30fps  |  4-up grid' : 'SD · 15fps  |  expand for HD'}
+          </div>
+        )}
       </div>
 
       {/* Live camera grid — always mounted, hidden when playback */}
@@ -1507,8 +1760,7 @@ export default function Cameras() {
                 lightEntityId={cam.lightEntityId}
                 hidden={isHidden}
                 expanded={isExpanded}
-                quality={quality}
-                paused={mode === 'playback'}
+                paused={mode === 'playback' || (isHidden && !WORKER_MSE_SUPPORTED)}
                 onExpand={() => setExpanded(cam.stream)}
                 onCollapse={() => setExpanded(null)}
               />

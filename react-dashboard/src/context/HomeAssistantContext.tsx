@@ -60,9 +60,28 @@ class HassStore {
     service: string,
     data?: Record<string, any>,
     target?: { entity_id?: string | string[] },
-  ) {
-    if (!this._hass) throw new Error('Not connected to Home Assistant');
-    return this._hass.callService(domain, service, data, target);
+  ): Promise<void> {
+    if (!this._hass) return; // silently drop — not connected
+    try {
+      await this._hass.callService(domain, service, data, target);
+    } catch (err: any) {
+      // HA closes the WebSocket message channel when the browser tab is
+      // backgrounded / minimised. The resulting rejection is not actionable
+      // — the service call likely already executed on the HA side — so we
+      // swallow it rather than let it become an unhandled promise rejection
+      // that Chrome surfaces as an error and React DevTools can propagate
+      // into a blank-screen crash.
+      const msg = String(err?.message ?? err);
+      const isClosed =
+        msg.includes('message channel closed') ||
+        msg.includes('The message channel is closed') ||
+        msg.includes('disconnected') ||
+        err?.code === 3 || // ERR_CONNECTION_LOST
+        err?.code === 6;   // ERR_INVALID_AUTH (can happen on resume)
+      if (!isClosed) {
+        console.warn('[VanDash] callService error:', err);
+      }
+    }
   }
 }
 

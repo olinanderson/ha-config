@@ -184,6 +184,19 @@ export default function VanlifeMap() {
     return () => clearTimeout(timer);
   }, [sidebarOpen]);
 
+  // Invalidate map size when the browser tab/window regains visibility
+  // (Leaflet loses its layout when the panel was hidden via display:none)
+  useEffect(() => {
+    const onVisible = () => {
+      if (!document.hidden) {
+        const map = mapInstance.current;
+        if (map) setTimeout(() => map.invalidateSize(), 50);
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, []);
+
   /* ── Fetch data range ────────────────────────────────────────────── */
 
   useEffect(() => {
