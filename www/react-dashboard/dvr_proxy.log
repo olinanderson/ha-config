@@ -1,3 +1,31 @@
 RTSP Scale proxy listening on port 8767
+[dvr_proxy] recording cache daemon queued
 DVR proxy listening on port 8766
-[dvr_proxy] Started playback (ch1 2026-04-14 00:00:00→2026-04-14 00:30:00 speed=1x)
+[cache] recording cache daemon started
+[cache] ch1: 48 segments to download
+[cache] ch2: 144 segments to download
+[cache] ch3: 96 segments to download
+[cache] ch4: 144 segments to download
+[cache] low disk (0 GB free), pausing
+[cache] pruned ch1/2026-04-15
+[cache] pruned ch1/2026-04-18
+[cache] pruned ch1/2026-04-13
+[cache] pruned ch1/2026-04-14
+[cache] pruned ch1/2026-04-17
+[cache] pruned ch1/2026-04-16
+[cache] pruned ch2/2026-04-15
+[cache] pruned ch2/2026-04-13
+[cache] pruned ch2/2026-04-14
+[cache] pruned ch2/2026-04-17
+[cache] pruned ch2/2026-04-16
+[cache] pruned ch4/2026-04-15
+[cache] pruned ch4/2026-04-13
+[cache] pruned ch4/2026-04-14
+[cache] pruned ch4/2026-04-17
+[cache] pruned ch4/2026-04-16
+[cache] pruned ch3/2026-04-15
+[cache] pruned ch3/2026-04-18
+[cache] pruned ch3/2026-04-13
+[cache] pruned ch3/2026-04-14
+[cache] pruned ch3/2026-04-17
+[cache] pruned ch3/2026-04-16

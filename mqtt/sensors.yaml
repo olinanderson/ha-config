@@ -1,9 +1,400 @@
-# ================================
-# mqtt/sensors.yaml
-# ================================
-# Most WiCAN OBD data uses native ha-wican integration (HTTP webhooks) → sensor.192_168_10_90_*
+# ============================================================
+# mqtt/sensors.yaml — WiCAN Pro OBD2 Sensors (MQTT)
+# ============================================================
+# All WiCAN OBD data via MQTT topics (replaces ha-wican HTTP webhooks).
+# Entity IDs match old ha-wican integration via object_id — no downstream changes needed.
+# WiCAN publishes {"NAME": value} per PID; value_template extracts the first value.
 #
-# NOTE: Two MQTT-only sensors (wican_fuel_rate, wican_alt_duty) were removed 2026-04-14:
-#   - wican_fuel_rate (22F49D): returned constant 8.66 on every poll, never changed — broken PID
-#   - wican_alt_duty (220598): never published any data at all
-# Both PIDs are now confirmed non-functional on this ECU. Remove from WiCAN Automate tab if desired.
+# Disabled PIDs (broken on this ECU): FUEL_RATE, ALT_DUTY
+# Disabled PIDs (hybrid-only, not applicable): HV_A, HV_V, SOC
+# ============================================================
+
+# ─── Standard OBD PIDs (Mode 01, 1s polling) ────────────────
+
+- name: "Engine RPM"
+  object_id: "192_168_10_90_0c_enginerpm"
+  unique_id: "wican_0c_enginerpm"
+  state_topic: "wican/EngineRPM"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "rpm"
+  state_class: measurement
+  icon: mdi:engine
+  expire_after: 30
+  device: &wican_device
+    identifiers: ["wican_pro"]
+    name: "WiCAN Pro"
+    manufacturer: "MeatPi Electronics"
+    model: "WiCAN Pro"
+
+- name: "Vehicle Speed"
+  object_id: "192_168_10_90_0d_vehiclespeed"
+  unique_id: "wican_0d_vehiclespeed"
+  state_topic: "wican/VehicleSpeed"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "km/h"
+  device_class: speed
+  state_class: measurement
+  icon: mdi:speedometer
+  expire_after: 30
+  device: *wican_device
+
+- name: "Control Module Voltage"
+  object_id: "192_168_10_90_42_controlmodulevolt"
+  unique_id: "wican_42_controlmodulevolt"
+  state_topic: "wican/ControlModuleVolt"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "V"
+  device_class: voltage
+  state_class: measurement
+  expire_after: 30
+  device: *wican_device
+
+- name: "Intake Air Temperature"
+  object_id: "192_168_10_90_0f_intakeairtemperature"
+  unique_id: "wican_0f_intakeairtemperature"
+  state_topic: "wican/IntakeAirTemperature"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "°C"
+  device_class: temperature
+  state_class: measurement
+  expire_after: 30
+  device: *wican_device
+
+- name: "Throttle Position"
+  object_id: "192_168_10_90_11_throttleposition"
+  unique_id: "wican_11_throttleposition"
+  state_topic: "wican/ThrottlePosition"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "%"
+  state_class: measurement
+  icon: mdi:gauge
+  expire_after: 30
+  device: *wican_device
+
+- name: "Engine Coolant Temp"
+  object_id: "192_168_10_90_05_enginecoolanttemp"
+  unique_id: "wican_05_enginecoolanttemp"
+  state_topic: "wican/EngineCoolantTemp"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "°C"
+  device_class: temperature
+  state_class: measurement
+  expire_after: 30
+  device: *wican_device
+
+- name: "Calculated Engine Load"
+  object_id: "192_168_10_90_04_calcengineload"
+  unique_id: "wican_04_calcengineload"
+  state_topic: "wican/CalcEngineLoad"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "%"
+  state_class: measurement
+  icon: mdi:gauge
+  expire_after: 30
+  device: *wican_device
+
+- name: "Fuel Tank Level"
+  object_id: "192_168_10_90_2f_fueltanklevel"
+  unique_id: "wican_2f_fueltanklevel"
+  state_topic: "wican/FuelTankLevel"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "%"
+  state_class: measurement
+  icon: mdi:gas-station
+  expire_after: 30
+  device: *wican_device
+
+- name: "Monitor Status"
+  object_id: "192_168_10_90_01_monitorstatus"
+  unique_id: "wican_01_monitorstatus"
+  state_topic: "wican/MonitorStatus"
+  value_template: "{{ value_json.values() | first }}"
+  expire_after: 30
+  device: *wican_device
+
+- name: "Ambient Air Temp"
+  object_id: "192_168_10_90_46_ambientairtemp"
+  unique_id: "wican_46_ambientairtemp"
+  state_topic: "wican/AmbientAirTemp"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "°C"
+  device_class: temperature
+  state_class: measurement
+  expire_after: 30
+  device: *wican_device
+
+- name: "Time Since Engine Start"
+  object_id: "192_168_10_90_1f_timesinceengstart"
+  unique_id: "wican_1f_timesinceengstart"
+  state_topic: "wican/TimeSinceEngStart"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "s"
+  device_class: duration
+  state_class: measurement
+  expire_after: 30
+  device: *wican_device
+
+# ─── User Custom PIDs ───────────────────────────────────────
+
+- name: "Short Term Fuel Trim Bank 1"
+  object_id: "192_168_10_90_stft_b1"
+  unique_id: "wican_stft_b1"
+  state_topic: "wican/STFT_B1"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "%"
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device
+
+- name: "Long Term Fuel Trim Bank 1"
+  object_id: "192_168_10_90_ltft_b1"
+  unique_id: "wican_ltft_b1"
+  state_topic: "wican/LTFT_B1"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "%"
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device
+
+- name: "Short Term Fuel Trim Bank 2"
+  object_id: "192_168_10_90_stft_b2"
+  unique_id: "wican_stft_b2"
+  state_topic: "wican/STFT_B2"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "%"
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device
+
+- name: "Long Term Fuel Trim Bank 2"
+  object_id: "192_168_10_90_ltft_b2"
+  unique_id: "wican_ltft_b2"
+  state_topic: "wican/LTFT_B2"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "%"
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device
+
+- name: "Lambda"
+  object_id: "192_168_10_90_lambda"
+  unique_id: "wican_lambda"
+  state_topic: "wican/LAMBDA"
+  value_template: "{{ value_json.values() | first }}"
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device
+
+- name: "Injector Pulse Width"
+  object_id: "192_168_10_90_inj_pw"
+  unique_id: "wican_inj_pw"
+  state_topic: "wican/INJ_PW"
+  value_template: "{{ value_json.values() | first }}"
+  state_class: measurement
+  expire_after: 30
+  device: *wican_device
+
+- name: "Manifold Absolute Pressure"
+  object_id: "192_168_10_90_map"
+  unique_id: "wican_map"
+  state_topic: "wican/MAP"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "kPa"
+  device_class: pressure
+  state_class: measurement
+  expire_after: 30
+  device: *wican_device
+
+# ─── Vehicle Specific PIDs (Ford Mode 22, 5s polling) ───────
+
+- name: "Tire Pressure FL"
+  object_id: "192_168_10_90_tyre_p_fl"
+  unique_id: "wican_tyre_p_fl"
+  state_topic: "wican/TYRE_P_FL"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "kPa"
+  state_class: measurement
+  icon: mdi:car-tire-alert
+  expire_after: 60
+  device: *wican_device
+
+- name: "Tire Pressure FR"
+  object_id: "192_168_10_90_tyre_p_fr"
+  unique_id: "wican_tyre_p_fr"
+  state_topic: "wican/TYRE_P_FR"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "kPa"
+  state_class: measurement
+  icon: mdi:car-tire-alert
+  expire_after: 60
+  device: *wican_device
+
+- name: "Tire Pressure RL"
+  object_id: "192_168_10_90_tyre_p_rl"
+  unique_id: "wican_tyre_p_rl"
+  state_topic: "wican/TYRE_P_RL"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "kPa"
+  state_class: measurement
+  icon: mdi:car-tire-alert
+  expire_after: 60
+  device: *wican_device
+
+- name: "Tire Pressure RR"
+  object_id: "192_168_10_90_tyre_p_rr"
+  unique_id: "wican_tyre_p_rr"
+  state_topic: "wican/TYRE_P_RR"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "kPa"
+  state_class: measurement
+  icon: mdi:car-tire-alert
+  expire_after: 60
+  device: *wican_device
+
+- name: "AC Compressor"
+  object_id: "192_168_10_90_ac_comp"
+  unique_id: "wican_ac_comp"
+  state_topic: "wican/AC_COMP"
+  value_template: "{{ value_json.values() | first }}"
+  expire_after: 60
+  device: *wican_device
+
+- name: "Parking Brake"
+  object_id: "192_168_10_90_park_brake"
+  unique_id: "wican_park_brake"
+  state_topic: "wican/PARK_BRAKE"
+  value_template: "{{ value_json.values() | first }}"
+  expire_after: 60
+  device: *wican_device
+
+- name: "Drive Mode"
+  object_id: "192_168_10_90_drive_mode"
+  unique_id: "wican_drive_mode"
+  state_topic: "wican/DRIVE_MODE"
+  value_template: "{{ value_json.values() | first }}"
+  expire_after: 60
+  device: *wican_device
+
+- name: "Coolant Temperature (Mode 22)"
+  object_id: "192_168_10_90_coolant_tmp"
+  unique_id: "wican_coolant_tmp"
+  state_topic: "wican/COOLANT_TMP"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "°C"
+  device_class: temperature
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device
+
+- name: "Fuel Rail Pressure"
+  object_id: "192_168_10_90_fuel_pressure"
+  unique_id: "wican_fuel_pressure"
+  state_topic: "wican/FUEL_PRESSURE"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "kPa"
+  device_class: pressure
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device
+
+- name: "Fuel Rail Pressure (Direct)"
+  object_id: "192_168_10_90_fuel_pressure_d"
+  unique_id: "wican_fuel_pressure_d"
+  state_topic: "wican/FUEL_PRESSURE_D"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "kPa"
+  device_class: pressure
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device
+
+- name: "Fuel Pump Duty Cycle"
+  object_id: "192_168_10_90_fuel_pump_duty"
+  unique_id: "wican_fuel_pump_duty"
+  state_topic: "wican/FUEL_PUMP_DUTY"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "%"
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device
+
+- name: "Fuel System Status"
+  object_id: "192_168_10_90_fuel_sys_stat"
+  unique_id: "wican_fuel_sys_stat"
+  state_topic: "wican/FUEL_SYS_STAT"
+  value_template: "{{ value_json.values() | first }}"
+  expire_after: 60
+  device: *wican_device
+
+- name: "Intake Air Temp (Mode 22)"
+  object_id: "192_168_10_90_intake_air_tmp"
+  unique_id: "wican_intake_air_tmp"
+  state_topic: "wican/INTAKE_AIR_TMP"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "°C"
+  device_class: temperature
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device
+
+- name: "Intake Air Temp 2"
+  object_id: "192_168_10_90_intake_air_temp_2"
+  unique_id: "wican_intake_air_temp_2"
+  state_topic: "wican/INTAKE_AIR_TEMP_2"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "°C"
+  device_class: temperature
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device
+
+- name: "Octane Ratio"
+  object_id: "192_168_10_90_octane_ratio_l"
+  unique_id: "wican_octane_ratio_l"
+  state_topic: "wican/OCTANE_RATIO_L"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "%"
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device
+
+- name: "Oil Life"
+  object_id: "192_168_10_90_oil_life"
+  unique_id: "wican_oil_life"
+  state_topic: "wican/OIL_LIFE"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "%"
+  state_class: measurement
+  icon: mdi:oil
+  expire_after: 60
+  device: *wican_device
+
+- name: "Transmission Fluid Temp"
+  object_id: "192_168_10_90_tran_f_temp"
+  unique_id: "wican_tran_f_temp"
+  state_topic: "wican/TRAN_F_TEMP"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "°C"
+  device_class: temperature
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device
+
+- name: "Current Gear"
+  object_id: "192_168_10_90_gear"
+  unique_id: "wican_gear"
+  state_topic: "wican/GEAR"
+  value_template: "{{ value_json.values() | first }}"
+  icon: mdi:car-shift-pattern
+  expire_after: 60
+  device: *wican_device
+
+- name: "Wastegate Position"
+  object_id: "192_168_10_90_wastegate"
+  unique_id: "wican_wastegate"
+  state_topic: "wican/WASTEGATE"
+  value_template: "{{ value_json.values() | first }}"
+  unit_of_measurement: "%"
+  state_class: measurement
+  expire_after: 60
+  device: *wican_device

@@ -61,7 +61,8 @@ function ChargingControls() {
 export default function Power() {
   return (
     <PageContainer title="Power & Energy">
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+      {/* Row 1: two info columns */}
+      <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-4">
           <BatteryCard />
           <VoltageCard />
@@ -70,9 +71,10 @@ export default function Power() {
           <SolarCard />
           <ChargingControls />
         </div>
-        <div className="space-y-4">
-          <PowerFlow />
-        </div>
+      </div>
+      {/* Row 2: power flow spanning full width */}
+      <div className="mt-4">
+        <PowerFlow />
       </div>
     </PageContainer>
   );

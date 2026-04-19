@@ -400,7 +400,7 @@ class VanlifeCoordinator:
         accuracy = state.attributes.get("gps_accuracy", 0) or 0
 
         # Get speed from WiCAN if available
-        speed_state = self.hass.states.get("sensor.wican_speed")
+        speed_state = self.hass.states.get("sensor.192_168_10_90_0d_vehiclespeed")
         speed = float(speed_state.state) if speed_state and speed_state.state not in ("unknown", "unavailable") else 0
 
         await self._traccar.async_send_position(

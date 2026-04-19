@@ -1,5 +1,25 @@
-# ================================
-# mqtt/binary_sensors.yaml
-# ================================
-# WiCAN MQTT binary sensor removed — now using native ha-wican integration.
-# Use binary_sensor.meatpi_pro_ecu_status for WiCAN connectivity.
+# ============================================================
+# mqtt/binary_sensors.yaml — WiCAN Status (MQTT LWT)
+# ============================================================
+# Replaces binary_sensor.meatpi_pro_ecu_status from ha-wican integration.
+# Uses the same object_id so entity ID matches — no downstream changes needed.
+#
+# WiCAN publishes "online" to wican/status on connect (retained).
+# MQTT broker sends "offline" via LWT when WiCAN disconnects.
+# expire_after: 300 is a safety net in case LWT doesn't fire.
+# ============================================================
+
+- name: "WiCAN ECU Status"
+  object_id: "meatpi_pro_ecu_status"
+  unique_id: "wican_ecu_status"
+  state_topic: "wican/status"
+  value_template: "{{ value_json.status }}"
+  payload_on: "online"
+  payload_off: "offline"
+  device_class: connectivity
+  expire_after: 300
+  device:
+    identifiers: ["wican_pro"]
+    name: "WiCAN Pro"
+    manufacturer: "MeatPi Electronics"
+    model: "WiCAN Pro"

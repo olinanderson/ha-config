@@ -38,9 +38,12 @@ function EngineCard() {
   const { data: speedHistory } = useHistory('sensor.192_168_10_90_0d_vehiclespeed', 6);
   const { open } = useHistoryDialog();
 
-  const wicanConnected = ecuStatus?.state === 'on' && isFresh(ecuStatus?.last_updated);
-  const isMoving = moving?.state === 'on' && wicanConnected;
-  const engineOn = engine?.state === 'on' && wicanConnected;
+  // ECU status only updates last_updated when state CHANGES, so isFresh is
+  // wrong for long-lived connections.  Use RPM freshness as the real heartbeat.
+  const rpmEntity = useEntity('sensor.192_168_10_90_0c_enginerpm');
+  const wicanConnected = ecuStatus?.state === 'on' && isFresh(rpmEntity?.last_updated, 120);
+  const isMoving = moving?.state === 'on';
+  const engineOn = engine?.state === 'on';
   const gearText = gear?.state ?? '—';
 
   return (
@@ -235,7 +238,7 @@ function DiagnosticsCard() {
   const { value: injPw } = useEntityNumeric('sensor.injector_pulse_width');
   const { value: fuelTrim } = useEntityNumeric('sensor.average_fuel_trim');
   const { value: afr } = useEntityNumeric('sensor.commanded_afr');
-  const { value: altDuty } = useEntityNumeric('sensor.wican_alternator_duty');
+  const { value: fuelPumpDuty } = useEntityNumeric('sensor.192_168_10_90_fuel_pump_duty');
   const cel = useEntity('binary_sensor.check_engine_light');
   const { value: dtcCount } = useEntityNumeric('sensor.dtc_count');
   const isCel = cel?.state === 'on';
@@ -264,7 +267,7 @@ function DiagnosticsCard() {
         <SparklineStat entityId="sensor.injector_pulse_width" label="Injector PW" value={fmt(injPw, 2)} unit="ms" color="#e879f9" />
         <SparklineStat entityId="sensor.average_fuel_trim" label="Fuel Trim" value={fmt(fuelTrim, 1)} unit="%" color="#fb923c" />
         <SparklineStat entityId="sensor.commanded_afr" label="AFR" value={fmt(afr, 1)} unit=":1" color="#a78bfa" />
-        <SparklineStat entityId="sensor.wican_alternator_duty" label="Alt Duty" value={fmt(altDuty, 0)} unit="%" color="#facc15" />
+        <SparklineStat entityId="sensor.192_168_10_90_fuel_pump_duty" label="Fuel Pump Duty" value={fmt(fuelPumpDuty, 0)} unit="%" color="#facc15" />
       </CardContent>
     </Card>
   );

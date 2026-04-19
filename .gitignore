@@ -23,6 +23,7 @@ secrets.yaml
 .ssh/
 ssh_keys/
 .dvr_credentials
+.ha_login
 
 # --- DVR config (contains credentials in RTSP URLs) ---
 go2rtc.yaml

@@ -58,23 +58,35 @@ class VanDashboard extends HTMLElement {
   constructor() {
     super();
     this._unmount = null;
-    this._loaded = false;
-    this._mountGen = 0; // incremented on every disconnect; cancels in-flight connectedCallback
+    this._mounting = false; // true while async _doMount is in progress
+    this._mountGen = 0;
     this._onVisibility = null;
   }
 
   set hass(hass) {
     window.__HASS__ = hass;
     window.dispatchEvent(new Event('hass-updated'));
+    // Recovery: if we're in the DOM but React isn't mounted, re-mount.
+    // This catches the case where HA's quick "reconnecting..." cycle
+    // disconnected/reconnected the element and the async mount failed or
+    // was aborted, leaving a blank screen.
+    if (this.isConnected && !this._unmount && !this._mounting) {
+      this._doMount();
+    }
   }
 
   set panel(panel) {
     this._panel = panel;
   }
 
-  async connectedCallback() {
-    if (this._loaded) return;
-    this._loaded = true;
+  connectedCallback() {
+    this._doMount();
+  }
+
+  async _doMount() {
+    // Already mounted or mount in progress — skip
+    if (this._unmount || this._mounting) return;
+    this._mounting = true;
 
     // Capture the current generation. If disconnectedCallback fires while we
     // are awaiting below, _mountGen is incremented and we abort early so we
@@ -84,20 +96,20 @@ class VanDashboard extends HTMLElement {
     // Clear any stale children from a previous mount cycle
     this.innerHTML = '';
 
-    // Inject CSS inside this element so it works inside HA's shadow DOM
-    const cssText = await getCss();
-    if (this._mountGen !== gen) return; // disconnected mid-flight — abort
-
-    const style = document.createElement('style');
-    style.textContent = cssText;
-    this.appendChild(style);
-
-    const mountPoint = document.createElement('div');
-    mountPoint.style.height = '100%';
-    mountPoint.style.width = '100%';
-    this.appendChild(mountPoint);
-
     try {
+      // Inject CSS inside this element so it works inside HA's shadow DOM
+      const cssText = await getCss();
+      if (this._mountGen !== gen) return; // disconnected mid-flight — abort
+
+      const style = document.createElement('style');
+      style.textContent = cssText;
+      this.appendChild(style);
+
+      const mountPoint = document.createElement('div');
+      mountPoint.style.height = '100%';
+      mountPoint.style.width = '100%';
+      this.appendChild(mountPoint);
+
       const mod = await getModule();
       if (this._mountGen !== gen) return; // disconnected mid-flight — abort
 
@@ -112,29 +124,35 @@ class VanDashboard extends HTMLElement {
           window.dispatchEvent(new Event('hass-updated'));
         }
       });
+
+      // When browser tab returns from background, force a hass refresh
+      if (this._onVisibility) {
+        document.removeEventListener('visibilitychange', this._onVisibility);
+      }
+      this._onVisibility = () => {
+        if (!document.hidden && window.__HASS__) {
+          window.dispatchEvent(new Event('hass-updated'));
+        }
+      };
+      document.addEventListener('visibilitychange', this._onVisibility);
     } catch (err) {
       if (this._mountGen !== gen) return;
       console.error('[VanDash] Failed to load:', err);
-      mountPoint.innerHTML = `
+      this.innerHTML = `
         <div style="padding: 2rem; color: red;">
           <h2>Failed to load dashboard</h2>
           <pre>${err}</pre>
         </div>
       `;
+    } finally {
+      this._mounting = false;
     }
-
-    // When browser tab returns from background, force a hass refresh
-    this._onVisibility = () => {
-      if (!document.hidden && window.__HASS__) {
-        window.dispatchEvent(new Event('hass-updated'));
-      }
-    };
-    document.addEventListener('visibilitychange', this._onVisibility);
   }
 
   disconnectedCallback() {
-    // Invalidate any in-flight connectedCallback awaits
+    // Invalidate any in-flight _doMount awaits
     this._mountGen++;
+    this._mounting = false;
 
     if (this._onVisibility) {
       document.removeEventListener('visibilitychange', this._onVisibility);
@@ -146,7 +164,6 @@ class VanDashboard extends HTMLElement {
     }
     // Clear DOM so reconnect starts fresh
     this.innerHTML = '';
-    this._loaded = false;
   }
 }
 

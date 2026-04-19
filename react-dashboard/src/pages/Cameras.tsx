@@ -16,6 +16,12 @@ import {
   Pause,
   Undo2,
   Redo2,
+  Scissors,
+  Download,
+  Trash2,
+  Film,
+  X,
+  Check,
 } from 'lucide-react';
 
 const CAMERAS = [
@@ -544,8 +550,8 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
         if (!didSnapToEdge && video.buffered.length > 0) {
           didSnapToEdge = true;
           const edge = video.buffered.end(video.buffered.length - 1);
-          if (edge - video.currentTime > 1.5) {
-            video.currentTime = Math.max(0, edge - 1.0);
+          if (edge - video.currentTime > 1.0) {
+            video.currentTime = Math.max(0, edge - 0.5);
           }
         }
       }
@@ -561,16 +567,33 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
     video.addEventListener('playing', onPlaying);
     video.addEventListener('error', onError);
 
-    // Live edge maintenance + stall watchdog (every 3s)
+    // Live edge maintenance + stall watchdog (every 1s)
     //
-    // Strategy: use playbackRate to *drift* toward live rather than hard-seeking.
-    // A hard seek causes a visible frame jump; playbackRate=1.05 catches up at
-    // ~0.15s per wall-second (lag 2s → live in ~13s) with no perceptible stutter.
-    // Audio is muted so pitch shift is irrelevant.
+    // Continuous proportional control: instead of discrete rate bands, compute
+    // an exact playbackRate every second based on how far the playhead is from
+    // the target lag.  This eliminates visible rate-change jumps entirely.
     //
-    // Only hard-seek when severely behind (>6s) — e.g. after a stall recovery.
+    // TARGET_LAG (0.5s): we *want* to be 0.5s behind the buffer edge — a tiny
+    // cushion that prevents decoder starvation when data arrives in bursts.
+    //   - Drift behind target → rate > 1.0 (catch up)
+    //   - Drift ahead of target → rate < 1.0 (slow down, rebuild buffer)
+    //   - At target → rate = 1.0
     //
-    // Hysteresis band (1–2.5s): no rate change to avoid flip-flopping.
+    // Gain (K = 0.04/s): rate = 1.0 + (lag − 0.5) × 0.04, clamped [0.95, 1.15]
+    //   lag  0.0s → 0.98  (slightly slow — too close to edge, rebuild buffer)
+    //   lag  0.5s → 1.00  (on target)
+    //   lag  1.5s → 1.04  (gentle catch-up, imperceptible)
+    //   lag  3.0s → 1.10  (faster catch-up)
+    //   lag  5.0s → 1.15  (cap — max smooth catch-up)
+    //   lag 15.0s → hard seek (only after major stall recovery)
+    //
+    // The 1s interval (vs previous 3s) means corrections are 3× smaller per
+    // tick, giving much finer-grained tracking with no perceptible jumps.
+    const TARGET_LAG = 0.5;
+    const GAIN = 0.04;
+    const MIN_RATE = 0.95;
+    const MAX_RATE = 1.15;
+    const HARD_SEEK_LAG = 15;
     let lastTime = -1;
     let stallCount = 0;
     let stallStartTime = 0;
@@ -582,22 +605,23 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
         const edge = video.buffered.end(video.buffered.length - 1);
         const lag = edge - video.currentTime;
 
-        if (lag > 6) {
-          // Way behind — hard seek (stall recovery, very rare with 0 drops)
-          video.currentTime = Math.max(0, edge - 1.5);
+        if (lag > HARD_SEEK_LAG) {
+          // Way behind (stall recovery) — hard seek close to live
+          video.currentTime = Math.max(0, edge - TARGET_LAG);
           video.playbackRate = 1.0;
-        } else if (lag > 2.5) {
-          // Behind — gradual catch-up at 1.05× (muted, no audio pitch issue)
-          if (video.playbackRate !== 1.05) video.playbackRate = 1.05;
-        } else if (lag < 1.0) {
-          // At live edge — back to normal
-          if (video.playbackRate !== 1.0) video.playbackRate = 1.0;
+        } else {
+          // Continuous proportional rate adjustment
+          const desired = 1.0 + (lag - TARGET_LAG) * GAIN;
+          const clamped = Math.min(MAX_RATE, Math.max(MIN_RATE, desired));
+          // Only update if meaningfully different (avoid excessive property sets)
+          if (Math.abs(video.playbackRate - clamped) > 0.005) {
+            video.playbackRate = Math.round(clamped * 1000) / 1000;
+          }
         }
-        // 1–2.5s band: hold current rate (hysteresis)
       }
 
-      // Stall detection — more patient when remote (4 checks = 12s vs 3 = 9s)
-      const stallThreshold = IS_LOCAL ? 3 : 4;
+      // Stall detection — currentTime stuck for 8s (local) / 12s (remote)
+      const stallThreshold = IS_LOCAL ? 8 : 12;
       const t = video.currentTime;
       if (lastTime >= 0 && t === lastTime && t > 0) {
         if (stallCount === 0) stallStartTime = Date.now();
@@ -613,7 +637,7 @@ function MSEFeed({ stream, paused }: { stream: string; paused?: boolean }) {
         stallCount = 0;
       }
       lastTime = t;
-    }, 3000);
+    }, 1000);
 
     // Tell worker the current playhead position so it can trim safely
     function sendCurrentTimeToWorker() {
@@ -881,6 +905,17 @@ interface TimelineSegment {
   flags: string;
 }
 
+interface SavedClip {
+  id: string;
+  channel: number;
+  name: string;
+  start: string;
+  end: string;
+  created: number;
+  status: 'exporting' | 'ready' | 'failed';
+  file_size: number;
+}
+
 async function dvrFetch(path: string, init?: RequestInit) {
   const url = `${dvrApiBase()}${path}`;
   const headers = { ...await dvrAuthHeaders(), ...(init?.headers as Record<string, string> || {}) };
@@ -892,13 +927,13 @@ async function dvrFetch(path: string, init?: RequestInit) {
 // ─── Playback Feed (via go2rtc) ───
 
 /**
- * Build the playback stream URL — dvr_proxy's ffmpeg pipe endpoint.
- * go2rtc is not involved; _proxy_mp4_stream() pipes ffmpeg stdout directly.
- * The RTSP Scale proxy (port 8767) handles server-side speed control.
+ * Build the playback stream URL — /api/playback/stream goes directly to the
+ * ffmpeg process started by /api/playback/start (no go2rtc involvement for
+ * playback).  On HTTPS the HA dvr-stream proxy routes it correctly.
  */
 function getPlaybackStreamUrl(): string {
   if (IS_HTTPS) {
-    const base = (window as unknown as Record<string, unknown>).__HA_BASE_URL__ as string || '';
+    const base = (window as unknown as Record<string, unknown>).__HA_BASE_URL__ || '';
     return `${base}/api/dvr-stream/playback/stream`;
   }
   return `${DVR_PROXY}/api/playback/stream`;
@@ -927,6 +962,7 @@ function PlaybackFeed({
   const [state, setState] = useState<StreamState>('connecting');
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
+  const rateHintRef = useRef(speed);
 
   // Pause/resume
   useEffect(() => {
@@ -939,6 +975,14 @@ function PlaybackFeed({
     }
   }, [paused]);
 
+  // Set initial playbackRate. The buffer monitor (inside the MSE effect)
+  // adaptively adjusts this to prevent buffer underrun at >1x speeds.
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    video.playbackRate = rateHintRef.current;
+  }, [speed]);
+
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !MSEClass) return;
@@ -948,6 +992,7 @@ function PlaybackFeed({
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     let trimInterval: ReturnType<typeof setInterval> | undefined;
     let stallWatchdog: ReturnType<typeof setInterval> | undefined;
+    let bufferMonitor: ReturnType<typeof setInterval> | undefined;
     const abortCtrl = new AbortController();
 
     async function start() {
@@ -966,6 +1011,15 @@ function PlaybackFeed({
           onErrorRef.current?.();
           return;
         }
+
+        // Server tells us the effective playback rate via X-Rate-Hint header.
+        // When FMP4Rewriter is active (go2rtc + Scale path), rate hint = 1
+        // because the DVR Scale already provides fast-forward speed and the
+        // rewriter adjusts fragment durations accordingly.  For the ffmpeg
+        // cache path, rate hint = speed (browser must play at Nx to achieve
+        // the desired speed).  Falls back to speed if header is absent.
+        const rateHint = parseFloat(resp.headers.get('X-Rate-Hint') || '') || speed;
+        rateHintRef.current = rateHint;
 
         // Determine MSE codec — HA go2rtc proxy may strip codecs from Content-Type
         let mimeType = '';
@@ -998,8 +1052,9 @@ function PlaybackFeed({
         if (cancelled) return;
 
         const sb = ms.addSourceBuffer(mimeType);
-        // Sequence mode handles timestamp discontinuities from DVR playback
-        try { sb.mode = 'sequence'; } catch { /* some browsers don't allow changing mode */ }
+        // Always use 'segments' mode — fMP4 timestamps are authoritative.
+        // For speed > 1, dvr_proxy rewrites timestamps to be evenly spaced
+        // (2s per I-frame), matching the DVR's trick-play interval.
         reader = resp.body.getReader();
 
         // --- Batched buffer management ---
@@ -1048,11 +1103,22 @@ function PlaybackFeed({
           if (sb.updating || ms.readyState !== 'open' || sb.buffered.length === 0) return;
           const bufStart = sb.buffered.start(0);
           const bufEnd = sb.buffered.end(sb.buffered.length - 1);
-          if (bufEnd - bufStart > 90) {
-            try {
-              sb.remove(bufStart, bufEnd - 30);
+          // Keep enough buffer for flow control headroom (scales with speed)
+          const keepAhead = Math.max(30, FC_PAUSE_AHEAD + 10);
+          const trimThreshold = keepAhead + 60;
+          if (bufEnd - bufStart > trimThreshold) {
+            // Never trim past currentTime — keep at least 2s behind playhead
+            // so the stall watchdog doesn't seek forward over unplayed content.
+            const ct = video!.currentTime;
+            const trimTo = Math.min(ct - 2, bufEnd - keepAhead);
+            if (trimTo > bufStart) {
+              try {
+                sb.remove(bufStart, trimTo);
+                trimPending = false;
+              } catch { /* ignore */ }
+            } else {
               trimPending = false;
-            } catch { /* ignore */ }
+            }
           } else {
             trimPending = false;
           }
@@ -1064,35 +1130,73 @@ function PlaybackFeed({
         trimInterval = setInterval(() => {
           if (cancelled) return;
           if (sb.buffered.length > 0) {
+            const keepAhead = Math.max(30, FC_PAUSE_AHEAD + 10);
             const range = sb.buffered.end(sb.buffered.length - 1) - sb.buffered.start(0);
-            if (range > 90) {
+            if (range > keepAhead + 60) {
               trimPending = true;
               drainQueue();
             }
           }
         }, 15000);
 
-        // --- Stall watchdog ---
-        let lastTime = 0;
+        // --- Stall watchdog (gentle — avoids aggressive seeking) ---
+        let lastTime = -1;
         let stallCount = 0;
+        let noGrowthCount = 0;
+        let lastBufEnd = -1;
 
         stallWatchdog = setInterval(() => {
           if (cancelled || !video || video.paused) return;
           if (sb.buffered.length === 0) return;
 
           const ct = video.currentTime;
+          const bufStart = sb.buffered.start(0);
+          const bufEnd = sb.buffered.end(sb.buffered.length - 1);
 
-          // Stall detection: currentTime not advancing for 2 checks (~6s)
-          if (Math.abs(ct - lastTime) < 0.1 && ct > 0) {
+          // DVR recordings have non-zero timestamps — if currentTime is before
+          // the buffer, seek to buffer start immediately
+          if (ct < bufStart - 0.5) {
+            console.log(`[playback] ct ${ct.toFixed(1)}s < buf start ${bufStart.toFixed(1)}s, seeking to buffer start`);
+            video.currentTime = bufStart + 0.5;
+            video.play().catch(() => {});
+            lastTime = bufStart + 0.5;
+            stallCount = 0;
+            return;
+          }
+
+          // Track buffer growth independently
+          if (lastBufEnd >= 0 && Math.abs(bufEnd - lastBufEnd) < 0.1) {
+            noGrowthCount++;
+          } else {
+            noGrowthCount = 0;
+          }
+          lastBufEnd = bufEnd;
+
+          // Stall detection: currentTime not advancing
+          if (lastTime >= 0 && Math.abs(ct - lastTime) < 0.1 && ct > 0) {
             stallCount++;
-            if (stallCount >= 2) {
-              const bufEnd = sb.buffered.end(sb.buffered.length - 1);
-              if (bufEnd > ct + 0.5) {
-                console.warn(`[playback] Stall at ${ct.toFixed(1)}s, seeking to ${(ct + 0.5).toFixed(1)}s (buf end: ${bufEnd.toFixed(1)}s)`);
-                video.currentTime = ct + 0.5;
-                video.play().catch(() => {});
-              }
+            const ahead = bufEnd - ct;
+
+            if (stallCount <= 3) {
+              // First 9s — just nudge play(), don't seek (avoids non-keyframe seeks)
+              console.log(`[playback] Stall #${stallCount} at ${ct.toFixed(1)}s (${ahead.toFixed(1)}s ahead), nudging play`);
+              video.play().catch(() => {});
+            } else if (ahead > 1) {
+              // After 9s with data ahead — try one bigger seek to find a keyframe
+              const seekTo = Math.min(ct + 5.0, bufEnd - 0.5);
+              console.warn(`[playback] Stall #${stallCount} at ${ct.toFixed(1)}s, seeking to ${seekTo.toFixed(1)}s (buf end: ${bufEnd.toFixed(1)}s)`);
+              video.currentTime = seekTo;
+              video.play().catch(() => {});
               stallCount = 0;
+            }
+
+            // If buffer stopped growing for 30s, stream is dead
+            if (noGrowthCount >= 10) {
+              console.warn(`[playback] No buffer growth for ${noGrowthCount * 3}s. Triggering error.`);
+              noGrowthCount = 0;
+              stallCount = 0;
+              onErrorRef.current?.();
+              return;
             }
           } else {
             stallCount = 0;
@@ -1100,12 +1204,71 @@ function PlaybackFeed({
           lastTime = ct;
         }, 3000);
 
+        // --- Buffer monitor for accelerated playback ---
+        // Proportional controller: smoothly adjusts playbackRate based on
+        // buffer health.  Uses rateHint (1.0 for go2rtc Scale path, speed
+        // for ffmpeg cache) as the center point.  With rate hint = 1.0, a
+        // 2-second buffer gives 2 WALL-SECONDS of headroom (vs 0.13s when
+        // rate was speed=16) — virtually eliminates stall-burst cycling.
+        if (speed > 1) {
+          const targetRate = rateHintRef.current;
+          let smoothRate = targetRate;
+          bufferMonitor = setInterval(() => {
+            if (cancelled || !video || video.paused) return;
+            if (sb.buffered.length === 0 || ms.readyState !== 'open') return;
+            const ahead = sb.buffered.end(sb.buffered.length - 1) - video.currentTime;
+            const TARGET_AHEAD = 2.0;  // media-seconds target buffer
+            const error = ahead - TARGET_AHEAD;
+            // Gain: gentle adjustments around the target rate
+            const rawRate = targetRate + error * 0.15;
+            // Clamp: floor at targetRate×0.5, cap at max(targetRate×2, speed/2)
+            // to handle DVR delivery rates that outpace the base target rate.
+            const maxRate = Math.max(targetRate * 2.0, speed / 2);
+            const clampedRate = Math.max(targetRate * 0.5, Math.min(maxRate, rawRate));
+            // EMA smoothing to avoid jitter
+            smoothRate = smoothRate * 0.7 + clampedRate * 0.3;
+            if (Math.abs(video.playbackRate - smoothRate) > 0.02) {
+              video.playbackRate = Math.round(smoothRate * 100) / 100;
+            }
+          }, 500);
+        }
+
         // Pump fetch stream → SourceBuffer (with initial buffering)
         let started = false;
         let initialBytes = 0;
-        const INITIAL_BUFFER_BYTES = 100_000; // ~0.6s of video at 155 KB/s
+        // DVR delivers main stream at ~2x real-time for all speeds (~80 KB/s).
+        // Use 100KB initial buffer for smooth startup.
+        const INITIAL_BUFFER_BYTES = 100_000;
+
+        // Flow control: pause reading when buffer is far ahead of playhead.
+        // This creates TCP backpressure back to the server, naturally throttling
+        // data delivery regardless of content bitrate (VBR-safe).
+        // Thresholds scale with speed so they represent ~constant wall-time:
+        //   speed=1 → pause@8,  resume@4  (8/4 wall-seconds)
+        //   speed=2 → pause@16, resume@8  (8/4 wall-seconds)
+        //   speed=8 → pause@64, resume@32 (8/4 wall-seconds)
+        const effectiveRate = rateHintRef.current;
+        const FC_PAUSE_AHEAD = 8 * Math.max(1, effectiveRate);   // ~8 wall-seconds
+        const FC_RESUME_AHEAD = 4 * Math.max(1, effectiveRate);  // ~4 wall-seconds
 
         while (!cancelled) {
+          // Flow control check — wait if buffer is too far ahead
+          if (started && sb.buffered.length > 0 && ms.readyState === 'open') {
+            const ahead = sb.buffered.end(sb.buffered.length - 1) - video.currentTime;
+            if (ahead > FC_PAUSE_AHEAD) {
+              await new Promise<void>(resolve => {
+                const check = setInterval(() => {
+                  if (cancelled || sb.buffered.length === 0 || ms.readyState !== 'open') {
+                    clearInterval(check); resolve(); return;
+                  }
+                  const a = sb.buffered.end(sb.buffered.length - 1) - video.currentTime;
+                  if (a < FC_RESUME_AHEAD) { clearInterval(check); resolve(); }
+                }, 200);
+              });
+              if (cancelled) break;
+            }
+          }
+
           const { done, value } = await reader.read();
           if (done || !value) break;
           if (ms.readyState !== 'open') break;
@@ -1122,12 +1285,24 @@ function PlaybackFeed({
             }
           }
 
-          // Buffer some data before starting playback to avoid immediate stall
+          // Buffer some data before starting playback to avoid immediate stall.
+          // Two triggers: (1) enough bytes + decoded buffer ready, or
+          // (2) generous byte threshold (fallback — stall watchdog will seek later).
           if (!started) {
             initialBytes += value.byteLength;
-            if (initialBytes >= INITIAL_BUFFER_BYTES) {
+            const bufReady = sb.buffered.length > 0;
+            if ((initialBytes >= INITIAL_BUFFER_BYTES && bufReady) || initialBytes >= 50_000) {
               started = true;
-              video.playbackRate = speed;
+              if (bufReady) {
+                const bufStart = sb.buffered.start(0);
+                // Seek slightly past bufStart to land within the first keyframe.
+                const seekOffset = 0.1;
+                console.log(`[playback] Starting: bufStart=${bufStart.toFixed(1)}s, ${initialBytes} bytes, speed=${speed}x`);
+                video.currentTime = bufStart + seekOffset;
+              } else {
+                console.log(`[playback] Starting (no buffer yet): ${initialBytes} bytes, speed=${speed}x — watchdog will seek`);
+              }
+              video.playbackRate = rateHintRef.current;
               video.play().catch(() => {});
             }
           }
@@ -1164,12 +1339,32 @@ function PlaybackFeed({
     }
 
     const onPlaying = () => { if (!cancelled) setState('playing'); };
+    let decodeErrorCount = 0;
     const onVideoError = () => {
-      if (!cancelled) {
-        console.error('Playback video error:', video.error);
-        setState('error');
-        onErrorRef.current?.();
+      if (cancelled) return;
+      const err = video.error;
+      console.error(`[playback] Video error: code=${err?.code} msg="${err?.message}"`);
+
+      // MEDIA_ERR_DECODE (3) — try to recover by seeking past the corrupt section.
+      // After a decode error, the video element may still be usable if we can
+      // find a good keyframe ahead.
+      if (err?.code === 3 && decodeErrorCount < 5) {
+        decodeErrorCount++;
+        if (video.buffered.length > 0) {
+          const bufEnd = video.buffered.end(video.buffered.length - 1);
+          if (bufEnd > video.currentTime + 1) {
+            const seekTo = Math.min(video.currentTime + 3, bufEnd - 0.5);
+            console.log(`[playback] Recovering from decode error #${decodeErrorCount}: seeking to ${seekTo.toFixed(1)}s`);
+            video.currentTime = seekTo;
+            video.play().catch(() => {});
+            return;
+          }
+        }
+        console.log(`[playback] Decode error #${decodeErrorCount} but no buffer ahead — stopping`);
       }
+
+      setState('error');
+      onErrorRef.current?.();
     };
 
     video.addEventListener('playing', onPlaying);
@@ -1182,6 +1377,7 @@ function PlaybackFeed({
       abortCtrl.abort();
       clearInterval(trimInterval);
       clearInterval(stallWatchdog);
+      clearInterval(bufferMonitor);
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('error', onVideoError);
       reader?.cancel().catch(() => {});
@@ -1313,6 +1509,119 @@ function PlaybackMode() {
   return <PlaybackModeInner />;
 }
 
+// ─── Saved Clips List ───
+
+function ClipsList({ clips, onRefresh }: { clips: SavedClip[]; onRefresh: () => void }) {
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const handleDelete = async (id: string) => {
+    setDeleting(id);
+    try {
+      const url = `${dvrApiBase()}/clips/${id}`;
+      const headers = await dvrAuthHeaders();
+      const r = await fetch(url, { method: 'DELETE', headers });
+      if (!r.ok) throw new Error(`Delete failed: ${r.status}`);
+      onRefresh();
+    } catch (err) {
+      console.error('Delete clip error:', err);
+    } finally {
+      setDeleting(null);
+    }
+  };
+
+  const handleDownload = (id: string, name: string) => {
+    const url = `${dvrApiBase()}/clips/${id}/download`;
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${name}.mp4`;
+    a.click();
+  };
+
+  const fmtSize = (bytes: number) => {
+    if (!bytes) return '';
+    if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(0)} KB`;
+    return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
+  };
+
+  if (clips.length === 0) {
+    return (
+      <div className="text-center text-muted-foreground text-sm py-6">
+        No saved clips yet. Use the <Scissors className="inline h-3.5 w-3.5 mx-0.5" /> button during playback to save a clip.
+      </div>
+    );
+  }
+
+  return (
+    <div className="space-y-2">
+      {clips.map((clip) => (
+        <div
+          key={clip.id}
+          className="flex items-center gap-3 p-2.5 rounded-lg bg-card border border-border"
+        >
+          {/* Thumbnail */}
+          <div className="w-16 h-10 rounded bg-muted flex-shrink-0 overflow-hidden">
+            {clip.status === 'ready' ? (
+              <img
+                src={`${dvrApiBase()}/clips/${clip.id}/thumb`}
+                alt=""
+                className="w-full h-full object-cover"
+              />
+            ) : (
+              <div className="w-full h-full flex items-center justify-center">
+                {clip.status === 'exporting' ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />
+                ) : (
+                  <X className="h-4 w-4 text-red-400" />
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Info */}
+          <div className="flex-1 min-w-0">
+            <div className="text-sm font-medium truncate">{clip.name}</div>
+            <div className="text-xs text-muted-foreground">
+              Ch {clip.channel} · {clip.start.slice(0, 10)} {clip.start.slice(11, 16)}–{clip.end.slice(11, 16)}
+              {clip.file_size > 0 && ` · ${fmtSize(clip.file_size)}`}
+            </div>
+          </div>
+
+          {/* Status / Actions */}
+          <div className="flex items-center gap-1.5 flex-shrink-0">
+            {clip.status === 'exporting' && (
+              <span className="text-[10px] text-yellow-400 font-medium">Exporting...</span>
+            )}
+            {clip.status === 'failed' && (
+              <span className="text-[10px] text-red-400 font-medium">Failed</span>
+            )}
+            {clip.status === 'ready' && (
+              <button
+                onClick={() => handleDownload(clip.id, clip.name)}
+                className="p-1.5 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+                title="Download"
+              >
+                <Download className="h-4 w-4" />
+              </button>
+            )}
+            <button
+              onClick={() => handleDelete(clip.id)}
+              disabled={deleting === clip.id}
+              className="p-1.5 rounded-md hover:bg-red-500/20 text-muted-foreground hover:text-red-400 transition-colors disabled:opacity-50"
+              title="Delete"
+            >
+              {deleting === clip.id ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
+            </button>
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function PlaybackModeInner() {
   const [channel, setChannel] = useState(1);
   const [date, setDate] = useState(() => {
@@ -1327,34 +1636,100 @@ function PlaybackModeInner() {
   const [speed, setSpeed] = useState(1);
   const [paused, setPaused] = useState(false);
   const [dateRange, setDateRange] = useState<{ min: string; max: string } | null>(null);
-  const [showControls, setShowControls] = useState(true);
-  const hideTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
-
+  // Source type: "cache" (speed controls available) or "dvr" (1x only)
+  const [source, setSource] = useState<'cache' | 'dvr' | null>(null);
+  // Cache download progress when source is "dvr"
+  const [cacheProgress, setCacheProgress] = useState<{ segs_done: number; segs_total: number } | null>(null);
   // Track pending resume state for channel switches
   const pendingResumeRef = useRef<{ time: string; wasPlaying: boolean } | null>(null);
+  // Track the start/end times for cache polling
+  const playbackRangeRef = useRef<{ channel: number; start: string; end: string } | null>(null);
 
-  // Auto-hide controls after 3s of inactivity (only when playing & not paused)
-  const resetControlsTimer = useCallback(() => {
-    setShowControls(true);
-    clearTimeout(hideTimerRef.current);
-    // Only auto-hide when actively playing
-    if (playbackKey && !paused) {
-      hideTimerRef.current = setTimeout(() => setShowControls(false), 3000);
-    }
-  }, [playbackKey, paused]);
+  // Clips state
+  const [clips, setClips] = useState<SavedClip[]>([]);
+  const [showClips, setShowClips] = useState(false);
+  const [savingClip, setSavingClip] = useState(false);
+  const [clipSaved, setClipSaved] = useState(false);
 
-  // Show controls when paused, stopped, or loading
+  // Fetch clips
+  const fetchClips = useCallback(async () => {
+    try {
+      const data = await dvrFetch('/clips');
+      setClips(data.clips || []);
+    } catch { /* ignore */ }
+  }, []);
+
+  // Load clips on mount, poll while any are exporting
   useEffect(() => {
-    if (!playbackKey || paused || loading) {
-      setShowControls(true);
-      clearTimeout(hideTimerRef.current);
-    } else {
-      resetControlsTimer();
-    }
-  }, [playbackKey, paused, loading, resetControlsTimer]);
+    fetchClips();
+  }, [fetchClips]);
 
-  // Cleanup timer on unmount
-  useEffect(() => () => clearTimeout(hideTimerRef.current), []);
+  useEffect(() => {
+    const hasExporting = clips.some((c) => c.status === 'exporting');
+    if (!hasExporting) return;
+    const iv = setInterval(fetchClips, 3000);
+    return () => clearInterval(iv);
+  }, [clips, fetchClips]);
+
+  // Save current playback position as a 30s clip
+  const saveClip = async () => {
+    if (!selectedTime || !playbackKey) return;
+    setSavingClip(true);
+    try {
+      const startDate = new Date(selectedTime.replace(' ', 'T'));
+      const endDate = new Date(startDate.getTime() + 30_000);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      const endStr = `${date} ${pad(endDate.getHours())}:${pad(endDate.getMinutes())}:${pad(endDate.getSeconds())}`;
+      const chLabel = CAMERAS.find((c) => c.channel === channel)?.label ?? `Ch${channel}`;
+      const name = `${chLabel} ${selectedTime.slice(11, 19)}`;
+      await dvrFetch('/clips', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ channel, startTime: selectedTime, endTime: endStr, name }),
+      });
+      setClipSaved(true);
+      setTimeout(() => setClipSaved(false), 2000);
+      fetchClips();
+    } catch (err) {
+      console.error('Save clip error:', err);
+    } finally {
+      setSavingClip(false);
+    }
+  };
+
+  // Find extended end time by walking contiguous segments forward from the
+  // segment containing the given time.  Falls back to +30min if no match.
+  const findExtendedEndTime = (segs: TimelineSegment[], timeStr: string): string => {
+    const ms = new Date(timeStr.replace(' ', 'T')).getTime();
+    let endTime = '';
+    let matchIdx = -1;
+    for (let i = 0; i < segs.length; i++) {
+      const segStart = new Date(segs[i].start.replace(' ', 'T')).getTime();
+      const segEnd = new Date(segs[i].end.replace(' ', 'T')).getTime();
+      if (ms >= segStart && ms < segEnd) {
+        matchIdx = i;
+        endTime = segs[i].end;
+        break;
+      }
+    }
+    if (matchIdx >= 0) {
+      for (let i = matchIdx + 1; i < segs.length; i++) {
+        const prevEnd = new Date(endTime.replace(' ', 'T')).getTime();
+        const nextStart = new Date(segs[i].start.replace(' ', 'T')).getTime();
+        if (nextStart - prevEnd <= 5000) {
+          endTime = segs[i].end;
+        } else {
+          break;
+        }
+      }
+    }
+    if (!endTime) {
+      const end = new Date(ms + 30 * 60000);
+      const pad = (n: number) => String(n).padStart(2, '0');
+      endTime = `${timeStr.slice(0, 10)} ${pad(end.getHours())}:${pad(end.getMinutes())}:${pad(end.getSeconds())}`;
+    }
+    return endTime;
+  };
 
   // Fetch date range on mount
   useEffect(() => {
@@ -1375,43 +1750,48 @@ function PlaybackModeInner() {
 
     setSegments([]);
     setPlaybackKey(null);
+    setSource(null);
+    setCacheProgress(null);
+    playbackRangeRef.current = null;
     setLoading(true);
     dvrFetch(`/timeline?channel=${channel}&date=${date}`).then(async (r) => {
       const segs: TimelineSegment[] = r.segments || [];
       setSegments(segs);
       if (segs.length) {
-        // Use resumed time if available (channel switch), otherwise first segment
-        const startTime = resume?.time ?? segs[0].start;
+        // Use resumed time if available (channel switch), otherwise first segment.
+        // If the resumed time falls outside this channel's recording range, fall
+        // back to the last available segment (e.g., switching from a camera
+        // recording at 9am to one that stopped at 6:20am).
+        let startTime = resume?.time ?? segs[0].start;
+        if (resume?.time) {
+          const resumeMs = new Date(resume.time.replace(' ', 'T')).getTime();
+          const inRange = segs.some(seg => {
+            const s = new Date(seg.start.replace(' ', 'T')).getTime();
+            const e = new Date(seg.end.replace(' ', 'T')).getTime();
+            return resumeMs >= s && resumeMs < e;
+          });
+          if (!inRange) {
+            // Resumed time not available on this channel — use last segment
+            startTime = segs[segs.length - 1].start;
+          }
+        }
         setSelectedTime(startTime);
 
         // Auto-start if resuming from playing state, or on initial load
         if (!resume || resume.wasPlaying) {
-          const selMs = new Date(startTime.replace(' ', 'T')).getTime();
-          let endTime = '';
-          for (const seg of segs) {
-            const segStart = new Date(seg.start.replace(' ', 'T')).getTime();
-            const segEnd = new Date(seg.end.replace(' ', 'T')).getTime();
-            if (selMs >= segStart && selMs < segEnd) {
-              endTime = seg.end;
-              break;
-            }
-          }
-          if (!endTime) {
-            // Default to end of first segment or +30min
-            if (segs[0].end) {
-              endTime = segs[0].end;
-            } else {
-              const end = new Date(selMs + 30 * 60000);
-              const pad = (n: number) => String(n).padStart(2, '0');
-              endTime = `${date} ${pad(end.getHours())}:${pad(end.getMinutes())}:${pad(end.getSeconds())}`;
-            }
-          }
+          const endTime = findExtendedEndTime(segs, startTime);
           try {
-            await dvrFetch('/playback/start', {
+            const resp = await dvrFetch('/playback/start', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({ channel, startTime, endTime, speed }),
             });
+            const src = resp.source as 'cache' | 'dvr' | undefined;
+            setSource(src ?? 'cache');
+            if (src === 'dvr') {
+              setSpeed(1);
+            }
+            playbackRangeRef.current = { channel, start: startTime, end: endTime };
             setPlaybackKey(Date.now());
           } catch (err) {
             console.error('Auto-playback start error:', err);
@@ -1448,31 +1828,28 @@ function PlaybackModeInner() {
     if (!playTime) return;
     setLoading(true);
     setPlaybackKey(null);
+    setSource(null);
+    setCacheProgress(null);
 
-    // Find end time: end of the segment containing playTime, or +30min
-    const selMs = new Date(playTime.replace(' ', 'T')).getTime();
-    let endTime = '';
-    for (const seg of segments) {
-      const segStart = new Date(seg.start.replace(' ', 'T')).getTime();
-      const segEnd = new Date(seg.end.replace(' ', 'T')).getTime();
-      if (selMs >= segStart && selMs < segEnd) {
-        endTime = seg.end;
-        break;
-      }
-    }
-    if (!endTime) {
-      // Default to +30min
-      const end = new Date(selMs + 30 * 60000);
-      const pad = (n: number) => String(n).padStart(2, '0');
-      endTime = `${date} ${pad(end.getHours())}:${pad(end.getMinutes())}:${pad(end.getSeconds())}`;
-    }
+    // Find end time: walk contiguous segments forward from the one containing
+    // playTime.  This ensures playback doesn't stop after just a few seconds
+    // when the selected time is near the end of a 30-minute DVR segment.
+    let endTime = findExtendedEndTime(segments, playTime);
 
     try {
-      await dvrFetch('/playback/start', {
+      const resp = await dvrFetch('/playback/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ channel, startTime: playTime, endTime, speed: playSpeed }),
       });
+      const src = resp.source as 'cache' | 'dvr' | undefined;
+      setSource(src ?? 'cache');
+      // If DVR source, force speed to 1
+      if (src === 'dvr') {
+        setSpeed(1);
+      }
+      // Store range for cache polling
+      playbackRangeRef.current = { channel, start: playTime, end: endTime };
       setPlaybackKey(Date.now());
     } catch (err) {
       console.error('Playback start error:', err);
@@ -1484,8 +1861,50 @@ function PlaybackModeInner() {
   const stopPlayback = () => {
     setPlaybackKey(null);
     setPaused(false);
+    setSource(null);
+    setCacheProgress(null);
+    playbackRangeRef.current = null;
     dvrFetch('/playback/stop', { method: 'POST' }).catch(() => {});
   };
+
+  // Poll cache download progress when playing from DVR.
+  // Auto-restarts playback from cache when download completes.
+  useEffect(() => {
+    if (source !== 'dvr' || !playbackKey || !playbackRangeRef.current) return;
+    const range = playbackRangeRef.current;
+    let cancelled = false;
+
+    const poll = async () => {
+      while (!cancelled) {
+        await new Promise(r => setTimeout(r, 2000));
+        if (cancelled) break;
+        try {
+          const params = new URLSearchParams({
+            channel: String(range.channel),
+            start: range.start,
+            end: range.end,
+          });
+          const data = await dvrFetch(`/cache/check?${params}`);
+          if (cancelled) break;
+          if (data.status === 'ready') {
+            setCacheProgress({ segs_done: data.segs_total, segs_total: data.segs_total });
+            // Cache is ready — restart from cache at current speed
+            // Brief interruption but now with speed controls + HD quality.
+            console.log('[playback] Cache ready, switching from DVR to cache');
+            startPlayback(selectedTime || range.start);
+            return;
+          }
+          if (data.status === 'downloading' || data.status === 'queued') {
+            setCacheProgress({ segs_done: data.segs_done ?? 0, segs_total: data.segs_total ?? 0 });
+          }
+        } catch {
+          // ignore poll errors
+        }
+      }
+    };
+    poll();
+    return () => { cancelled = true; };
+  }, [source, playbackKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When timeline is clicked during playback, auto-restart at the new time
   const handleTimeSelect = (time: string) => {
@@ -1495,21 +1914,33 @@ function PlaybackModeInner() {
     }
   };
 
-  const handleSpeedChange = (newSpeed: number) => {
+  const handleSpeedChange = async (newSpeed: number) => {
+    // DVR streams are always 1x — speed controls are disabled in the UI,
+    // but guard here too.
+    if (source === 'dvr') return;
     setSpeed(newSpeed);
-    // If playing, restart at current position with new speed (DVR needs server-side speed)
-    if (playbackKey && selectedTime) {
-      startPlayback(selectedTime, newSpeed);
+    if (playbackKey) {
+      // Update server-side ffmpeg for the new speed
+      try {
+        await dvrFetch('/playback/speed', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ speed: newSpeed }),
+        });
+      } catch (err) {
+        console.error('Speed change error:', err);
+      }
+      // Restart feed to pick up new stream
+      setPlaybackKey(Date.now());
     }
   };
 
   const channelLabel = CAMERAS.find((c) => c.channel === channel)?.label ?? `Ch ${channel}`;
 
   return (
+    <>
     <div
       className="relative aspect-video rounded-lg overflow-hidden border border-border bg-black"
-      onMouseMove={resetControlsTimer}
-      onTouchStart={resetControlsTimer}
     >
       {/* Video layer — always present for stable layout */}
       {playbackKey ? (
@@ -1537,23 +1968,8 @@ function PlaybackModeInner() {
         </div>
       )}
 
-      {/* Overlay controls — auto-hide when watching, always visible when paused/stopped */}
-      <div
-        className={`absolute inset-0 flex flex-col justify-between transition-opacity duration-500 ${
-          showControls ? 'opacity-100' : 'opacity-0 pointer-events-none'
-        }`}
-        onClick={(e) => {
-          // Clicking the video area (not a control) toggles controls
-          if (e.target === e.currentTarget) {
-            if (showControls && playbackKey && !paused) {
-              setShowControls(false);
-              clearTimeout(hideTimerRef.current);
-            } else {
-              resetControlsTimer();
-            }
-          }
-        }}
-      >
+      {/* Overlay controls — always visible */}
+      <div className="absolute inset-0 flex flex-col justify-between">
         {/* Top bar: channel + date */}
         <div className="bg-gradient-to-b from-black/80 via-black/50 to-transparent px-3 py-2.5">
           <div className="flex items-center gap-2 flex-wrap">
@@ -1562,6 +1978,7 @@ function PlaybackModeInner() {
               {CAMERAS.map((cam) => (
                 <button
                   key={cam.channel}
+                  data-testid={`camera-channel-${cam.label.toLowerCase()}`}
                   onClick={() => {
                     if (cam.channel === channel) return;
                     // Remember playback state for smart resume on new channel
@@ -1612,6 +2029,7 @@ function PlaybackModeInner() {
             {/* Play/Pause button */}
             {playbackKey ? (
               <button
+                data-testid="playback-pause"
                 onClick={() => setPaused((p) => !p)}
                 className="flex items-center justify-center w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors"
               >
@@ -1619,6 +2037,7 @@ function PlaybackModeInner() {
               </button>
             ) : (
               <button
+                data-testid="playback-play"
                 onClick={() => startPlayback()}
                 disabled={loading || !selectedTime}
                 className="flex items-center justify-center w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white transition-colors disabled:opacity-30"
@@ -1630,6 +2049,7 @@ function PlaybackModeInner() {
             {/* Skip back 10s */}
             {playbackKey && (
               <button
+                data-testid="playback-back10"
                 onClick={() => { if (selectedTime) { const d = new Date(selectedTime.replace(' ', 'T')); d.setSeconds(d.getSeconds() - 10); const pad = (n: number) => String(n).padStart(2, '0'); const t = `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; startPlayback(t); } }}
                 className="flex items-center justify-center w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 text-white/80 transition-colors"
                 title="Back 10s"
@@ -1641,6 +2061,7 @@ function PlaybackModeInner() {
             {/* Skip forward 10s */}
             {playbackKey && (
               <button
+                data-testid="playback-fwd10"
                 onClick={() => { if (selectedTime) { const d = new Date(selectedTime.replace(' ', 'T')); d.setSeconds(d.getSeconds() + 10); const pad = (n: number) => String(n).padStart(2, '0'); const t = `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; startPlayback(t); } }}
                 className="flex items-center justify-center w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 text-white/80 transition-colors"
                 title="Forward 10s"
@@ -1652,10 +2073,33 @@ function PlaybackModeInner() {
             {/* Stop button (when playing) */}
             {playbackKey && (
               <button
+                data-testid="playback-stop"
                 onClick={stopPlayback}
                 className="px-2 py-1 rounded text-xs font-medium text-red-400 bg-red-500/20 hover:bg-red-500/30 transition-colors"
               >
                 Stop
+              </button>
+            )}
+
+            {/* Save clip button (when playing) */}
+            {playbackKey && (
+              <button
+                onClick={saveClip}
+                disabled={savingClip}
+                className={`flex items-center justify-center w-7 h-7 rounded-full transition-colors ${
+                  clipSaved
+                    ? 'bg-green-500/30 text-green-400'
+                    : 'bg-white/15 hover:bg-white/25 text-white/80'
+                }`}
+                title="Save 30s clip"
+              >
+                {savingClip ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : clipSaved ? (
+                  <Check className="h-3.5 w-3.5" />
+                ) : (
+                  <Scissors className="h-3.5 w-3.5" />
+                )}
               </button>
             )}
 
@@ -1666,21 +2110,36 @@ function PlaybackModeInner() {
               </span>
             )}
 
-            {/* Speed selector */}
+            {/* Speed selector — disabled for DVR streams (always 1x) */}
             <div className="flex items-center gap-0.5 ml-auto">
-              {[1, 2, 4, 8].map((s) => (
-                <button
-                  key={s}
-                  onClick={() => handleSpeedChange(s)}
-                  className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                    speed === s
-                      ? 'bg-white/25 text-white'
-                      : 'text-white/50 hover:text-white hover:bg-white/10'
-                  }`}
-                >
-                  {s}x
-                </button>
-              ))}
+              {source === 'dvr' ? (
+                <>
+                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/25 text-white">
+                    1x
+                  </span>
+                  {cacheProgress && cacheProgress.segs_total > 0 && (
+                    <span className="text-[10px] text-amber-400/80 ml-1 flex items-center gap-1">
+                      <Loader2 className="h-2.5 w-2.5 animate-spin" />
+                      {cacheProgress.segs_done}/{cacheProgress.segs_total}
+                    </span>
+                  )}
+                </>
+              ) : (
+                [1, 2, 4, 8, 16].map((s) => (
+                  <button
+                    key={s}
+                    data-testid={`playback-speed-${s}x`}
+                    onClick={() => handleSpeedChange(s)}
+                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
+                      speed === s
+                        ? 'bg-white/25 text-white'
+                        : 'text-white/50 hover:text-white hover:bg-white/10'
+                    }`}
+                  >
+                    {s}x
+                  </button>
+                ))
+              )}
             </div>
           </div>
 
@@ -1696,6 +2155,20 @@ function PlaybackModeInner() {
         </div>
       </div>
     </div>
+
+    {/* Saved Clips section */}
+    <div className="mt-3">
+      <button
+        onClick={() => setShowClips((v) => !v)}
+        className="flex items-center gap-1.5 text-sm font-medium text-muted-foreground hover:text-foreground transition-colors mb-2"
+      >
+        <Film className="h-4 w-4" />
+        Saved Clips ({clips.length})
+        <ChevronRight className={`h-3.5 w-3.5 transition-transform ${showClips ? 'rotate-90' : ''}`} />
+      </button>
+      {showClips && <ClipsList clips={clips} onRefresh={fetchClips} />}
+    </div>
+    </>
   );
 }
 
@@ -1710,6 +2183,7 @@ export default function Cameras() {
       {/* Mode toggle */}
       <div className="flex items-center gap-2 mb-3">
         <button
+          data-testid="mode-live"
           onClick={() => setMode('live')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
             mode === 'live'
@@ -1721,6 +2195,7 @@ export default function Cameras() {
           Live
         </button>
         <button
+          data-testid="mode-playback"
           onClick={() => setMode('playback')}
           className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-sm font-medium transition-colors ${
             mode === 'playback'
@@ -1732,7 +2207,6 @@ export default function Cameras() {
           Playback
         </button>
 
-        {/* Grid = SD sub-stream (15fps), expanded single camera = HD main (30fps) — automatic */}
         {mode === 'live' && (
           <div className="ml-auto text-xs text-muted-foreground">
             {expanded ? 'HD · 30fps' : WORKER_MSE_SUPPORTED ? 'HD · 30fps  |  4-up grid' : 'SD · 15fps  |  expand for HD'}
@@ -1760,7 +2234,7 @@ export default function Cameras() {
                 lightEntityId={cam.lightEntityId}
                 hidden={isHidden}
                 expanded={isExpanded}
-                paused={mode === 'playback' || (isHidden && !WORKER_MSE_SUPPORTED)}
+                paused={mode === 'playback'}
                 onExpand={() => setExpanded(cam.stream)}
                 onCollapse={() => setExpanded(null)}
               />

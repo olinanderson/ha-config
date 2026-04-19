@@ -154,6 +154,12 @@ Both sides use matching `.stignore` files that exclude:
 | **OS** | Alpine Linux v3.23 (HAOS), x86_64 |
 | **Shell** | zsh |
 
+### HA Web UI Login
+
+Credentials are stored in `.ha_login` (JSON, git-ignored). When using browser tools
+to interact with the HA frontend, read this file to get the username and password for
+the login form. The file is at the workspace root: `<workspace>/.ha_login`.
+
 ### Setting Up a New Computer (Laptop, etc.)
 
 To add another PC to the Syncthing mesh:
@@ -1336,32 +1342,52 @@ Browser (MSEFeed)  ──HTTP/TCP──►  dvr_proxy:8766  ──HTTP──► 
 
 Python HTTP server running on port **8766** inside the HA container. Proxies go2rtc's MSE
 stream to the browser (since go2rtc's `local_auth: true` blocks external CORS requests).
-Also serves the DVR playback/recording API on port **8767**.
+Also serves the DVR playback/recording API on port **8767** (RTSP Scale proxy) and
+the playback control API on port **8766** (same as live MSE).
 
 | Endpoint | Method | Purpose |
 |---|---|---|
 | `/api/mse?src=channel_N` | GET | Proxies go2rtc `/api/stream.mp4` — long-lived streaming response |
+| `/api/mse?src=playback` | GET | Proxies go2rtc playback stream (with FMP4Rewriter at speed > 1) |
+| `/api/playback/start` | POST | Start DVR playback — registers go2rtc stream, routes through Scale proxy |
+| `/api/playback/speed` | POST | Change playback speed — estimates DVR position, re-routes stream |
+| `/api/playback/stop` | POST | Stop DVR playback — deletes go2rtc stream, resets state |
+| `/api/timeline?channel=N&date=YYYY-MM-DD` | GET | Query DVR recording segments for a date |
+| `/api/date-range?channel=N` | GET | Get oldest/newest recording timestamps |
 | `/api/webrtc` | POST | Legacy WebRTC signaling (still functional, no longer used by frontend) |
-| Port 8767 | GET | RTSP Scale proxy for DVR playback |
+| Port 8767 | — | RTSP Scale proxy (TCP passthrough, injects Scale header into PLAY) |
 
 **Auto-start**: `shell_command.start_dvr_proxy` + automation `dvr_proxy_start_on_boot` (40s delay).
 The proxy's `ensure_dvrip_streams()` also re-registers all streams in go2rtc via API on startup
 as a fallback in case `go2rtc.yaml` wasn't loaded.
 
-### MSEFeed Component (Cameras.tsx)
+### MSEFeed Component — Live Streaming (Cameras.tsx)
 
 The `MSEFeed` React component handles live streaming:
 - Fetches `/api/mse?src=channel_N` via `fetch()` → `ReadableStream`
 - Creates `MediaSource` → `SourceBuffer`, pumps fMP4 chunks into it
 - **Buffer management**: Single `updateend` handler, batch-drain queue before trim, trim on 10s interval (keeps last 20s, trims at 60s buffer)
-- **Live edge — initial snap**: On first `playing` event, snaps `currentTime` to `bufferedEnd - 1.0` to start at live edge instead of buffer start
-- **Live edge — drift maintenance**: Watchdog every 3s; uses `playbackRate = 1.05` to gradually drift toward live (no jarring seek) when lag is 2.5–6s. Hard seek only when lag > 6s (rarely happens). Resets to 1.0 when lag < 1s. Hysteresis band 1–2.5s.
-- **Stall watchdog**: 3 consecutive 3s checks without `currentTime` advancing → force reconnect
+- **Live edge — initial snap**: On first `playing` event, snaps `currentTime` to `bufferedEnd - 0.5` to start 0.5s behind live (TARGET_LAG cushion)
+- **Live edge — proportional controller**: Watchdog every **1s** computes a continuous
+  `playbackRate` to track a target lag of 0.5s behind the buffer edge. No discrete rate
+  bands or hard seeks under normal operation:
+  ```
+  rate = clamp(1.0 + (lag − 0.5) × 0.04, 0.95, 1.15)
+  ```
+  | Lag | Rate | Behavior |
+  |---|---|---|
+  | 0.0s | 0.98 | Too close to edge — slow down, rebuild buffer |
+  | 0.5s | 1.00 | On target — normal playback |
+  | 1.5s | 1.04 | Gentle catch-up, imperceptible |
+  | 3.0s | 1.10 | Faster catch-up |
+  | 5.0s | 1.15 | Cap — max smooth catch-up |
+  | >15s | Hard seek to `edge − 0.5` | Only after major stall recovery |
+- **Stall watchdog**: `currentTime` stuck for 8s (local) / 12s (remote) → force reconnect
 - **Auto-reconnect**: Exponential backoff (2s → 30s cap) with per-channel stagger
 - **Stream quality — automatic**: Chrome 107+ uses `MediaSource.canConstructInDedicatedWorker` (worker MSE) which moves all SourceBuffer work off the main thread, enabling 4×30fps HD grid. Grid uses main stream (HD 30fps). Expanded single-camera also uses main stream. On older browsers without worker MSE, grid falls back to sub-stream (15fps 512kbps SD) to avoid main-thread JS overload. No manual quality toggle.
 - **Startup stagger**: channel_1 at 0ms, channel_2 at 250ms, channel_3 at 500ms, channel_4 at 750ms. Prevents simultaneous burst overloading go2rtc.
 - **Trim stagger (main-thread fallback only)**: Each channel's periodic trim is offset by (last char % 4) × 2500ms to prevent all 4 trimming simultaneously. Not needed for worker MSE (each worker has its own thread).
-- **currentTime sync to worker**: Watchdog sends `video.currentTime` to worker every 3s via `{ type: 'currentTime', time }`. Worker uses this to prevent trim from cutting ahead of the playhead (which would cause a stall at the trimmed position).
+- **currentTime sync to worker**: Watchdog sends `video.currentTime` to worker every 1s via `{ type: 'currentTime', time }`. Worker uses this to prevent trim from cutting ahead of the playhead (which would cause a stall at the trimmed position).
 
 ### Measured Latency (verified 2026-04-15)
 
@@ -1415,3 +1441,233 @@ The original `_proxy_mse_stream` was synchronous (read from go2rtc + write to br
   must match the go2rtc.yaml URLs.
 - **go2rtc config entry** is auto-created with `source: "system"` after restart when
   `go2rtc:` is in configuration.yaml.
+
+---
+
+## DVR Playback System — RTSP Scale, FMP4 Rewriting, Speed Control
+
+The Cameras page includes a **playback mode** for reviewing DVR recordings at 1×–16× speed.
+Playback uses the same go2rtc fMP4 pipeline as live streams, but with additional server-side
+infrastructure to control DVR playback speed and rewrite timestamps for smooth browser playback.
+
+### Architecture
+
+```
+Browser (PlaybackFeed)                    dvr_proxy:8766                        go2rtc:1984
+  │                                         │                                     │
+  ├─POST /api/playback/start──────────────►│                                     │
+  │  {channel, startTime, endTime, speed}   │                                     │
+  │                                         ├─DELETE /api/streams?name=playback──►│
+  │                                         │  (clean up old stream)              │
+  │                                         │  sleep 2s (DVR closes RTSP)         │
+  │                                         │                                     │
+  │                                         ├─PUT /api/streams?name=playback     │
+  │                                         │  &src=rtsp://...Scale proxy...──────►│──RTSP──►DVR:554
+  │                                         │                                     │
+  ├─GET /api/mse?src=playback─────────────►│──GET /api/stream.mp4?src=playback──►│
+  │  (long-lived fMP4 stream)              │  (FMP4Rewriter if speed > 1)        │
+  │                                         │                                     │
+  ├─POST /api/playback/speed──────────────►│  (estimate position, DELETE+PUT     │
+  │  {speed: 8}                            │   new stream with new Scale)        │
+  │                                         │                                     │
+  ├─POST /api/playback/stop──────────────►│──DELETE /api/streams?name=playback  │
+```
+
+### RTSP Scale Header
+
+The DVR supports the RTSP **Scale** header in the `PLAY` request, which instructs it to
+deliver video at N× real-time speed. At Scale > 1, the DVR sends **I-frames only** (keyframes),
+skipping P/B-frames. This is the standard RTSP trick-play mechanism (RFC 2326 §12.34).
+
+**Speed → Scale mapping** (`dvr_proxy.py`):
+
+| Speed | Scale | Route | Frame delivery |
+|---|---|---|---|
+| 1× | None (no header) | Direct to DVR:554 | All frames (H.264 full stream) |
+| 2× | 2.000 | Scale proxy:8767 | I-frames only, ~2× real-time delivery |
+| 4× | 4.000 | Scale proxy:8767 | I-frames only, ~4× |
+| 8× | 8.000 | Scale proxy:8767 | I-frames only, ~8× |
+| 16× | 16.000 | Scale proxy:8767 | I-frames only, ~16× |
+
+**Why 1× bypasses the proxy**: At 1×, no Scale header is needed — go2rtc connects directly
+to the DVR. The proxy adds latency and is unnecessary for normal-speed playback.
+
+### RTSP Scale Proxy (port 8767)
+
+A **transparent TCP proxy** between go2rtc and the DVR that intercepts RTSP `PLAY` requests
+and injects the `Scale:` header. All other traffic (SETUP, DESCRIBE, RTP data, RTCP) passes
+through unchanged.
+
+**How it works:**
+1. go2rtc connects to `127.0.0.1:8767` (thinking it's the DVR)
+2. Proxy opens a connection to the real DVR at `192.168.10.156:554`
+3. Client→DVR direction: proxy parses RTSP messages, looking for `PLAY` requests
+4. On `PLAY`: strips any existing `Scale:` header, appends `Scale: N.000`
+5. DVR→Client direction: all data forwarded unchanged (including RTP interleaved data)
+6. Session times out after 15 minutes
+
+**RTSP message parsing**: The proxy handles both RTSP text messages (terminated by `\r\n\r\n`)
+and interleaved RTP/RTCP data (prefixed by `$` + 1-byte channel + 2-byte length). This is
+critical because RTSP over TCP multiplexes control and media on the same connection.
+
+### FMP4 Timestamp Rewriter
+
+**Problem**: At Scale > 1, the DVR sends I-frames with **compressed RTP timestamps** — all
+frames are clustered within <0.5s of media time. When the browser's MSE SourceBuffer receives
+these, it plays through all frames in <1 second then stalls, waiting for more data. The result
+is a rapid burst of frames followed by a freeze, repeating every few seconds.
+
+**Solution**: `FMP4Rewriter` (in `dvr_proxy.py`) rewrites the fMP4 `moof` boxes on the fly
+as they flow through the proxy, spacing each fragment evenly at 2-second intervals.
+
+**Constants:**
+```python
+_FMP4_TIMESCALE = 90000       # H.264 RTP 90kHz clock
+_FMP4_TARGET_DUR = 180000     # 2 seconds per fragment (180000 / 90000)
+```
+
+**What it rewrites in each `moof` box:**
+1. **`tfdt` (Track Fragment Decode Time)**: Sets `baseMediaDecodeTime = frag_idx × 180000`
+   - Fragment 0 → 0, Fragment 1 → 180000, Fragment 2 → 360000, ...
+   - Handles both 32-bit (version 0) and 64-bit (version 1) `tfdt` boxes
+2. **`tfhd` (Track Fragment Header)**: Sets `default_sample_duration = 180000`
+   - Only if the `default-sample-duration-present` flag (0x000008) is set
+   - Parses variable-length fields (base_data_offset, sample_description_index) to locate the duration field
+
+**Activation**: Only applied when `stream_name == "playback"` and `_playback_scale > 1.0`.
+At 1× speed, the rewriter is not instantiated — timestamps from the DVR are already correct.
+
+**Result**: Browser sees frames spaced at 0s, 2s, 4s, 6s, 8s... — smooth, even playback
+at any speed with no stalls or bursts.
+
+### Playback API Endpoints
+
+#### `POST /api/playback/start`
+
+```json
+{ "channel": 1, "startTime": "2026-04-15 14:23:45", "endTime": "2026-04-15 15:00:00", "speed": 2 }
+```
+
+**Sequence:**
+1. DELETE existing `playback` stream from go2rtc (cleanup previous session)
+2. Sleep 2s — DVR needs time to close the old RTSP session
+3. Build RTSP URL via `_build_playback_url()` — routes through Scale proxy if speed > 1
+4. PUT new `playback` stream to go2rtc with the RTSP URL
+5. Update `_playback_state` (channel, time range, speed, `time.time()` of start)
+
+**RTSP URL format**: `rtsp://admin:PASS@HOST:PORT/cam/playback?channel=N&subtype=0&starttime=YYYY_MM_DD_HH_MM_SS&endtime=YYYY_MM_DD_HH_MM_SS`
+
+**Time format**: DVR expects `_`-delimited timestamps (e.g. `2026_04_15_14_23_45`). The API
+accepts human-readable `YYYY-MM-DD HH:MM:SS` and converts internally. All times are in **DVR
+local time** (not UTC).
+
+#### `POST /api/playback/speed`
+
+```json
+{ "speed": 8 }
+```
+
+Changes speed mid-playback without requiring the user to pick a new time:
+1. Estimate current DVR position: `current = startTime + elapsed_real × old_speed`
+2. Build new RTSP URL from estimated position to endTime with new speed
+3. DELETE + PUT the go2rtc stream (same as start)
+4. Frontend remounts `PlaybackFeed` with new key to pick up new stream
+
+#### `POST /api/playback/stop`
+
+Deletes the `playback` stream from go2rtc, resets `_playback_scale` to 1.0, clears state.
+
+#### `GET /api/timeline?channel=N&date=YYYY-MM-DD`
+
+Queries the DVR's recording index via the Dahua `mediaFileFind` CGI API. Returns segments:
+```json
+{
+  "segments": [
+    { "start": "2026-04-15 14:23:45", "end": "2026-04-15 14:53:47", "flags": "..." },
+    { "start": "2026-04-15 15:10:22", "end": "2026-04-15 15:40:15", "flags": "..." }
+  ],
+  "channel": 1, "date": "2026-04-15"
+}
+```
+
+Uses Dahua's `factory.create` → `findFile` → `findNextFile` → `destroy` session pattern
+(up to 500 segments per query).
+
+#### `GET /api/date-range?channel=N`
+
+Returns `{ "min_date": "...", "max_date": "..." }` — the oldest and newest recording
+timestamps for the date picker bounds.
+
+### PlaybackFeed Component (Cameras.tsx)
+
+The `PlaybackFeed` React component handles DVR playback streaming (separate from `MSEFeed`
+which handles live). Key differences from live:
+
+- **Main-thread MSE only** — no worker path (single stream, no 4-up competition)
+- **SourceBuffer mode**: `segments` (not `sequence`) — DVR timestamps are rewritten to be
+  monotonically increasing, so `segments` mode works correctly and allows seeking
+- **Buffer**: Keeps last 30s (vs 20s for live), trims at 90s (vs 60s for live)
+- **Initial buffer threshold**: 100KB at 1× (full frames), 10KB at 2×+ (I-frames only)
+- **Initial seek**: On first sufficient buffer, seeks to `bufferStart + 0.1` (speed > 1)
+  or `bufferStart` (1×) and calls `play()`
+
+**Stall watchdog (every 3s):**
+- If `currentTime` is behind `bufferStart`, seek to `bufferStart + 0.5` (DVR recordings
+  have non-zero timestamps)
+- Stall count ≤ 3 (9s): nudge with `play()` (avoids non-keyframe seeks)
+- Stall count > 3 with data ahead: seek forward 5s to next keyframe
+- No buffer growth for 30s: stream is dead → error callback
+
+**Adaptive playback rate (speed > 1, checked every 1s):**
+
+| Buffer ahead | Action |
+|---|---|
+| < 0.5s | Drop to 1.0× (nearly empty, let DVR catch up) |
+| 0.5–2.0s | Ease to `speed × 0.7` (thin buffer, prevent underrun) |
+| 2.0–8.0s | Full target speed (healthy buffer) |
+| > 8.0s | Speed up to `speed × 1.2` (burn excess, capped at 16) |
+
+This is necessary because the DVR delivers at ~N× rate (due to Scale), but network jitter
+means the buffer can temporarily thin out or balloon. The adaptive rate keeps playback smooth.
+
+### Playback UI — PlaybackMode Component
+
+**Mode switching**: The Cameras page has three modes — `live` (default), `playback`, and
+`expanded` (single camera zoom). Switching to playback mode stops all live MSE feeds.
+
+**Timeline**: Clicking a date fetches `/api/timeline` segments. Segments are displayed as
+colored bars. Clicking a time on the timeline calls `startPlayback()`.
+
+**`findExtendedEndTime()` helper**: When the user clicks a time, the frontend finds the
+DVR segment containing that time and then walks forward through contiguous segments (gap ≤ 5s)
+to extend the endTime. This prevents playback from stopping at a segment boundary when the
+DVR has continuous recording split across multiple files.
+
+**Speed buttons**: [1×, 2×, 4×, 8×, 16×]. Changing speed calls `POST /api/playback/speed`
+then remounts `PlaybackFeed` with a new React key (forces fresh MSE connection to pick up
+the new Scale-routed stream).
+
+### DVR Playback Quirks & Lessons Learned
+
+- **DVR segment boundaries**: The Lorex splits recordings into ~30-minute files. Adjacent
+  segments are contiguous (gap < 1s). `findExtendedEndTime()` handles this by walking
+  forward with a 5s gap threshold.
+- **2s sleep after DELETE**: Absolutely required. Without it, the DVR rejects the new RTSP
+  SETUP because it's still tearing down the previous session. go2rtc retries, but the first
+  attempt fails and adds latency.
+- **Scale proxy session timeout**: 15 minutes max. For very long playback sessions, the proxy
+  session will end and go2rtc will reconnect (transparent to the user via MSE reconnect).
+- **fMP4 timescale is 90kHz**: The DVR outputs H.264 with a 90kHz RTP clock. All timestamp
+  arithmetic in FMP4Rewriter uses this timescale. The target duration of 180000 ticks = 2.0s.
+- **I-frame interval at Scale > 1**: DVR sends roughly one keyframe per 2 seconds of real-time
+  DVR content. At 8× this means ~4 I-frames per second of wall-clock time.
+- **No MAF/MAP for fuel rate**: Unrelated to cameras but noted here — the Ford ECU doesn't
+  support MAF (0x10) via standard OBD, only Ford Mode 22 MAP (`22F404`).
+- **Measured playback stability** (verified 2026-04-15):
+  | Speed | Duration tested | Result |
+  |---|---|---|
+  | 1× | 10+ min | Stable |
+  | 2× | 12+ min DVR content | Stable |
+  | 4× | 7+ min DVR content | Stable |
+  | 8× | 9+ min DVR content | Stable |
+  | 16× | 15+ min DVR content | Stable |

@@ -1,14 +1,14 @@
 import { PageContainer } from '@/components/layout/PageContainer';
 import { HeatingControls } from '@/components/HeatingControls';
+import { ThermostatControl } from '@/components/ThermostatControl';
 import { TemperatureCard } from '@/components/TemperatureCard';
 import { FanControl } from '@/components/FanControl';
-import { SparklineStat } from '@/components/ClickableValue';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { BangBangControl } from '@/components/BangBangControl';
+import { Card, CardContent } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
-import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
+import { useEntity } from '@/hooks/useEntity';
 import { useToggle } from '@/hooks/useService';
-import { fmt } from '@/lib/utils';
-import { Thermometer, ToggleLeft, Battery, Wind } from 'lucide-react';
+import { Battery, Droplets, Trash2, ShowerHead, ToggleLeft, Flame } from 'lucide-react';
 
 const zones = [
   {
@@ -33,38 +33,6 @@ const zones = [
   },
 ];
 
-function BatteryHeaterCard() {
-  const { value: power } = useEntityNumeric('sensor.battery_heater_power_12v');
-  const { value: plateTemp } = useEntityNumeric('sensor.a32_pro_s5140_channel_36_temperature_battery_bottom_aluminum_plate');
-  const heaterEnable = useEntity('switch.a32_pro_battery_heater_enable');
-  const toggleHeater = useToggle('switch.a32_pro_battery_heater_enable');
-  const thermostat = useEntity('climate.a32_pro_battery_heater_thermostat');
-
-  const targetTemp = thermostat?.attributes?.temperature;
-  const currentTemp = thermostat?.attributes?.current_temperature;
-  const mode = thermostat?.state; // 'heat' or 'off'
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Battery className="h-4 w-4" />
-          Battery Heater
-          <div className="ml-auto flex items-center gap-1.5">
-            <span className="text-[10px] text-muted-foreground">{mode === 'heat' ? 'Heating' : 'Off'}</span>
-            <Switch checked={heaterEnable?.state === 'on'} onCheckedChange={toggleHeater} />
-          </div>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-1">
-        <SparklineStat entityId="sensor.a32_pro_s5140_channel_36_temperature_battery_bottom_aluminum_plate" label="Battery Plate" value={fmt(plateTemp, 1)} unit="°C" color="#3b82f6" />
-        {currentTemp != null && <div className="flex items-center justify-between text-xs"><span className="text-muted-foreground">Thermostat</span><span className="tabular-nums">{fmt(currentTemp, 1)}°C → {fmt(targetTemp, 0)}°C</span></div>}
-        <SparklineStat entityId="sensor.battery_heater_power_12v" label="Power" value={fmt(power, 0)} unit="W" color="#ef4444" />
-      </CardContent>
-    </Card>
-  );
-}
-
 function BlowerModeCard() {
   const blowerMode = useEntity('switch.a32_pro_coolant_blower_mode_auto_manual');
   const toggleMode = useToggle('switch.a32_pro_coolant_blower_mode_auto_manual');
@@ -88,44 +56,17 @@ function BlowerModeCard() {
   );
 }
 
-function AirFryerCard() {
-  const { value: temp } = useEntityNumeric('sensor.a32_pro_s5140_channel_37_temperature_air_fryer_compartment');
-  const vent = useEntity('switch.a32_pro_air_fryer_ventilation_enable');
-  const toggleVent = useToggle('switch.a32_pro_air_fryer_ventilation_enable');
-
-  return (
-    <Card>
-      <CardContent className="pt-4 space-y-2">
-        <SparklineStat
-          entityId="sensor.a32_pro_s5140_channel_37_temperature_air_fryer_compartment"
-          label="Air Fryer Compartment"
-          value={fmt(temp, 1)}
-          unit="°C"
-          icon={Thermometer}
-          color="#f97316"
-        />
-        <div className="flex items-center justify-between">
-          <span className="text-sm flex items-center gap-1.5">
-            <Wind className="h-3.5 w-3.5" />
-            Ventilation Fan
-          </span>
-          <Switch checked={vent?.state === 'on'} onCheckedChange={toggleVent} />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function Climate() {
   return (
     <PageContainer title="Climate & Heating">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {/* Column 1: Heating */}
+        {/* Column 1: Thermostat + Heating System */}
         <div className="space-y-4">
+          <ThermostatControl />
           <HeatingControls />
         </div>
 
-        {/* Column 2: Temperatures */}
+        {/* Column 2: Temperatures + Freeze Protection */}
         <div className="space-y-4">
           <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider">
             Temperature Zones
@@ -140,14 +81,55 @@ export default function Climate() {
               />
             ))}
           </div>
-          <BatteryHeaterCard />
-          <AirFryerCard />
+
+          <h2 className="text-sm font-semibold text-muted-foreground uppercase tracking-wider pt-2">
+            Freeze Protection
+          </h2>
+          <BangBangControl
+            climateEntity="climate.a32_pro_battery_heater_thermostat"
+            enableEntity="switch.a32_pro_battery_heater_enable"
+            tempEntity="sensor.a32_pro_s5140_channel_36_temperature_battery_bottom_aluminum_plate"
+            powerEntity="sensor.battery_heater_power_12v"
+            name="Battery Heater"
+            icon={Battery}
+            color="#3b82f6"
+          />
+          <BangBangControl
+            climateEntity="climate.a32_pro_fresh_water_tank_thermostat"
+            tempEntity="sensor.a32_pro_s5140_channel_38_temperature_fresh_water_tank"
+            name="Fresh Water Tank"
+            icon={Droplets}
+            color="#06b6d4"
+          />
+          <BangBangControl
+            climateEntity="climate.a32_pro_shower_water_tank_thermostat"
+            tempEntity="sensor.a32_pro_s5140_channel_40_temperature_shower_water_tank"
+            name="Shower Tank"
+            icon={ShowerHead}
+            color="#8b5cf6"
+          />
+          <BangBangControl
+            climateEntity="climate.a32_pro_grey_water_tank_thermostat"
+            tempEntity="sensor.a32_pro_s5140_channel_39_temperature_grey_water_tank"
+            name="Grey Water Tank"
+            icon={Trash2}
+            color="#64748b"
+          />
         </div>
 
-        {/* Column 3: Fan + Controls */}
+        {/* Column 3: Fan + Controls + Air Fryer */}
         <div className="space-y-4">
           <FanControl />
           <BlowerModeCard />
+          <BangBangControl
+            climateEntity="climate.a32_pro_air_fryer_ventilation_thermostat"
+            enableEntity="switch.a32_pro_air_fryer_ventilation_enable"
+            tempEntity="sensor.a32_pro_s5140_channel_37_temperature_air_fryer_compartment"
+            name="Air Fryer Ventilation"
+            icon={Flame}
+            color="#f97316"
+            isCooling
+          />
         </div>
       </div>
     </PageContainer>

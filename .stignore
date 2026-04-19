@@ -11,6 +11,7 @@ home-assistant_v2.db-wal
 vanlife_tracker.db
 vanlife_tracker.db-shm
 vanlife_tracker.db-wal
+vanlife_tracker_pre_replace.db
 *.db-journal
 *.pid
 
@@ -43,6 +44,9 @@ www/sounds
 // SQLite cache and logs — change every few minutes, no need to sync
 www/vanlife-panel/route_cache.db
 www/vanlife-panel/osrm_proxy.log
+www/vanlife-panel/filtered_gps.db
+www/vanlife-panel/filtered_gps.db-shm
+www/vanlife-panel/filtered_gps.db-wal
 
 // --- Blueprints (stock HA) ---
 blueprints
@@ -52,6 +56,11 @@ themes
 
 // --- Backups ---
 yaml_backups
+db_backups
+recordings
+
+// Syncthing file versioning store (local cache)
+.stversions
 
 // --- ESPHome build artifacts ---
 esphome/.esphome

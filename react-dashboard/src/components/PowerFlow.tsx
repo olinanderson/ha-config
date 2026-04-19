@@ -1,11 +1,11 @@
 import { useState, useEffect, useRef } from 'react';
-import { getSmoothStepPath, Position } from '@xyflow/react';
 import { Card, CardContent } from '@/components/ui/card';
 import { useEntityNumeric } from '@/hooks/useEntity';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
 import { fmt, cn } from '@/lib/utils';
 import {
   Sun, Plug, Car, Lightbulb, Snowflake, Cpu, Zap, Home, BatteryMedium,
+  Fan, Flame, BedDouble, Ellipsis,
   type LucideIcon,
 } from 'lucide-react';
 
@@ -37,232 +37,258 @@ const consumersDef: NodeDef[] = [
   { id: 'inverter', label: 'Inverter', Icon: Zap, powerEntity: 'sensor.inverter_power_24v', currentEntity: 'sensor.a32_pro_s5140_channel_7_current_24v_inverter', color: '#ea580c' },
 ];
 
-// ─── Layout constants (px in SVG viewBox) ───
+const subConsumersDef: { id: string; label: string; Icon: LucideIcon; parentId: string; powerEntity: string; currentEntity: string; color: string }[] = [
+  { id: 'fan', label: 'Roof Fan', Icon: Fan, parentId: '12v', powerEntity: 'sensor.roof_fan_power_12v', currentEntity: 'sensor.a32_pro_s5140_channel_14_current_12v_roof_fan', color: '#8b5cf6' },
+  { id: 'heater', label: 'Batt. Heater', Icon: Flame, parentId: '12v', powerEntity: 'sensor.battery_heater_power_12v', currentEntity: 'sensor.a32_pro_s5140_channel_13_current_12v_battery_heater', color: '#ef4444' },
+  { id: 'other12v', label: 'Other', Icon: Ellipsis, parentId: '12v', powerEntity: 'sensor.all_12v_devices_power_24v', currentEntity: 'sensor.a32_pro_s5140_channel_6_current_24v_12v_devices', color: '#6b7280' },
+  { id: 'bed', label: 'Bed Motor', Icon: BedDouble, parentId: '24v', powerEntity: 'sensor.bed_motor_power_24v', currentEntity: 'sensor.a32_pro_s5140_channel_15_current_24v_bed_motor', color: '#a855f7' },
+  { id: 'other24v', label: 'Other', Icon: Ellipsis, parentId: '24v', powerEntity: 'sensor.all_24v_devices_power_24v', currentEntity: 'sensor.a32_pro_s5140_channel_5_current_24v_24v_devices', color: '#6b7280' },
+];
 
-const CHIP_W = 120;
-const CHIP_H = 56;
-const HUB_SIZE = 90;
+// ─── Layout constants (SVG viewBox coords) ───
+
+const CHIP_W = 115;
+const CHIP_H = 46;
+const HUB_R = 42;
 const BATT_W = 100;
-const BATT_H = 72;
+const BATT_H = 62;
 
-const HUB_X = 260;  // center
-const HUB_Y = 175;  // center
-const BATT_X = HUB_X;
-const BATT_Y = 340;
+const VB_W = 670;
+const VB_H = 490;
 
-const SRC_X = 10;
-const CON_X = 450;
+const SRC_X = 50;
+const SRC_YS = [67, 183, 299];
 
-const VB_W = 580;
-const VB_H = 420;
+const HUB_CX = 280;
+const HUB_CY = 206;
+
+const BATT_LEFT = HUB_CX - BATT_W / 2;
+const BATT_TOP = 420;
+
+const CON_X = 420;
+const CON_YS = [78, 148, 218, 288];
+
+const SUB_X = 555;
+const SUB_CHIP_W = 90;
+const SUB_CHIP_H = 34;
 
 const MAX_DOTS = 3;
+const THRESHOLD_W = 8;
+const THRESHOLD_A = 0.3;
 
-function centerPositions(count: number, centerY: number, spacing: number, itemH: number): number[] {
-  const total = (count - 1) * spacing;
-  const start = centerY - total / 2;
-  return Array.from({ length: count }, (_, i) => start + i * spacing - itemH / 2);
+// ─── Orthogonal path helper (90° turns with rounded corners) ───
+
+function ortho(pts: [number, number][], r: number = 8): string {
+  if (pts.length < 2) return '';
+  let d = `M ${pts[0][0]},${pts[0][1]}`;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const [px, py] = pts[i - 1];
+    const [cx, cy] = pts[i];
+    const [nx, ny] = pts[i + 1];
+    const dx1 = Math.sign(cx - px);
+    const dy1 = Math.sign(cy - py);
+    const dx2 = Math.sign(nx - cx);
+    const dy2 = Math.sign(ny - cy);
+    const leg1 = Math.abs(cx - px) + Math.abs(cy - py);
+    const leg2 = Math.abs(nx - cx) + Math.abs(ny - cy);
+    const rr = Math.min(r, leg1 / 2, leg2 / 2);
+    d += ` L ${cx - dx1 * rr},${cy - dy1 * rr}`;
+    d += ` Q ${cx},${cy} ${cx + dx2 * rr},${cy + dy2 * rr}`;
+  }
+  d += ` L ${pts[pts.length - 1][0]},${pts[pts.length - 1][1]}`;
+  return d;
 }
 
-const srcYs = centerPositions(sourcesDef.length, HUB_Y, 75, CHIP_H);
-const conYs = centerPositions(consumersDef.length, HUB_Y, 68, CHIP_H);
-
-// ─── Precompute all edge paths (static geometry) ───
+// ─── Edge paths (all orthogonal, all non-overlapping) ───
 
 interface EdgeDef {
   id: string;
   path: string;
-  defaultColor: string;
-}
-
-function computePath(
-  sx: number, sy: number, sp: Position,
-  tx: number, ty: number, tp: Position,
-): string {
-  const [p] = getSmoothStepPath({
-    sourceX: sx, sourceY: sy, sourcePosition: sp,
-    targetX: tx, targetY: ty, targetPosition: tp,
-    borderRadius: 16,
-  });
-  return p;
+  color: string;
 }
 
 const edgeDefs: EdgeDef[] = [];
 
-// Sources → Hub (source handle = right edge of chip, target = left side of hub spread)
-sourcesDef.forEach((s, i) => {
-  const sx = SRC_X + CHIP_W;
-  const sy = srcYs[i] + CHIP_H / 2;
-  const hubLeft = HUB_X - HUB_SIZE / 2;
-  const hubTop = HUB_Y - HUB_SIZE / 2;
-  const tx = hubLeft;
-  const ty = hubTop + HUB_SIZE * (0.25 + i * 0.25);
-  edgeDefs.push({
-    id: `${s.id}-hub`,
-    path: computePath(sx, sy, Position.Right, tx, ty, Position.Left),
-    defaultColor: s.color,
-  });
-});
+// Source → Hub (right of chip → staggered vertical channels → hub left)
+edgeDefs.push({ id: 'solar-hub', path: ortho([[165, 90],  [210, 90],  [210, 194], [238, 194]]), color: '#ca8a04' });
+edgeDefs.push({ id: 'shore-hub', path: ortho([[165, 206], [238, 206]]),                          color: '#16a34a' });
+edgeDefs.push({ id: 'alt-hub',   path: ortho([[165, 322], [220, 322], [220, 218], [238, 218]]), color: '#2563eb' });
 
-// Hub → Consumers (source = right side of hub spread, target = left edge of chip)
-consumersDef.forEach((c, i) => {
-  const hubRight = HUB_X + HUB_SIZE / 2;
-  const hubTop = HUB_Y - HUB_SIZE / 2;
-  const sx = hubRight;
-  const sy = hubTop + HUB_SIZE * (0.13 + i * 0.25);
-  const tx = CON_X;
-  const ty = conYs[i] + CHIP_H / 2;
-  edgeDefs.push({
-    id: `hub-${c.id}`,
-    path: computePath(sx, sy, Position.Right, tx, ty, Position.Left),
-    defaultColor: c.color,
-  });
-});
+// Source → Battery (left channel → down → horizontal → battery top)
+// Left-to-right at battery: solar (x=240), shore (x=255), alt (x=270)
+edgeDefs.push({ id: 'solar-batt', path: ortho([[50, 90],  [15, 90],  [15, 408], [240, 408], [240, 420]]), color: '#ca8a04' });
+edgeDefs.push({ id: 'shore-batt', path: ortho([[50, 206], [25, 206], [25, 398], [255, 398], [255, 420]]), color: '#16a34a' });
+edgeDefs.push({ id: 'alt-batt',   path: ortho([[50, 322], [35, 322], [35, 388], [270, 388], [270, 420]]), color: '#2563eb' });
 
-// Hub → Battery
-edgeDefs.push({
-  id: 'batt-edge',
-  path: computePath(HUB_X, HUB_Y + HUB_SIZE / 2, Position.Bottom, BATT_X, BATT_Y - BATT_H / 2, Position.Top),
-  defaultColor: '#334155',
-});
+// Battery → Hub (straight vertical)
+edgeDefs.push({ id: 'batt-hub', path: ortho([[280, 420], [280, 248]]), color: '#ec4899' });
 
-// ─── Module-level animation stores ───
+// Hub → Consumers (12V exits hub top vertically, Inv exits hub bottom vertically;
+// offset x=295 to avoid battery line at x=280; A/C+24V exit hub right)
+edgeDefs.push({ id: 'hub-12v',      path: ortho([[295, 164], [295, 101], [420, 101]]), color: '#4f46e5' });
+edgeDefs.push({ id: 'hub-ac',       path: ortho([[322, 200], [365, 200], [365, 171], [420, 171]]), color: '#0891b2' });
+edgeDefs.push({ id: 'hub-24v',      path: ortho([[322, 212], [365, 212], [365, 241], [420, 241]]), color: '#2563eb' });
+edgeDefs.push({ id: 'hub-inverter', path: ortho([[295, 248], [295, 311], [420, 311]]), color: '#ea580c' });
 
-interface AnimState {
-  phases: number[];
-  lastTime: number;
-}
+// Sub-consumer branches (off parent consumer chip right edges)
+// 12V subs: fan y=60, heater y=96, other12v y=132 (each h=34)
+edgeDefs.push({ id: '12v-fan',      path: ortho([[535, 88],  [545, 88],  [545, 77],  [555, 77]]),  color: '#8b5cf6' });
+edgeDefs.push({ id: '12v-heater',   path: ortho([[535, 101], [545, 101], [545, 113], [555, 113]]), color: '#ef4444' });
+edgeDefs.push({ id: '12v-other12v', path: ortho([[535, 116], [545, 116], [545, 149], [555, 149]]), color: '#6b7280' });
+// 24V subs: bed y=222, other24v y=258 (each h=34)
+edgeDefs.push({ id: '24v-bed',      path: ortho([[535, 234], [545, 234], [545, 239], [555, 239]]), color: '#a855f7' });
+edgeDefs.push({ id: '24v-other24v', path: ortho([[535, 250], [545, 250], [545, 275], [555, 275]]), color: '#6b7280' });
+
+// ─── Module-level animation stores (persist across unmount/remount) ───
 
 interface EdgeLive {
   color: string;
-  active: boolean;
+  value: number;
   speed: number;
   dotCount: number;
   reverse: boolean;
   strokeWidth: number;
+  threshold: number;
 }
 
-const edgeAnimStore = new Map<string, AnimState>();
-const edgeLiveStore = new Map<string, EdgeLive>();
+interface DrainInfo {
+  endTime: number;
+  speed: number;
+  color: string;
+  dotCount: number;
+}
 
-function getAnim(id: string, dotCount: number): AnimState {
-  let s = edgeAnimStore.get(id);
-  if (!s) {
-    s = { phases: Array.from({ length: MAX_DOTS }, (_, i) => i / Math.max(dotCount, MAX_DOTS)), lastTime: 0 };
-    edgeAnimStore.set(id, s);
+// Phase per edge — NEVER reset while JS context is alive
+const phaseStore = new Map<string, number>();
+// Drain: dots finishing their path after value drops to 0
+const drainStore = new Map<string, DrainInfo>();
+// Live data: written by React, read by RAF
+const liveStore = new Map<string, EdgeLive>();
+
+// SVG element refs — set/cleared per mount cycle
+let mtPaths = new Map<string, SVGPathElement>();
+let mtDots = new Map<string, SVGCircleElement[]>();
+
+function updateEdge(id: string, data: Omit<EdgeLive, 'threshold'>, threshold: number) {
+  const fullData: EdgeLive = { ...data, threshold };
+  const old = liveStore.get(id);
+  const wasActive = old ? old.value > threshold : false;
+  const isActive = fullData.value > threshold;
+
+  // Transition active → inactive: start drain so dots finish their path
+  if (wasActive && !isActive && !drainStore.has(id)) {
+    drainStore.set(id, {
+      endTime: performance.now() + old!.speed * 1000,
+      speed: old!.speed,
+      color: old!.color,
+      dotCount: old!.dotCount,
+    });
   }
-  return s;
+  if (isActive) drainStore.delete(id);
+  liveStore.set(id, fullData);
 }
 
-function getLive(id: string): EdgeLive {
-  return edgeLiveStore.get(id) ?? { color: '#888', active: false, speed: 3, dotCount: 0, reverse: false, strokeWidth: 1 };
+function valToSpeed(v: number, m: Mode): number {
+  return 4 - Math.min(v / (m === 'amps' ? 20 : 500), 1) * 3;
+}
+function valToDots(v: number, m: Mode): number {
+  const f = Math.min(v / (m === 'amps' ? 15 : 400), 1);
+  return f > 0.5 ? 3 : f > 0.15 ? 2 : 1;
 }
 
-// Map value → speed + dot count
-function valueToDur(val: number, mode: Mode): number {
-  const maxVal = mode === 'amps' ? 20 : 500;
-  return 4 - Math.min(val / maxVal, 1) * 3;
-}
-function valueToDotCount(val: number, mode: Mode): number {
-  const frac = Math.min(val / (mode === 'amps' ? 15 : 400), 1);
-  return frac > 0.5 ? 3 : frac > 0.15 ? 2 : 1;
-}
-
-// ─── Single global RAF loop for all edges ───
+// ─── Global RAF loop ───
 
 let rafId = 0;
 let rafRunning = false;
-const pathEls = new Map<string, SVGPathElement>();
-const dotEls = new Map<string, SVGCircleElement[]>();
+let lastTs = 0;
 
-function startRAF() {
-  if (rafRunning) return;
-  rafRunning = true;
+function tick(now: number) {
+  const dt = lastTs === 0 ? 0 : Math.min((now - lastTs) / 1000, 0.1);
+  lastTs = now;
 
-  function animate(now: number) {
-    for (const eDef of edgeDefs) {
-      const { id } = eDef;
-      const live = getLive(id);
-      const anim = getAnim(id, live.dotCount);
-      const dt = anim.lastTime === 0 ? 0 : Math.min((now - anim.lastTime) / 1000, 0.1);
-      anim.lastTime = now;
+  for (const { id } of edgeDefs) {
+    const live = liveStore.get(id);
+    if (!live) continue;
 
-      // Update path
-      const pathEl = pathEls.get(id);
-      if (pathEl) {
-        pathEl.setAttribute('stroke', live.color);
-        pathEl.setAttribute('stroke-width', String(live.strokeWidth));
-        pathEl.setAttribute('opacity', live.active ? '0.25' : '0.06');
+    const drain = drainStore.get(id);
+    const isActive = live.value > live.threshold;
+
+    let speed: number, animating: boolean, dotCount: number, dotColor: string;
+
+    if (isActive) {
+      speed = live.speed; animating = true; dotCount = live.dotCount; dotColor = live.color;
+    } else if (drain) {
+      if (now >= drain.endTime) {
+        drainStore.delete(id); animating = false; speed = 0; dotCount = 0; dotColor = live.color;
+      } else {
+        speed = drain.speed; animating = true; dotCount = drain.dotCount; dotColor = drain.color;
       }
-
-      // Update dots — enforce equal spacing from lead dot
-      const dots = dotEls.get(id);
-      if (!dots || !pathEl) continue;
-      const totalLen = pathEl.getTotalLength();
-      const increment = live.speed > 0 ? dt / live.speed : 0;
-
-      // Advance only the lead dot; others are derived
-      if (live.active && live.dotCount > 0) {
-        anim.phases[0] = live.reverse
-          ? ((anim.phases[0] - increment) % 1 + 1) % 1
-          : (anim.phases[0] + increment) % 1;
-      }
-
-      const spacing = 1 / Math.max(live.dotCount, 1);
-      for (let i = 0; i < MAX_DOTS; i++) {
-        const c = dots[i];
-        if (!c) continue;
-        if (!live.active || i >= live.dotCount) {
-          c.setAttribute('opacity', '0');
-          continue;
-        }
-        const phase = ((anim.phases[0] + i * spacing) % 1 + 1) % 1;
-        const pt = pathEl.getPointAtLength(phase * totalLen);
-        c.setAttribute('cx', String(pt.x));
-        c.setAttribute('cy', String(pt.y));
-        c.setAttribute('fill', live.color);
-        c.setAttribute('opacity', '0.8');
-      }
+    } else {
+      animating = false; speed = 0; dotCount = 0; dotColor = live.color;
     }
-    rafId = requestAnimationFrame(animate);
+
+    // Advance phase continuously (even without mounted SVG)
+    if (animating && speed > 0) {
+      const p = phaseStore.get(id) ?? 0;
+      const inc = dt / speed;
+      phaseStore.set(id, live.reverse ? ((p - inc) % 1 + 1) % 1 : (p + inc) % 1);
+    }
+
+    const pathEl = mtPaths.get(id);
+    const dots = mtDots.get(id);
+    if (!pathEl || !dots) continue;
+
+    pathEl.setAttribute('stroke', isActive ? live.color : (drain ? drain.color : live.color));
+    pathEl.setAttribute('stroke-width', String(live.strokeWidth));
+    pathEl.setAttribute('opacity', (isActive || drain) ? '0.55' : '0.18');
+
+    const len = pathEl.getTotalLength();
+    const curP = phaseStore.get(id) ?? 0;
+    const gap = 1 / Math.max(dotCount, 1);
+
+    for (let i = 0; i < MAX_DOTS; i++) {
+      const c = dots[i];
+      if (!c) continue;
+      if (!animating || i >= dotCount) { c.setAttribute('opacity', '0'); continue; }
+      const dp = ((curP + i * gap) % 1 + 1) % 1;
+      const pt = pathEl.getPointAtLength(dp * len);
+      c.setAttribute('cx', String(pt.x));
+      c.setAttribute('cy', String(pt.y));
+      c.setAttribute('fill', dotColor);
+      c.setAttribute('opacity', '0.95');
+    }
   }
-
-  rafId = requestAnimationFrame(animate);
+  rafId = requestAnimationFrame(tick);
 }
 
-function stopRAF() {
-  rafRunning = false;
-  cancelAnimationFrame(rafId);
-}
+function startRAF() { if (rafRunning) return; rafRunning = true; lastTs = 0; rafId = requestAnimationFrame(tick); }
+function stopRAF() { rafRunning = false; cancelAnimationFrame(rafId); }
 
-// ─── Chip node (source / consumer) ───
+// ─── Chip node ───
 
 function Chip({ def, val, unit, active, onClick }: {
   def: NodeDef; val: string; unit: string; active: boolean; onClick: () => void;
 }) {
   const Icon = def.Icon;
   return (
-    <div
-      style={{ width: CHIP_W, height: CHIP_H, cursor: 'pointer' }}
-      onClick={onClick}
-    >
+    <div style={{ width: CHIP_W, height: CHIP_H, cursor: 'pointer' }} onClick={onClick}>
       <div style={{
         height: '100%', borderRadius: 12,
         border: `2px solid ${active ? `${def.color}70` : 'hsl(var(--border))'}`,
-        padding: '6px 12px', display: 'flex', alignItems: 'center', gap: 10,
-        opacity: active ? 1 : 0.5,
+        padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8,
+        opacity: active ? 1 : 0.65,
         boxShadow: active ? `0 0 10px ${def.color}20` : 'none',
         transition: 'all 0.3s',
       }}>
-        <Icon size={18} style={{ flexShrink: 0, color: active ? def.color : 'hsl(var(--muted-foreground))' }} />
+        <Icon size={16} style={{ flexShrink: 0, color: active ? def.color : 'hsl(var(--muted-foreground))' }} />
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <span style={{
-            fontSize: 11, fontWeight: 500, color: 'hsl(var(--muted-foreground))', lineHeight: 1.2,
-            opacity: active ? 0.9 : 0.5,
+            fontSize: 10, fontWeight: 500, color: 'hsl(var(--muted-foreground))', lineHeight: 1.2,
+            opacity: active ? 0.9 : 0.7,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>{def.label}</span>
           <span style={{
-            fontSize: 15, fontWeight: 700, lineHeight: 1.2,
+            fontSize: 14, fontWeight: 700, lineHeight: 1.2,
             fontVariantNumeric: 'tabular-nums',
             color: active ? def.color : 'hsl(var(--muted-foreground))',
           }}>{val} {unit}</span>
@@ -272,40 +298,75 @@ function Chip({ def, val, unit, active, onClick }: {
   );
 }
 
+// ─── 10-second rolling average hook ───
+
+function useRollingAvg(value: number | null, windowMs = 10000): number | null {
+  const buf = useRef<{ t: number; v: number }[]>([]);
+  const prev = useRef<number | null>(null);
+  const now = Date.now();
+  if (value != null && value !== prev.current) {
+    buf.current.push({ t: now, v: value });
+    prev.current = value;
+  }
+  buf.current = buf.current.filter(e => e.t >= now - windowMs);
+  if (buf.current.length === 0) return value;
+  return buf.current.reduce((s, e) => s + e.v, 0) / buf.current.length;
+}
+
+function useEntityAvg(entityId: string, windowMs = 10000) {
+  const { value, entity } = useEntityNumeric(entityId);
+  const avg = useRollingAvg(value, windowMs);
+  return { value: avg, entity };
+}
+
 // ─── Main component ───
 
 export function PowerFlow() {
   const [mode, setMode] = useState<Mode>('amps');
   const { open } = useHistoryDialog();
   const unit = mode === 'amps' ? 'A' : 'W';
-  const threshold = mode === 'amps' ? 0.05 : 2;
+  const threshold = mode === 'amps' ? THRESHOLD_A : THRESHOLD_W;
   const decimals = mode === 'amps' ? 1 : 0;
 
-  // Battery
+  // Battery (SOC instant, power/current averaged)
   const { value: soc } = useEntityNumeric('sensor.olins_van_bms_battery');
-  const { value: chargingW } = useEntityNumeric('sensor.battery_charging');
-  const { value: dischargingW } = useEntityNumeric('sensor.battery_discharging');
-  const { value: bmsCurrent } = useEntityNumeric('sensor.olins_van_bms_current');
+  const { value: chargingW } = useEntityAvg('sensor.battery_charging');
+  const { value: dischargingW } = useEntityAvg('sensor.battery_discharging');
+  const { value: bmsCurrent } = useEntityAvg('sensor.olins_van_bms_current');
 
-  // Sources (power + current)
-  const { value: solarW } = useEntityNumeric('sensor.total_mppt_pv_power');
-  const { value: shoreW } = useEntityNumeric('sensor.shore_power_charger_power_24v');
-  const { value: altW } = useEntityNumeric('sensor.alternator_charger_power_24v');
-  const { value: solarA } = useEntityNumeric('sensor.total_mppt_output_current');
-  const { value: shoreA } = useEntityNumeric('sensor.a32_pro_s5140_channel_16_current_24v_shore_power_charger');
-  const { value: altA } = useEntityNumeric('sensor.a32_pro_s5140_channel_8_current_24v_alternator_charger');
+  // Sources (10s rolling average)
+  const { value: solarW } = useEntityAvg('sensor.total_mppt_pv_power');
+  const { value: shoreW } = useEntityAvg('sensor.shore_power_charger_power_24v');
+  const { value: altW } = useEntityAvg('sensor.alternator_charger_power_24v');
+  const { value: solarA } = useEntityAvg('sensor.total_mppt_output_current');
+  const { value: shoreA } = useEntityAvg('sensor.a32_pro_s5140_channel_16_current_24v_shore_power_charger');
+  const { value: altA } = useEntityAvg('sensor.a32_pro_s5140_channel_8_current_24v_alternator_charger');
 
-  // Consumers (power + current)
-  const { value: dev12W } = useEntityNumeric('sensor.all_12v_devices_power_24v');
-  const { value: acW } = useEntityNumeric('sensor.air_conditioning_power_24v');
-  const { value: dev24W } = useEntityNumeric('sensor.all_24v_devices_power_24v');
-  const { value: inverterW } = useEntityNumeric('sensor.inverter_power_24v');
-  const { value: dev12A } = useEntityNumeric('sensor.a32_pro_s5140_channel_6_current_24v_12v_devices');
-  const { value: acA } = useEntityNumeric('sensor.a32_pro_s5140_channel_4_current_24v_air_conditioning');
-  const { value: dev24A } = useEntityNumeric('sensor.a32_pro_s5140_channel_5_current_24v_24v_devices');
-  const { value: inverterA } = useEntityNumeric('sensor.a32_pro_s5140_channel_7_current_24v_inverter');
+  // Consumers (10s rolling average)
+  const { value: dev12W } = useEntityAvg('sensor.all_12v_devices_power_24v');
+  const { value: acW } = useEntityAvg('sensor.air_conditioning_power_24v');
+  const { value: dev24W } = useEntityAvg('sensor.all_24v_devices_power_24v');
+  const { value: inverterW } = useEntityAvg('sensor.inverter_power_24v');
+  const { value: dev12A } = useEntityAvg('sensor.a32_pro_s5140_channel_6_current_24v_12v_devices');
+  const { value: acA } = useEntityAvg('sensor.a32_pro_s5140_channel_4_current_24v_air_conditioning');
+  const { value: dev24A } = useEntityAvg('sensor.a32_pro_s5140_channel_5_current_24v_24v_devices');
+  const { value: inverterA } = useEntityAvg('sensor.a32_pro_s5140_channel_7_current_24v_inverter');
 
-  const srcVals: Record<string, number> = mode === 'amps'
+  // Sub-consumers (10s rolling average)
+  const { value: fanW } = useEntityAvg('sensor.roof_fan_power_12v');
+  const { value: heaterW } = useEntityAvg('sensor.battery_heater_power_12v');
+  const { value: bedW } = useEntityAvg('sensor.bed_motor_power_24v');
+  const { value: fanA } = useEntityAvg('sensor.a32_pro_s5140_channel_14_current_12v_roof_fan');
+  const { value: heaterA } = useEntityAvg('sensor.a32_pro_s5140_channel_13_current_12v_battery_heater');
+  const { value: bedA } = useEntityAvg('sensor.a32_pro_s5140_channel_15_current_24v_bed_motor');
+
+  // Voltage ratio for converting 12V amps → 24V-equivalent amps
+  // Fan (ch14) and heater (ch13) are measured on the 12V rail; all others are 24V
+  const { value: bmsV } = useEntityNumeric('sensor.olins_van_bms_voltage');
+  const { value: rail12V } = useEntityNumeric('sensor.a32_pro_smart_battery_sense_12v_voltage');
+  const v12to24 = (bmsV && rail12V && bmsV > 0) ? rail12V / bmsV : 0.5;
+
+  const srcRaw: Record<string, number> = mode === 'amps'
     ? { solar: Math.abs(solarA ?? 0), shore: Math.abs(shoreA ?? 0), alt: Math.abs(altA ?? 0) }
     : { solar: Math.abs(solarW ?? 0), shore: Math.abs(shoreW ?? 0), alt: Math.abs(altW ?? 0) };
 
@@ -313,6 +374,17 @@ export function PowerFlow() {
     ? { '12v': Math.abs(dev12A ?? 0), ac: Math.abs(acA ?? 0), '24v': Math.abs(dev24A ?? 0), inverter: Math.abs(inverterA ?? 0) }
     : { '12v': Math.abs(dev12W ?? 0), ac: Math.abs(acW ?? 0), '24v': Math.abs(dev24W ?? 0), inverter: Math.abs(inverterW ?? 0) };
 
+  const namedSubVals = mode === 'amps'
+    ? { fan: Math.abs(fanA ?? 0) * v12to24, heater: Math.abs(heaterA ?? 0) * v12to24, bed: Math.abs(bedA ?? 0) }
+    : { fan: Math.abs(fanW ?? 0), heater: Math.abs(heaterW ?? 0), bed: Math.abs(bedW ?? 0) };
+
+  const subVals: Record<string, number> = {
+    ...namedSubVals,
+    other12v: Math.max(0, conVals['12v'] - namedSubVals.fan - namedSubVals.heater),
+    other24v: Math.max(0, conVals['24v'] - namedSubVals.bed),
+  };
+
+  // Battery charge / discharge
   let chg: number, dchg: number;
   if (mode === 'amps') {
     const cur = bmsCurrent ?? 0;
@@ -323,84 +395,110 @@ export function PowerFlow() {
     dchg = dischargingW ?? 0;
   }
 
-  const totalHome = Object.values(conVals).reduce((a, b) => a + b, 0);
+  // ─── Flow split: source → hub vs source → battery ───
+  const totalSrc = Object.values(srcRaw).reduce((a, b) => a + b, 0);
+  let battFrac = 0;
+  if (chg > threshold && totalSrc > 0) battFrac = Math.min(1, chg / totalSrc);
+  const homeFrac = 1 - battFrac;
+
+  const srcToHub: Record<string, number> = {};
+  const srcToBatt: Record<string, number> = {};
+  for (const s of sourcesDef) {
+    srcToHub[s.id] = srcRaw[s.id] * homeFrac;
+    srcToBatt[s.id] = srcRaw[s.id] * battFrac;
+  }
+
+  const totalHome = totalSrc * homeFrac + dchg;
   const socVal = soc ?? 0;
   const socColor = socVal >= 65 ? '#16a34a' : socVal >= 30 ? '#d97706' : '#dc2626';
 
-  // ─── Update live edge data (RAF reads from here — no React rendering involved) ───
+  // ─── Update live edge data ───
   const scale = mode === 'amps' ? 15 : 300;
   const maxSW = 4.5;
 
   sourcesDef.forEach((s) => {
-    const val = srcVals[s.id];
-    const active = val > threshold;
-    edgeLiveStore.set(`${s.id}-hub`, {
-      color: s.color, active,
-      speed: valueToDur(val, mode), dotCount: valueToDotCount(val, mode),
+    const v = srcToHub[s.id];
+    updateEdge(`${s.id}-hub`, {
+      color: s.color, value: v,
+      speed: valToSpeed(v, mode), dotCount: valToDots(v, mode),
       reverse: false,
-      strokeWidth: active ? Math.min(1.5 + (val / scale) * maxSW, maxSW) : 1,
-    });
+      strokeWidth: v > threshold ? Math.min(1.5 + (v / scale) * maxSW, maxSW) : 1.2,
+    }, threshold);
+
+    const vb = srcToBatt[s.id];
+    updateEdge(`${s.id}-batt`, {
+      color: s.color, value: vb,
+      speed: valToSpeed(vb, mode), dotCount: valToDots(vb, mode),
+      reverse: false,
+      strokeWidth: vb > threshold ? Math.min(1.5 + (vb / scale) * maxSW, maxSW) : 1.2,
+    }, threshold);
   });
+
+  updateEdge('batt-hub', {
+    color: '#ec4899', value: dchg,
+    speed: valToSpeed(dchg, mode), dotCount: valToDots(dchg, mode),
+    reverse: false,
+    strokeWidth: dchg > threshold ? Math.min(1.5 + (dchg / scale) * maxSW, maxSW) : 1.2,
+  }, threshold);
 
   consumersDef.forEach((c) => {
-    const val = conVals[c.id];
-    const active = val > threshold;
-    edgeLiveStore.set(`hub-${c.id}`, {
-      color: c.color, active,
-      speed: valueToDur(val, mode), dotCount: valueToDotCount(val, mode),
+    const v = conVals[c.id];
+    updateEdge(`hub-${c.id}`, {
+      color: c.color, value: v,
+      speed: valToSpeed(v, mode), dotCount: valToDots(v, mode),
       reverse: false,
-      strokeWidth: active ? Math.min(1.5 + (val / scale) * maxSW, maxSW) : 1,
-    });
+      strokeWidth: v > threshold ? Math.min(1.5 + (v / scale) * maxSW, maxSW) : 1.2,
+    }, threshold);
   });
 
-  const battVal = Math.max(chg, dchg);
-  const battActive = chg > threshold || dchg > threshold;
-  edgeLiveStore.set('batt-edge', {
-    color: chg > threshold ? '#16a34a' : dchg > threshold ? '#ea580c' : 'hsl(var(--border))',
-    active: battActive,
-    speed: valueToDur(battVal, mode),
-    dotCount: battActive ? valueToDotCount(battVal, mode) : 0,
-    reverse: dchg > threshold,
-    strokeWidth: battActive ? Math.min(1.5 + (battVal / scale) * maxSW, maxSW) : 1,
+  // Sub-consumer branch edges
+  subConsumersDef.forEach((sc) => {
+    const v = subVals[sc.id];
+    updateEdge(`${sc.parentId}-${sc.id}`, {
+      color: sc.color, value: v,
+      speed: valToSpeed(v, mode), dotCount: valToDots(v, mode),
+      reverse: false,
+      strokeWidth: v > threshold ? Math.min(1 + (v / scale) * 3, 3) : 0.8,
+    }, threshold);
   });
 
-  // SVG ref — mount paths + dots once, then never touch via React
+  // ─── SVG init ───
   const svgRef = useRef<SVGSVGElement>(null);
-  const svgInitRef = useRef(false);
+  const initDone = useRef(false);
 
   useEffect(() => {
     const svg = svgRef.current;
-    if (!svg || svgInitRef.current) return;
-    svgInitRef.current = true;
+    if (!svg || initDone.current) return;
+    initDone.current = true;
 
-    // Create all edge SVG elements imperatively (React never touches these)
+    mtPaths = new Map();
+    mtDots = new Map();
+
     for (const eDef of edgeDefs) {
-      // Path
       const path = document.createElementNS('http://www.w3.org/2000/svg', 'path');
       path.setAttribute('d', eDef.path);
       path.setAttribute('fill', 'none');
       path.setAttribute('stroke', '#888');
       path.setAttribute('stroke-width', '1');
       path.setAttribute('stroke-linecap', 'round');
-      path.setAttribute('opacity', '0.07');
+      path.setAttribute('opacity', '0.06');
       svg.appendChild(path);
-      pathEls.set(eDef.id, path);
+      mtPaths.set(eDef.id, path);
 
-      // Dots
       const dots: SVGCircleElement[] = [];
       for (let i = 0; i < MAX_DOTS; i++) {
         const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        c.setAttribute('r', '4');
+        c.setAttribute('r', '4.5');
         c.setAttribute('fill', 'none');
         c.setAttribute('opacity', '0');
         svg.appendChild(c);
         dots.push(c);
       }
-      dotEls.set(eDef.id, dots);
+      mtDots.set(eDef.id, dots);
     }
 
     startRAF();
-    return () => stopRAF();
+    return () => { stopRAF(); mtPaths = new Map(); mtDots = new Map(); };
   }, []);
 
   return (
@@ -428,30 +526,23 @@ export function PowerFlow() {
           >Watts</button>
         </div>
 
-        {/* Flow diagram — SVG edges + HTML nodes layered */}
+        {/* Flow diagram */}
         <div style={{ position: 'relative', width: '100%', aspectRatio: `${VB_W}/${VB_H}`, margin: '0 auto' }}>
-          {/* SVG layer (behind nodes) — imperatively managed, never re-rendered */}
           <svg
             ref={svgRef}
             viewBox={`0 0 ${VB_W} ${VB_H}`}
             style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
             preserveAspectRatio="xMidYMid meet"
           />
-
-          {/* HTML node layer (scales with SVG via same aspect ratio) */}
-          <div style={{
-            position: 'absolute', inset: 0,
-            /* Use SVG viewBox coordinates via scale transform */
-          }}>
+          <div style={{ position: 'absolute', inset: 0 }}>
             <svg viewBox={`0 0 ${VB_W} ${VB_H}`} style={{ width: '100%', height: '100%' }} preserveAspectRatio="xMidYMid meet">
-              {/* foreignObject for each node so HTML scales with SVG viewBox */}
 
               {/* Source chips */}
               {sourcesDef.map((s, i) => {
-                const val = srcVals[s.id];
+                const val = srcRaw[s.id];
                 const entity = mode === 'amps' ? s.currentEntity : s.powerEntity;
                 return (
-                  <foreignObject key={s.id} x={SRC_X} y={srcYs[i]} width={CHIP_W} height={CHIP_H}>
+                  <foreignObject key={s.id} x={SRC_X} y={SRC_YS[i]} width={CHIP_W} height={CHIP_H}>
                     <Chip def={s} val={fmt(val, decimals)} unit={unit}
                       active={val > threshold}
                       onClick={() => open(entity, s.label, unit)} />
@@ -459,14 +550,14 @@ export function PowerFlow() {
                 );
               })}
 
-              {/* Hub */}
-              <foreignObject x={HUB_X - HUB_SIZE / 2} y={HUB_Y - HUB_SIZE / 2} width={HUB_SIZE} height={HUB_SIZE}>
+              {/* Home hub */}
+              <foreignObject x={HUB_CX - HUB_R} y={HUB_CY - HUB_R} width={HUB_R * 2} height={HUB_R * 2}>
                 <div style={{
-                  width: HUB_SIZE, height: HUB_SIZE, borderRadius: '50%',
+                  width: HUB_R * 2, height: HUB_R * 2, borderRadius: '50%',
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
                   border: `2px solid ${totalHome > threshold ? '#ca8a0460' : 'hsl(var(--border))'}`,
-                  boxShadow: totalHome > threshold ? '0 0 12px #ca8a0420' : 'none',
+                  boxShadow: totalHome > threshold ? '0 0 14px #ca8a0420' : 'none',
                   transition: 'border-color 0.3s, box-shadow 0.3s',
                 }}>
                   <Home size={18} style={{ color: totalHome > threshold ? '#ca8a04' : 'hsl(var(--muted-foreground))' }} />
@@ -477,7 +568,7 @@ export function PowerFlow() {
               </foreignObject>
 
               {/* Battery */}
-              <foreignObject x={BATT_X - BATT_W / 2} y={BATT_Y - BATT_H / 2} width={BATT_W} height={BATT_H}>
+              <foreignObject x={BATT_LEFT} y={BATT_TOP} width={BATT_W} height={BATT_H}>
                 <div
                   style={{ width: BATT_W, height: BATT_H, position: 'relative', cursor: 'pointer' }}
                   onClick={() => open('sensor.olins_van_bms_battery', 'Battery SOC', '%')}
@@ -528,10 +619,39 @@ export function PowerFlow() {
                 const val = conVals[c.id];
                 const entity = mode === 'amps' ? c.currentEntity : c.powerEntity;
                 return (
-                  <foreignObject key={c.id} x={CON_X} y={conYs[i]} width={CHIP_W} height={CHIP_H}>
+                  <foreignObject key={c.id} x={CON_X} y={CON_YS[i]} width={CHIP_W} height={CHIP_H}>
                     <Chip def={c} val={fmt(val, decimals)} unit={unit}
                       active={val > threshold}
                       onClick={() => open(entity, c.label, unit)} />
+                  </foreignObject>
+                );
+              })}
+
+              {/* Sub-consumer chips (branching off parent buses) */}
+              {subConsumersDef.map((sc) => {
+                const val = subVals[sc.id];
+                const entity = mode === 'amps' ? sc.currentEntity : sc.powerEntity;
+                const active = val > threshold;
+                const Icon = sc.Icon;
+                const yPos = { fan: 60, heater: 96, other12v: 132, bed: 222, other24v: 258 }[sc.id] ?? 0;
+                return (
+                  <foreignObject key={sc.id} x={SUB_X} y={yPos} width={SUB_CHIP_W} height={SUB_CHIP_H}>
+                    <div style={{ width: SUB_CHIP_W, height: SUB_CHIP_H, cursor: 'pointer' }}
+                      onClick={() => open(entity, sc.label, unit)}>
+                      <div style={{
+                        height: '100%', borderRadius: 8,
+                        border: `1.5px solid ${active ? `${sc.color}60` : 'hsl(var(--border))'}`,
+                        padding: '2px 5px', display: 'flex', alignItems: 'center', gap: 4,
+                        opacity: active ? 1 : 0.65,
+                        transition: 'all 0.3s',
+                      }}>
+                        <Icon size={11} style={{ flexShrink: 0, color: active ? sc.color : 'hsl(var(--muted-foreground))' }} />
+                        <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
+                          <span style={{ fontSize: 8, fontWeight: 500, color: 'hsl(var(--muted-foreground))', lineHeight: 1.1, opacity: active ? 0.9 : 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.label}</span>
+                          <span style={{ fontSize: 10, fontWeight: 700, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums', color: active ? sc.color : 'hsl(var(--muted-foreground))' }}>{fmt(val, decimals)} {unit}</span>
+                        </div>
+                      </div>
+                    </div>
                   </foreignObject>
                 );
               })}
