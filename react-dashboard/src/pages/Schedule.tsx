@@ -15,6 +15,10 @@ import {
   Repeat2,
   CheckCircle2,
   Timer,
+  Sparkles,
+  BellRing,
+  PauseCircle,
+  Radio,
 } from 'lucide-react';
 
 // ─── Types ────────────────────────────────────────────────────────────────
@@ -180,8 +184,8 @@ function summarizeAction(action: SchedulerAction): string {
 }
 
 function formatNextTrigger(timestamps: string[]): string | null {
-  if (!timestamps?.length) return null;
-  const dt = new Date(timestamps[0]);
+  const dt = getNextTriggerDate(timestamps);
+  if (!dt) return null;
   const diffMs = dt.getTime() - Date.now();
   if (diffMs < 0) return null;
   const h = Math.floor(diffMs / 3_600_000);
@@ -190,6 +194,25 @@ function formatNextTrigger(timestamps: string[]): string | null {
   if (h > 0)  return `in ${h}h ${m}m`;
   if (m > 0)  return `in ${m}m`;
   return 'soon';
+}
+
+function getNextTriggerDate(timestamps: string[]): Date | null {
+  if (!timestamps?.length) return null;
+  const now = Date.now();
+  const next = timestamps
+    .map((t) => new Date(t))
+    .filter((d) => Number.isFinite(d.getTime()) && d.getTime() >= now)
+    .sort((a, b) => a.getTime() - b.getTime())[0];
+  return next ?? null;
+}
+
+function formatNextAbsolute(date: Date | null): string | null {
+  if (!date) return null;
+  return date.toLocaleString([], {
+    weekday: 'short',
+    hour: 'numeric',
+    minute: '2-digit',
+  });
 }
 
 function editorFromSchedule(s: ScheduleEntry): EditorState {
@@ -624,17 +647,31 @@ function ScheduleCard({
   const [confirmDelete, setConfirmDelete] = useState(false);
   const action = schedule.timeslots[0]?.actions[0];
   const time = schedule.timeslots[0]?.start;
+  const nextDate = getNextTriggerDate(schedule.timestamps);
   const nextTrigger = formatNextTrigger(schedule.timestamps);
+  const nextAbsolute = formatNextAbsolute(nextDate);
+  const diffMs = nextDate ? nextDate.getTime() - Date.now() : null;
+  const isSoon = schedule.enabled && diffMs !== null && diffMs >= 0 && diffMs <= 2 * 60 * 60 * 1000;
   const { label: repeatLabel, Icon: RepeatIcon } = formatRepeatType(schedule.repeat_type);
+  const title = schedule.name ?? `Schedule #${schedule.schedule_id}`;
 
   return (
     <div
       className={cn(
-        'border rounded-lg p-3 transition-all bg-card',
-        !schedule.enabled && 'opacity-55',
+        'group relative overflow-hidden rounded-2xl border bg-card/90 p-4 transition-all',
+        'hover:-translate-y-0.5 hover:shadow-lg hover:shadow-black/10',
+        schedule.enabled ? 'border-primary/25' : 'border-border',
+        !schedule.enabled && 'opacity-75',
       )}
     >
-      <div className="flex items-start gap-3">
+      <div
+        className={cn(
+          'absolute left-0 top-0 h-full w-1',
+          schedule.enabled ? (isSoon ? 'bg-amber-400' : 'bg-primary') : 'bg-muted-foreground/30',
+        )}
+      />
+
+      <div className="flex items-start gap-3 pl-2">
         {/* Enable toggle */}
         <button
           onClick={() => onToggle(!schedule.enabled)}
@@ -654,36 +691,60 @@ function ScheduleCard({
 
         {/* Content */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-baseline gap-2 flex-wrap">
-            <span className="text-sm font-semibold">
-              {schedule.name ?? `Schedule #${schedule.schedule_id}`}
-            </span>
-            {!schedule.enabled && (
-              <span className="text-[10px] uppercase text-muted-foreground/60 font-medium">
-                off
-              </span>
-            )}
+          <div className="flex items-start justify-between gap-2">
+            <div className="min-w-0">
+              <p className="truncate text-sm font-semibold">{title}</p>
+              <div className="mt-1 flex items-center gap-1.5 text-[11px] text-muted-foreground">
+                <RepeatIcon className="h-3 w-3" />
+                <span>{repeatLabel}</span>
+                <span>•</span>
+                <span>{formatDays(schedule.weekdays)}</span>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center justify-end gap-1.5">
+              {isSoon && (
+                <span className="inline-flex items-center gap-1 rounded-full bg-amber-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-amber-300">
+                  <BellRing className="h-3 w-3" />
+                  Soon
+                </span>
+              )}
+              {schedule.enabled ? (
+                <span className="inline-flex items-center gap-1 rounded-full bg-emerald-500/15 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-emerald-300">
+                  <Radio className="h-3 w-3" />
+                  Armed
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1 rounded-full bg-muted px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
+                  <PauseCircle className="h-3 w-3" />
+                  Paused
+                </span>
+              )}
+            </div>
           </div>
 
-          <div className="flex items-center gap-2 mt-0.5 flex-wrap text-xs text-muted-foreground">
-            {time && (
-              <span className="flex items-center gap-1 font-medium text-foreground">
-                <Clock className="h-3 w-3" />
-                {formatTime(time)}
-              </span>
-            )}
-            <span>{formatDays(schedule.weekdays)}</span>
-            <span className="flex items-center gap-0.5">
-              <RepeatIcon className="h-3 w-3" />
-              {repeatLabel}
-            </span>
-            {schedule.enabled && nextTrigger && (
-              <span className="text-muted-foreground/60">{nextTrigger}</span>
-            )}
+          <div className="mt-3 grid grid-cols-2 gap-2 text-xs">
+            <div className="rounded-lg border border-border/70 bg-background/40 px-2.5 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">At</p>
+              <p className="mt-1 flex items-center gap-1.5 font-semibold text-foreground">
+                <Clock className="h-3.5 w-3.5" />
+                {time ? formatTime(time) : '—'}
+              </p>
+            </div>
+
+            <div className="rounded-lg border border-border/70 bg-background/40 px-2.5 py-2">
+              <p className="text-[10px] uppercase tracking-wide text-muted-foreground">Next</p>
+              <p className="mt-1 truncate font-semibold text-foreground">
+                {schedule.enabled ? (nextTrigger ?? 'No upcoming run') : 'Disabled'}
+              </p>
+              {schedule.enabled && nextAbsolute && (
+                <p className="mt-0.5 truncate text-[11px] text-muted-foreground">{nextAbsolute}</p>
+              )}
+            </div>
           </div>
 
           {action && (
-            <p className="text-[11px] text-muted-foreground mt-0.5 truncate">
+            <p className="mt-2.5 rounded-md bg-muted/40 px-2 py-1.5 text-[11px] text-muted-foreground">
               {summarizeAction(action)}
             </p>
           )}
@@ -731,6 +792,33 @@ function ScheduleCard({
           )}
         </div>
       </div>
+    </div>
+  );
+}
+
+function SectionHeader({
+  icon: Icon,
+  title,
+  subtitle,
+  count,
+}: {
+  icon: typeof Clock;
+  title: string;
+  subtitle: string;
+  count: number;
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <p className="flex items-center gap-2 text-sm font-semibold text-foreground">
+          <Icon className="h-4 w-4 text-muted-foreground" />
+          {title}
+        </p>
+        <p className="mt-0.5 text-xs text-muted-foreground">{subtitle}</p>
+      </div>
+      <span className="rounded-full border border-border/70 bg-muted/40 px-2.5 py-1 text-xs font-semibold text-muted-foreground">
+        {count}
+      </span>
     </div>
   );
 }
@@ -793,30 +881,76 @@ export default function Schedule() {
     await loadSchedules();
   };
 
+  const enabledCount = schedules.filter((s) => s.enabled).length;
+  const soonCount = schedules.filter((s) => {
+    if (!s.enabled) return false;
+    const dt = getNextTriggerDate(s.timestamps);
+    if (!dt) return false;
+    const diff = dt.getTime() - Date.now();
+    return diff >= 0 && diff <= 2 * 60 * 60 * 1000;
+  }).length;
+  const soonSchedules = schedules.filter((s) => {
+    if (!s.enabled) return false;
+    const dt = getNextTriggerDate(s.timestamps);
+    if (!dt) return false;
+    const diff = dt.getTime() - Date.now();
+    return diff >= 0 && diff <= 2 * 60 * 60 * 1000;
+  });
+  const armedSchedules = schedules.filter(
+    (s) => s.enabled && !soonSchedules.some((soon) => soon.schedule_id === s.schedule_id),
+  );
+  const pausedSchedules = schedules.filter((s) => !s.enabled);
+
   return (
     <PageContainer title="Schedules">
       <div className="space-y-4">
-        {/* Header row */}
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2 text-muted-foreground">
-            <CalendarDays className="h-4 w-4" />
-            <span className="text-sm">{schedules.length} schedule{schedules.length !== 1 ? 's' : ''}</span>
+        {/* Header */}
+        <div className="relative overflow-hidden rounded-2xl border border-primary/20 bg-gradient-to-br from-primary/15 via-card to-card p-4">
+          <div className="pointer-events-none absolute -right-10 -top-10 h-32 w-32 rounded-full bg-primary/20 blur-2xl" />
+          <div className="pointer-events-none absolute -bottom-10 left-10 h-24 w-24 rounded-full bg-amber-400/15 blur-2xl" />
+
+          <div className="relative flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <p className="flex items-center gap-2 text-base font-semibold text-foreground">
+                <Sparkles className="h-4 w-4 text-primary" />
+                Daily Agenda
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                {schedules.length} schedule{schedules.length !== 1 ? 's' : ''} • {enabledCount} active • {soonCount} soon
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                onClick={loadSchedules}
+                title="Refresh"
+                className="rounded-md border border-border/70 bg-background/50 p-2 text-muted-foreground transition-colors hover:bg-muted"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => setEditor({ initial: DEFAULT_EDITOR })}
+                className="flex items-center gap-1.5 rounded-md bg-primary px-3 py-2 text-sm font-medium text-primary-foreground transition-colors hover:bg-primary/90"
+              >
+                <Plus className="h-4 w-4" />
+                Add
+              </button>
+            </div>
           </div>
-          <div className="flex items-center gap-2">
-            <button
-              onClick={loadSchedules}
-              title="Refresh"
-              className="p-2 rounded-md hover:bg-muted text-muted-foreground transition-colors"
-            >
-              <RefreshCw className="h-4 w-4" />
-            </button>
-            <button
-              onClick={() => setEditor({ initial: DEFAULT_EDITOR })}
-              className="flex items-center gap-1.5 px-3 py-2 rounded-md bg-primary text-primary-foreground text-sm font-medium hover:bg-primary/90 transition-colors"
-            >
-              <Plus className="h-4 w-4" />
-              Add
-            </button>
+
+          <div className="relative mt-3 grid grid-cols-3 gap-2 text-xs">
+            <div className="rounded-lg border border-border/70 bg-background/45 p-2">
+              <p className="text-muted-foreground">Total</p>
+              <p className="mt-0.5 text-lg font-semibold text-foreground">{schedules.length}</p>
+            </div>
+            <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/10 p-2">
+              <p className="text-emerald-200/90">Armed</p>
+              <p className="mt-0.5 text-lg font-semibold text-emerald-100">{enabledCount}</p>
+            </div>
+            <div className="rounded-lg border border-amber-500/30 bg-amber-500/10 p-2">
+              <p className="text-amber-200/90">Soon</p>
+              <p className="mt-0.5 text-lg font-semibold text-amber-100">{soonCount}</p>
+            </div>
           </div>
         </div>
 
@@ -840,17 +974,75 @@ export default function Schedule() {
 
         {/* Schedule list */}
         {!loading && schedules.length > 0 && (
-          <div className="space-y-2">
-            {schedules.map((s) => (
-              <ScheduleCard
-                key={s.schedule_id}
-                schedule={s}
-                onToggle={(enabled) => handleToggle(s, enabled)}
-                onEdit={() => setEditor({ initial: editorFromSchedule(s), scheduleId: s.schedule_id })}
-                onDelete={() => handleDelete(s)}
-                onRun={() => api.runNow(s.entity_id)}
-              />
-            ))}
+          <div className="space-y-5">
+            {soonSchedules.length > 0 && (
+              <div className="space-y-2">
+                <SectionHeader
+                  icon={BellRing}
+                  title="Coming Up"
+                  subtitle="Scheduled within the next two hours"
+                  count={soonSchedules.length}
+                />
+                <div className="space-y-2">
+                  {soonSchedules.map((s) => (
+                    <ScheduleCard
+                      key={s.schedule_id}
+                      schedule={s}
+                      onToggle={(enabled) => handleToggle(s, enabled)}
+                      onEdit={() => setEditor({ initial: editorFromSchedule(s), scheduleId: s.schedule_id })}
+                      onDelete={() => handleDelete(s)}
+                      onRun={() => api.runNow(s.entity_id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {armedSchedules.length > 0 && (
+              <div className="space-y-2">
+                <SectionHeader
+                  icon={CalendarDays}
+                  title="Armed"
+                  subtitle="Enabled schedules outside the near window"
+                  count={armedSchedules.length}
+                />
+                <div className="space-y-2">
+                  {armedSchedules.map((s) => (
+                    <ScheduleCard
+                      key={s.schedule_id}
+                      schedule={s}
+                      onToggle={(enabled) => handleToggle(s, enabled)}
+                      onEdit={() => setEditor({ initial: editorFromSchedule(s), scheduleId: s.schedule_id })}
+                      onDelete={() => handleDelete(s)}
+                      onRun={() => api.runNow(s.entity_id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {pausedSchedules.length > 0 && (
+              <div className="space-y-2">
+                <SectionHeader
+                  icon={PauseCircle}
+                  title="Paused"
+                  subtitle="Disabled schedules kept around for later"
+                  count={pausedSchedules.length}
+                />
+                <div className="space-y-2">
+                  {pausedSchedules.map((s) => (
+                    <ScheduleCard
+                      key={s.schedule_id}
+                      schedule={s}
+                      onToggle={(enabled) => handleToggle(s, enabled)}
+                      onEdit={() => setEditor({ initial: editorFromSchedule(s), scheduleId: s.schedule_id })}
+                      onDelete={() => handleDelete(s)}
+                      onRun={() => api.runNow(s.entity_id)}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </div>

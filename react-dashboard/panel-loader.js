@@ -61,18 +61,58 @@ class VanDashboard extends HTMLElement {
     this._mounting = false; // true while async _doMount is in progress
     this._mountGen = 0;
     this._onVisibility = null;
+    this._onFocus = null;
+    this._onPageShow = null;
+    this._watchdog = null;
+    this._teardownTimer = null;
+  }
+
+  _dispatchHassUpdated() {
+    if (!window.__HASS__) return;
+    window.dispatchEvent(new Event('hass-updated'));
+    requestAnimationFrame(() => {
+      if (this.isConnected && window.__HASS__) {
+        window.dispatchEvent(new Event('hass-updated'));
+      }
+    });
+  }
+
+  _hasLiveDom() {
+    return !!this.querySelector('.van-dash-root');
+  }
+
+  _recover(reason = 'unknown') {
+    if (!this.isConnected) return;
+
+    if (!this._unmount && !this._mounting) {
+      console.debug('[VanDash] Recovering mount after', reason);
+      this._doMount();
+      return;
+    }
+
+    if (!this._hasLiveDom() && !this._mounting) {
+      console.debug('[VanDash] Recovering blank DOM after', reason);
+      if (this._unmount) {
+        try {
+          this._unmount();
+        } catch (_) {}
+        this._unmount = null;
+      }
+      this._doMount();
+      return;
+    }
+
+    this._dispatchHassUpdated();
   }
 
   set hass(hass) {
     window.__HASS__ = hass;
-    window.dispatchEvent(new Event('hass-updated'));
+    this._dispatchHassUpdated();
     // Recovery: if we're in the DOM but React isn't mounted, re-mount.
     // This catches the case where HA's quick "reconnecting..." cycle
     // disconnected/reconnected the element and the async mount failed or
     // was aborted, leaving a blank screen.
-    if (this.isConnected && !this._unmount && !this._mounting) {
-      this._doMount();
-    }
+    this._recover('hass-setter');
   }
 
   set panel(panel) {
@@ -80,7 +120,11 @@ class VanDashboard extends HTMLElement {
   }
 
   connectedCallback() {
-    this._doMount();
+    if (this._teardownTimer) {
+      clearTimeout(this._teardownTimer);
+      this._teardownTimer = null;
+    }
+    this._recover('connected');
   }
 
   async _doMount() {
@@ -121,7 +165,7 @@ class VanDashboard extends HTMLElement {
       // (useLayoutEffect runs synchronously after DOM commit, before RAF)
       requestAnimationFrame(() => {
         if (this._mountGen === gen && window.__HASS__) {
-          window.dispatchEvent(new Event('hass-updated'));
+          this._dispatchHassUpdated();
         }
       });
 
@@ -130,11 +174,36 @@ class VanDashboard extends HTMLElement {
         document.removeEventListener('visibilitychange', this._onVisibility);
       }
       this._onVisibility = () => {
-        if (!document.hidden && window.__HASS__) {
-          window.dispatchEvent(new Event('hass-updated'));
+        if (!document.hidden) {
+          this._recover('visibilitychange');
         }
       };
       document.addEventListener('visibilitychange', this._onVisibility);
+
+      if (this._onFocus) {
+        window.removeEventListener('focus', this._onFocus);
+      }
+      this._onFocus = () => {
+        this._recover('focus');
+      };
+      window.addEventListener('focus', this._onFocus);
+
+      if (this._onPageShow) {
+        window.removeEventListener('pageshow', this._onPageShow);
+      }
+      this._onPageShow = () => {
+        this._recover('pageshow');
+      };
+      window.addEventListener('pageshow', this._onPageShow);
+
+      if (this._watchdog) {
+        clearInterval(this._watchdog);
+      }
+      this._watchdog = setInterval(() => {
+        if (!document.hidden) {
+          this._recover('watchdog');
+        }
+      }, 5000);
     } catch (err) {
       if (this._mountGen !== gen) return;
       console.error('[VanDash] Failed to load:', err);
@@ -150,20 +219,44 @@ class VanDashboard extends HTMLElement {
   }
 
   disconnectedCallback() {
-    // Invalidate any in-flight _doMount awaits
-    this._mountGen++;
-    this._mounting = false;
+    if (this._teardownTimer) {
+      clearTimeout(this._teardownTimer);
+    }
 
-    if (this._onVisibility) {
-      document.removeEventListener('visibilitychange', this._onVisibility);
-      this._onVisibility = null;
-    }
-    if (this._unmount) {
-      this._unmount();
-      this._unmount = null;
-    }
-    // Clear DOM so reconnect starts fresh
-    this.innerHTML = '';
+    // HA can temporarily disconnect the panel custom element during its own
+    // websocket reconnect cycle. Delay teardown so quick detach/reattach does
+    // not blank the panel and require a full reload.
+    this._teardownTimer = setTimeout(() => {
+      this._teardownTimer = null;
+      if (this.isConnected) return;
+
+      // Invalidate any in-flight _doMount awaits
+      this._mountGen++;
+      this._mounting = false;
+
+      if (this._watchdog) {
+        clearInterval(this._watchdog);
+        this._watchdog = null;
+      }
+      if (this._onVisibility) {
+        document.removeEventListener('visibilitychange', this._onVisibility);
+        this._onVisibility = null;
+      }
+      if (this._onFocus) {
+        window.removeEventListener('focus', this._onFocus);
+        this._onFocus = null;
+      }
+      if (this._onPageShow) {
+        window.removeEventListener('pageshow', this._onPageShow);
+        this._onPageShow = null;
+      }
+      if (this._unmount) {
+        this._unmount();
+        this._unmount = null;
+      }
+      // Clear DOM only after we've confirmed the element stayed detached.
+      this.innerHTML = '';
+    }, 2000);
   }
 }
 

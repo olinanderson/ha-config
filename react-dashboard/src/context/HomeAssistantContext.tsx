@@ -124,11 +124,18 @@ export function HassProvider({ children }: HassProviderProps) {
     };
     document.addEventListener('visibilitychange', onVisibility);
 
+    const onFocus = () => handler();
+    const onPageShow = () => handler();
+    window.addEventListener('focus', onFocus);
+    window.addEventListener('pageshow', onPageShow);
+
     // Pick up hass if it was already set before React mounted
     handler();
     return () => {
       window.removeEventListener('hass-updated', handler);
       document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('focus', onFocus);
+      window.removeEventListener('pageshow', onPageShow);
     };
   }, []);
 

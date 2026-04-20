@@ -38,10 +38,10 @@ function EngineCard() {
   const { data: speedHistory } = useHistory('sensor.192_168_10_90_0d_vehiclespeed', 6);
   const { open } = useHistoryDialog();
 
-  // ECU status only updates last_updated when state CHANGES, so isFresh is
-  // wrong for long-lived connections.  Use RPM freshness as the real heartbeat.
+  // WiCAN status topic is unreliable (reports "offline" while publishing data).
+  // Use RPM entity freshness as the real connectivity heartbeat instead.
   const rpmEntity = useEntity('sensor.192_168_10_90_0c_enginerpm');
-  const wicanConnected = ecuStatus?.state === 'on' && isFresh(rpmEntity?.last_updated, 120);
+  const wicanConnected = isFresh(rpmEntity?.last_updated, 120);
   const isMoving = moving?.state === 'on';
   const engineOn = engine?.state === 'on';
   const gearText = gear?.state ?? '—';
@@ -141,24 +141,18 @@ function FuelCard() {
 }
 
 function TirePressureCard() {
-  const { value: flRaw, entity: flEntity } = useEntityNumeric('sensor.192_168_10_90_tyre_p_fl');
-  const { value: frRaw, entity: frEntity } = useEntityNumeric('sensor.192_168_10_90_tyre_p_fr');
-  const { value: rlRaw, entity: rlEntity } = useEntityNumeric('sensor.192_168_10_90_tyre_p_rl');
-  const { value: rrRaw, entity: rrEntity } = useEntityNumeric('sensor.192_168_10_90_tyre_p_rr');
+  const { value: flRaw } = useEntityNumeric('sensor.192_168_10_90_tyre_p_fl');
+  const { value: frRaw } = useEntityNumeric('sensor.192_168_10_90_tyre_p_fr');
+  const { value: rlRaw } = useEntityNumeric('sensor.192_168_10_90_tyre_p_rl');
+  const { value: rrRaw } = useEntityNumeric('sensor.192_168_10_90_tyre_p_rr');
   const lowTire = useEntity('binary_sensor.low_tire_pressure');
   const isLow = lowTire?.state === 'on';
 
-  // HA auto-converts psi→kPa in entity registry; convert back if needed
-  const toPsi = (val: number | null, entity: typeof flEntity) => {
-    if (val == null) return null;
-    const unit = entity?.attributes?.unit_of_measurement;
-    if (unit === 'kPa') return val * 0.0725190;
-    return val;
-  };
-  const fl = toPsi(flRaw, flEntity);
-  const fr = toPsi(frRaw, frEntity);
-  const rl = toPsi(rlRaw, rlEntity);
-  const rr = toPsi(rrRaw, rrEntity);
+  // Entity now reports directly in psi (conversion done in MQTT discovery value_template)
+  const fl = flRaw;
+  const fr = frRaw;
+  const rl = rlRaw;
+  const rr = rrRaw;
 
   // Transit T-350 HD: front ~65 psi, rear ~80 psi recommended
   const tireColor = (psi: number | null) =>
@@ -229,7 +223,6 @@ function RoadGradeCard() {
 
 function DiagnosticsCard() {
   const { value: oilLife } = useEntityNumeric('sensor.192_168_10_90_oil_life');
-  const { value: transTemp } = useEntityNumeric('sensor.192_168_10_90_tran_f_temp');
   const { value: wastegate } = useEntityNumeric('sensor.192_168_10_90_wastegate');
   const { value: intakeAir } = useEntityNumeric('sensor.192_168_10_90_intake_air_tmp');
   const { value: ambientAir } = useEntityNumeric('sensor.192_168_10_90_46_ambientairtemp');

@@ -47,30 +47,30 @@ const subConsumersDef: { id: string; label: string; Icon: LucideIcon; parentId: 
 
 // ─── Layout constants (SVG viewBox coords) ───
 
-const CHIP_W = 115;
-const CHIP_H = 46;
-const HUB_R = 42;
-const BATT_W = 100;
-const BATT_H = 62;
+const CHIP_W = 70;
+const CHIP_H = 28;
+const HUB_R = 25;
+const BATT_W = 60;
+const BATT_H = 37;
 
 const VB_W = 670;
-const VB_H = 490;
+const VB_H = 305;
 
 const SRC_X = 50;
-const SRC_YS = [67, 183, 299];
+const SRC_YS = [42, 92, 142];
 
 const HUB_CX = 280;
-const HUB_CY = 206;
+const HUB_CY = 106;
 
 const BATT_LEFT = HUB_CX - BATT_W / 2;
-const BATT_TOP = 420;
+const BATT_TOP = 248;
 
 const CON_X = 420;
-const CON_YS = [78, 148, 218, 288];
+const CON_YS = [38, 78, 118, 158];
 
 const SUB_X = 555;
-const SUB_CHIP_W = 90;
-const SUB_CHIP_H = 34;
+const SUB_CHIP_W = 54;
+const SUB_CHIP_H = 20;
 
 const MAX_DOTS = 3;
 const THRESHOLD_W = 8;
@@ -110,34 +110,33 @@ interface EdgeDef {
 const edgeDefs: EdgeDef[] = [];
 
 // Source → Hub (right of chip → staggered vertical channels → hub left)
-edgeDefs.push({ id: 'solar-hub', path: ortho([[165, 90],  [210, 90],  [210, 194], [238, 194]]), color: '#ca8a04' });
-edgeDefs.push({ id: 'shore-hub', path: ortho([[165, 206], [238, 206]]),                          color: '#16a34a' });
-edgeDefs.push({ id: 'alt-hub',   path: ortho([[165, 322], [220, 322], [220, 218], [238, 218]]), color: '#2563eb' });
+// Chip right x=120. Source centers: solar y=56, shore y=106, alt y=156. Hub: CX=280, CY=106, R=25, left=255.
+edgeDefs.push({ id: 'solar-hub', path: ortho([[120, 56],  [200, 56],  [200, 100], [255, 100]]), color: '#ca8a04' });
+edgeDefs.push({ id: 'shore-hub', path: ortho([[120, 106], [255, 106]]),                          color: '#16a34a' });
+edgeDefs.push({ id: 'alt-hub',   path: ortho([[120, 156], [210, 156], [210, 112], [255, 112]]), color: '#2563eb' });
 
-// Source → Battery (left channel → down → horizontal → battery top)
-// Left-to-right at battery: solar (x=240), shore (x=255), alt (x=270)
-edgeDefs.push({ id: 'solar-batt', path: ortho([[50, 90],  [15, 90],  [15, 408], [240, 408], [240, 420]]), color: '#ca8a04' });
-edgeDefs.push({ id: 'shore-batt', path: ortho([[50, 206], [25, 206], [25, 398], [255, 398], [255, 420]]), color: '#16a34a' });
-edgeDefs.push({ id: 'alt-batt',   path: ortho([[50, 322], [35, 322], [35, 388], [270, 388], [270, 420]]), color: '#2563eb' });
+// Source → Battery (left channel → down → horizontal → battery top at y=248)
+edgeDefs.push({ id: 'solar-batt', path: ortho([[50, 56],  [10, 56],  [10, 236], [254, 236], [254, 248]]), color: '#ca8a04' });
+edgeDefs.push({ id: 'shore-batt', path: ortho([[50, 106], [20, 106], [20, 228], [262, 228], [262, 248]]), color: '#16a34a' });
+edgeDefs.push({ id: 'alt-batt',   path: ortho([[50, 156], [30, 156], [30, 220], [270, 220], [270, 248]]), color: '#2563eb' });
 
-// Battery → Hub (straight vertical)
-edgeDefs.push({ id: 'batt-hub', path: ortho([[280, 420], [280, 248]]), color: '#ec4899' });
+// Battery → Hub (straight vertical). Hub bottom = CY+R = 131.
+edgeDefs.push({ id: 'batt-hub', path: ortho([[280, 248], [280, 131]]), color: '#ec4899' });
 
-// Hub → Consumers (12V exits hub top vertically, Inv exits hub bottom vertically;
-// offset x=295 to avoid battery line at x=280; A/C+24V exit hub right)
-edgeDefs.push({ id: 'hub-12v',      path: ortho([[295, 164], [295, 101], [420, 101]]), color: '#4f46e5' });
-edgeDefs.push({ id: 'hub-ac',       path: ortho([[322, 200], [365, 200], [365, 171], [420, 171]]), color: '#0891b2' });
-edgeDefs.push({ id: 'hub-24v',      path: ortho([[322, 212], [365, 212], [365, 241], [420, 241]]), color: '#2563eb' });
-edgeDefs.push({ id: 'hub-inverter', path: ortho([[295, 248], [295, 311], [420, 311]]), color: '#ea580c' });
+// Hub → Consumers. Hub top=81, bottom=131, right=305.
+// Consumer chip top Y: 12v=38, ac=78, 24v=118, inverter=158. Centers: 52, 92, 132, 172.
+edgeDefs.push({ id: 'hub-12v',      path: ortho([[288, 81],  [288, 52],  [420, 52]]),              color: '#4f46e5' });
+edgeDefs.push({ id: 'hub-ac',       path: ortho([[305, 102], [352, 102], [352, 92],  [420, 92]]),  color: '#0891b2' });
+edgeDefs.push({ id: 'hub-24v',      path: ortho([[305, 110], [354, 110], [354, 132], [420, 132]]), color: '#2563eb' });
+edgeDefs.push({ id: 'hub-inverter', path: ortho([[288, 131], [288, 172], [420, 172]]),              color: '#ea580c' });
 
-// Sub-consumer branches (off parent consumer chip right edges)
-// 12V subs: fan y=60, heater y=96, other12v y=132 (each h=34)
-edgeDefs.push({ id: '12v-fan',      path: ortho([[535, 88],  [545, 88],  [545, 77],  [555, 77]]),  color: '#8b5cf6' });
-edgeDefs.push({ id: '12v-heater',   path: ortho([[535, 101], [545, 101], [545, 113], [555, 113]]), color: '#ef4444' });
-edgeDefs.push({ id: '12v-other12v', path: ortho([[535, 116], [545, 116], [545, 149], [555, 149]]), color: '#6b7280' });
-// 24V subs: bed y=222, other24v y=258 (each h=34)
-edgeDefs.push({ id: '24v-bed',      path: ortho([[535, 234], [545, 234], [545, 239], [555, 239]]), color: '#a855f7' });
-edgeDefs.push({ id: '24v-other24v', path: ortho([[535, 250], [545, 250], [545, 275], [555, 275]]), color: '#6b7280' });
+// Sub-consumer branches. Consumer chip right x=490.
+// Sub chip top Y: fan=30, heater=52, other12v=74, bed=110, other24v=132. Centers: 40,62,84,120,142.
+edgeDefs.push({ id: '12v-fan',      path: ortho([[490, 48],  [525, 48],  [525, 40],  [555, 40]]),  color: '#8b5cf6' });
+edgeDefs.push({ id: '12v-heater',   path: ortho([[490, 52],  [527, 52],  [527, 62],  [555, 62]]),  color: '#ef4444' });
+edgeDefs.push({ id: '12v-other12v', path: ortho([[490, 56],  [530, 56],  [530, 84],  [555, 84]]),  color: '#6b7280' });
+edgeDefs.push({ id: '24v-bed',      path: ortho([[490, 128], [525, 128], [525, 120], [555, 120]]), color: '#a855f7' });
+edgeDefs.push({ id: '24v-other24v', path: ortho([[490, 136], [527, 136], [527, 142], [555, 142]]), color: '#6b7280' });
 
 // ─── Module-level animation stores (persist across unmount/remount) ───
 
@@ -273,22 +272,22 @@ function Chip({ def, val, unit, active, onClick }: {
   return (
     <div style={{ width: CHIP_W, height: CHIP_H, cursor: 'pointer' }} onClick={onClick}>
       <div style={{
-        height: '100%', borderRadius: 12,
-        border: `2px solid ${active ? `${def.color}70` : 'hsl(var(--border))'}`,
-        padding: '6px 10px', display: 'flex', alignItems: 'center', gap: 8,
+        height: '100%', borderRadius: 7,
+        border: `1.5px solid ${active ? `${def.color}70` : 'hsl(var(--border))'}`,
+        padding: '3px 6px', display: 'flex', alignItems: 'center', gap: 5,
         opacity: active ? 1 : 0.65,
-        boxShadow: active ? `0 0 10px ${def.color}20` : 'none',
+        boxShadow: active ? `0 0 6px ${def.color}20` : 'none',
         transition: 'all 0.3s',
       }}>
-        <Icon size={16} style={{ flexShrink: 0, color: active ? def.color : 'hsl(var(--muted-foreground))' }} />
+        <Icon size={10} style={{ flexShrink: 0, color: active ? def.color : 'hsl(var(--muted-foreground))' }} />
         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
           <span style={{
-            fontSize: 10, fontWeight: 500, color: 'hsl(var(--muted-foreground))', lineHeight: 1.2,
+            fontSize: 7, fontWeight: 500, color: 'hsl(var(--muted-foreground))', lineHeight: 1.2,
             opacity: active ? 0.9 : 0.7,
             overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
           }}>{def.label}</span>
           <span style={{
-            fontSize: 14, fontWeight: 700, lineHeight: 1.2,
+            fontSize: 9, fontWeight: 700, lineHeight: 1.2,
             fontVariantNumeric: 'tabular-nums',
             color: active ? def.color : 'hsl(var(--muted-foreground))',
           }}>{val} {unit}</span>
@@ -488,7 +487,7 @@ export function PowerFlow() {
       const dots: SVGCircleElement[] = [];
       for (let i = 0; i < MAX_DOTS; i++) {
         const c = document.createElementNS('http://www.w3.org/2000/svg', 'circle');
-        c.setAttribute('r', '4.5');
+        c.setAttribute('r', '3');
         c.setAttribute('fill', 'none');
         c.setAttribute('opacity', '0');
         svg.appendChild(c);
@@ -556,12 +555,12 @@ export function PowerFlow() {
                   width: HUB_R * 2, height: HUB_R * 2, borderRadius: '50%',
                   display: 'flex', flexDirection: 'column',
                   alignItems: 'center', justifyContent: 'center',
-                  border: `2px solid ${totalHome > threshold ? '#ca8a0460' : 'hsl(var(--border))'}`,
-                  boxShadow: totalHome > threshold ? '0 0 14px #ca8a0420' : 'none',
+                  border: `1.5px solid ${totalHome > threshold ? '#ca8a0460' : 'hsl(var(--border))'}`,
+                  boxShadow: totalHome > threshold ? '0 0 8px #ca8a0420' : 'none',
                   transition: 'border-color 0.3s, box-shadow 0.3s',
                 }}>
-                  <Home size={18} style={{ color: totalHome > threshold ? '#ca8a04' : 'hsl(var(--muted-foreground))' }} />
-                  <span style={{ fontSize: 12, fontWeight: 600, fontVariantNumeric: 'tabular-nums', marginTop: 2, color: 'hsl(var(--foreground))' }}>
+                  <Home size={11} style={{ color: totalHome > threshold ? '#ca8a04' : 'hsl(var(--muted-foreground))' }} />
+                  <span style={{ fontSize: 8, fontWeight: 600, fontVariantNumeric: 'tabular-nums', marginTop: 1, color: 'hsl(var(--foreground))' }}>
                     {fmt(totalHome, decimals)} {unit}
                   </span>
                 </div>
@@ -574,37 +573,37 @@ export function PowerFlow() {
                   onClick={() => open('sensor.olins_van_bms_battery', 'Battery SOC', '%')}
                 >
                   <div style={{
-                    width: BATT_W, height: BATT_H, borderRadius: '12px 12px 0 0',
-                    border: `2px solid ${socColor}60`,
+                    width: BATT_W, height: BATT_H, borderRadius: '8px 8px 0 0',
+                    border: `1.5px solid ${socColor}60`,
                     display: 'flex', flexDirection: 'column',
                     alignItems: 'center', justifyContent: 'center',
-                    boxShadow: `0 0 8px ${socColor}15`,
+                    boxShadow: `0 0 5px ${socColor}15`,
                     transition: 'border-color 0.3s',
                   }}>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                      <BatteryMedium size={16} style={{ color: socColor }} />
-                      <span style={{ fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: socColor }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <BatteryMedium size={10} style={{ color: socColor }} />
+                      <span style={{ fontSize: 9, fontWeight: 700, fontVariantNumeric: 'tabular-nums', color: socColor }}>
                         {fmt(socVal, 0)}%
                       </span>
                     </div>
-                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 2 }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', marginTop: 1 }}>
                       {chg > threshold && (
-                        <span style={{ fontSize: 10, fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: '#16a34a' }}>
+                        <span style={{ fontSize: 7, fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: '#16a34a' }}>
                           ↓ {fmt(chg, decimals)} {unit}
                         </span>
                       )}
                       {dchg > threshold && (
-                        <span style={{ fontSize: 10, fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: '#ea580c' }}>
+                        <span style={{ fontSize: 7, fontWeight: 500, fontVariantNumeric: 'tabular-nums', color: '#ea580c' }}>
                           ↑ {fmt(dchg, decimals)} {unit}
                         </span>
                       )}
                       {chg <= threshold && dchg <= threshold && (
-                        <span style={{ fontSize: 10, color: 'hsl(var(--muted-foreground))', opacity: 0.5 }}>Idle</span>
+                        <span style={{ fontSize: 7, color: 'hsl(var(--muted-foreground))', opacity: 0.5 }}>Idle</span>
                       )}
                     </div>
                     <div style={{
-                      position: 'absolute', bottom: 0, left: 0, height: 3,
-                      borderRadius: '0 0 12px 12px',
+                      position: 'absolute', bottom: 0, left: 0, height: 2,
+                      borderRadius: '0 0 8px 8px',
                       width: `${socVal}%`,
                       backgroundColor: socColor,
                       boxShadow: `0 0 4px ${socColor}40`,
@@ -633,22 +632,22 @@ export function PowerFlow() {
                 const entity = mode === 'amps' ? sc.currentEntity : sc.powerEntity;
                 const active = val > threshold;
                 const Icon = sc.Icon;
-                const yPos = { fan: 60, heater: 96, other12v: 132, bed: 222, other24v: 258 }[sc.id] ?? 0;
+                const yPos = { fan: 30, heater: 52, other12v: 74, bed: 110, other24v: 132 }[sc.id] ?? 0;
                 return (
                   <foreignObject key={sc.id} x={SUB_X} y={yPos} width={SUB_CHIP_W} height={SUB_CHIP_H}>
                     <div style={{ width: SUB_CHIP_W, height: SUB_CHIP_H, cursor: 'pointer' }}
                       onClick={() => open(entity, sc.label, unit)}>
                       <div style={{
-                        height: '100%', borderRadius: 8,
-                        border: `1.5px solid ${active ? `${sc.color}60` : 'hsl(var(--border))'}`,
-                        padding: '2px 5px', display: 'flex', alignItems: 'center', gap: 4,
+                        height: '100%', borderRadius: 5,
+                        border: `1px solid ${active ? `${sc.color}60` : 'hsl(var(--border))'}`,
+                        padding: '1px 4px', display: 'flex', alignItems: 'center', gap: 3,
                         opacity: active ? 1 : 0.65,
                         transition: 'all 0.3s',
                       }}>
-                        <Icon size={11} style={{ flexShrink: 0, color: active ? sc.color : 'hsl(var(--muted-foreground))' }} />
+                        <Icon size={7} style={{ flexShrink: 0, color: active ? sc.color : 'hsl(var(--muted-foreground))' }} />
                         <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-                          <span style={{ fontSize: 8, fontWeight: 500, color: 'hsl(var(--muted-foreground))', lineHeight: 1.1, opacity: active ? 0.9 : 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.label}</span>
-                          <span style={{ fontSize: 10, fontWeight: 700, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums', color: active ? sc.color : 'hsl(var(--muted-foreground))' }}>{fmt(val, decimals)} {unit}</span>
+                          <span style={{ fontSize: 6, fontWeight: 500, color: 'hsl(var(--muted-foreground))', lineHeight: 1.1, opacity: active ? 0.9 : 0.7, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sc.label}</span>
+                          <span style={{ fontSize: 7, fontWeight: 700, lineHeight: 1.1, fontVariantNumeric: 'tabular-nums', color: active ? sc.color : 'hsl(var(--muted-foreground))' }}>{fmt(val, decimals)} {unit}</span>
                         </div>
                       </div>
                     </div>
