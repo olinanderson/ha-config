@@ -29,3 +29,278 @@ DVR proxy listening on port 8766
 [cache] pruned ch3/2026-04-14
 [cache] pruned ch3/2026-04-17
 [cache] pruned ch3/2026-04-16
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_18_23_30_00→2026_04_19_11_38_22 speed=1x (sub-stream, DVR fallback)
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 41650)
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/usr/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/usr/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/usr/lib/python3.12/http/server.py", line 436, in handle
+    self.handle_one_request()
+  File "/usr/lib/python3.12/http/server.py", line 424, in handle_one_request
+    method()
+  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1722, in do_POST
+    proc, source = _start_ffmpeg(channel, rtsp_start, rtsp_end, speed,
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1111, in _start_ffmpeg
+    return subprocess.Popen(
+           ^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/usr/lib/python3.12/subprocess.py", line 1955, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'
+----------------------------------------
+[dvr_proxy] ffmpeg: ch3 RTSP 2026_04_18_23_30_00→2026_04_19_11_38_34 speed=1x (sub-stream, DVR fallback)
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 59242)
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/usr/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/usr/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/usr/lib/python3.12/http/server.py", line 436, in handle
+    self.handle_one_request()
+  File "/usr/lib/python3.12/http/server.py", line 424, in handle_one_request
+    method()
+  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1722, in do_POST
+    proc, source = _start_ffmpeg(channel, rtsp_start, rtsp_end, speed,
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1111, in _start_ffmpeg
+    return subprocess.Popen(
+           ^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/usr/lib/python3.12/subprocess.py", line 1955, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'
+----------------------------------------
+[dvr_proxy] ffmpeg: ch3 RTSP 2026_04_19_07_38_02→2026_04_19_11_38_34 speed=1x (sub-stream, DVR fallback)
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 45280)
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/usr/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/usr/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/usr/lib/python3.12/http/server.py", line 436, in handle
+    self.handle_one_request()
+  File "/usr/lib/python3.12/http/server.py", line 424, in handle_one_request
+    method()
+  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1722, in do_POST
+    proc, source = _start_ffmpeg(channel, rtsp_start, rtsp_end, speed,
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1111, in _start_ffmpeg
+    return subprocess.Popen(
+           ^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/usr/lib/python3.12/subprocess.py", line 1955, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'
+----------------------------------------
+[dvr_proxy] ffmpeg: ch3 RTSP 2026_04_19_07_38_02→2026_04_19_11_38_34 speed=1x (sub-stream, DVR fallback)
+----------------------------------------
+Exception occurred during processing of request from ('127.0.0.1', 45308)
+Traceback (most recent call last):
+  File "/usr/lib/python3.12/socketserver.py", line 697, in process_request_thread
+    self.finish_request(request, client_address)
+  File "/usr/lib/python3.12/socketserver.py", line 362, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "/usr/lib/python3.12/socketserver.py", line 766, in __init__
+    self.handle()
+  File "/usr/lib/python3.12/http/server.py", line 436, in handle
+    self.handle_one_request()
+  File "/usr/lib/python3.12/http/server.py", line 424, in handle_one_request
+    method()
+  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1722, in do_POST
+    proc, source = _start_ffmpeg(channel, rtsp_start, rtsp_end, speed,
+                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1111, in _start_ffmpeg
+    return subprocess.Popen(
+           ^^^^^^^^^^^^^^^^^
+  File "/usr/lib/python3.12/subprocess.py", line 1026, in __init__
+    self._execute_child(args, executable, preexec_fn, close_fds,
+  File "/usr/lib/python3.12/subprocess.py", line 1955, in _execute_child
+    raise child_exception_type(errno_num, err_msg, err_filename)
+FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'
+----------------------------------------
+[cache] ch1: 73 segments to download
+[cache] ch2: 146 segments to download
+[cache] ch3: 146 segments to download
+[cache] ch4: 146 segments to download
+[cache] downloading ch1 2026-04-19 11:30:00 → 2026-04-19 11:56:26
+[cache] done 112 MB in 18s (6.4 MB/s)
+[cache] downloading ch2 2026-04-19 11:30:00 → 2026-04-19 11:56:27
+[cache] done 88 MB in 12s (7.1 MB/s)
+[cache] downloading ch3 2026-04-19 11:30:00 → 2026-04-19 11:56:27
+[cache] done 86 MB in 12s (7.1 MB/s)
+[cache] downloading ch4 2026-04-19 11:30:00 → 2026-04-19 11:56:31
+[cache] done 120 MB in 16s (7.8 MB/s)
+[cache] downloading ch1 2026-04-19 11:00:00 → 2026-04-19 11:30:00
+[cache] done 129 MB in 16s (8.1 MB/s)
+[cache] downloading ch2 2026-04-19 11:30:00 → 2026-04-19 11:56:31
+[cache] done 89 MB in 13s (7.0 MB/s)
+[cache] downloading ch3 2026-04-19 11:30:00 → 2026-04-19 11:56:31
+[cache] done 86 MB in 12s (7.3 MB/s)
+[cache] downloading ch1 2026-04-19 10:30:00 → 2026-04-19 11:00:00
+[cache] done 127 MB in 16s (7.9 MB/s)
+[cache] downloading ch2 2026-04-19 11:00:00 → 2026-04-19 11:30:00
+[cache] done 102 MB in 14s (7.3 MB/s)
+[cache] downloading ch3 2026-04-19 11:00:00 → 2026-04-19 11:30:00
+[cache] done 95 MB in 12s (7.7 MB/s)
+[cache] downloading ch4 2026-04-19 11:00:00 → 2026-04-19 11:30:00
+[cache] done 135 MB in 19s (7.1 MB/s)
+[cache] downloading ch1 2026-04-19 10:00:00 → 2026-04-19 10:30:00
+[cache] done 128 MB in 16s (8.0 MB/s)
+[cache] downloading ch1 2026-04-19 09:30:00 → 2026-04-19 10:00:00
+[cache] done 128 MB in 17s (7.6 MB/s)
+[cache] downloading ch2 2026-04-19 10:30:00 → 2026-04-19 11:00:00
+[cache] done 102 MB in 13s (7.7 MB/s)
+[cache] downloading ch3 2026-04-19 10:30:00 → 2026-04-19 11:00:00
+[cache] done 93 MB in 13s (7.3 MB/s)
+[cache] downloading ch4 2026-04-19 10:30:00 → 2026-04-19 11:00:00
+[cache] done 134 MB in 18s (7.7 MB/s)
+[cache] downloading ch1 2026-04-19 09:00:00 → 2026-04-19 09:30:00
+[cache] done 125 MB in 18s (7.1 MB/s)
+[cache] downloading ch1 2026-04-19 08:30:00 → 2026-04-19 09:00:00
+[cache] done 110 MB in 14s (7.7 MB/s)
+[cache] downloading ch2 2026-04-19 10:00:00 → 2026-04-19 10:30:00
+[cache] done 99 MB in 14s (7.1 MB/s)
+[cache] downloading ch3 2026-04-19 10:00:00 → 2026-04-19 10:30:00
+[cache] done 91 MB in 12s (7.4 MB/s)
+[cache] downloading ch4 2026-04-19 10:00:00 → 2026-04-19 10:30:00
+[cache] done 135 MB in 18s (7.6 MB/s)
+[cache] downloading ch1 2026-04-19 08:00:00 → 2026-04-19 08:30:00
+[cache] done 97 MB in 13s (7.4 MB/s)
+[cache] downloading ch1 2026-04-19 07:30:00 → 2026-04-19 08:00:00
+[cache] done 114 MB in 16s (7.1 MB/s)
+[cache] downloading ch2 2026-04-19 09:30:00 → 2026-04-19 10:00:00
+[cache] done 98 MB in 13s (7.6 MB/s)
+[cache] downloading ch3 2026-04-19 09:30:00 → 2026-04-19 10:00:00
+[cache] done 90 MB in 13s (7.1 MB/s)
+[cache] downloading ch4 2026-04-19 09:30:00 → 2026-04-19 10:00:00
+[cache] done 136 MB in 19s (7.0 MB/s)
+[cache] downloading ch1 2026-04-19 07:00:00 → 2026-04-19 07:30:00
+[cache] done 120 MB in 15s (7.9 MB/s)
+[cache] downloading ch1 2026-04-19 06:30:00 → 2026-04-19 07:00:00
+[cache] done 133 MB in 17s (7.8 MB/s)
+[cache] downloading ch2 2026-04-19 09:00:00 → 2026-04-19 09:30:00
+[cache] done 101 MB in 14s (7.0 MB/s)
+[cache] downloading ch3 2026-04-19 09:00:00 → 2026-04-19 09:30:00
+[cache] done 91 MB in 12s (7.3 MB/s)
+[cache] downloading ch4 2026-04-19 09:00:00 → 2026-04-19 09:30:00
+[cache] done 138 MB in 17s (8.2 MB/s)
+[cache] downloading ch1 2026-04-19 06:00:00 → 2026-04-19 06:30:00
+[cache] done 361 MB in 41s (8.7 MB/s)
+[cache] downloading ch1 2026-04-19 05:30:00 → 2026-04-19 06:00:00
+[cache] done 1948 MB in 209s (9.3 MB/s)
+[cache] downloading ch2 2026-04-19 08:30:00 → 2026-04-19 09:00:00
+[cache] done 118 MB in 15s (7.7 MB/s)
+[cache] downloading ch3 2026-04-19 08:30:00 → 2026-04-19 09:00:00
+[cache] done 89 MB in 12s (7.5 MB/s)
+[cache] downloading ch4 2026-04-19 08:30:00 → 2026-04-19 09:00:00
+[cache] done 131 MB in 18s (7.2 MB/s)
+[cache] downloading ch1 2026-04-19 05:00:00 → 2026-04-19 05:30:00
+[cache] done 1822 MB in 199s (9.1 MB/s)
+[cache] downloading ch1 2026-04-19 04:30:00 → 2026-04-19 05:00:00
+[cache] done 1810 MB in 208s (8.7 MB/s)
+[cache] downloading ch2 2026-04-19 08:00:00 → 2026-04-19 08:30:00
+[cache] done 111 MB in 15s (7.6 MB/s)
+[cache] downloading ch3 2026-04-19 08:00:00 → 2026-04-19 08:30:00
+[cache] done 91 MB in 12s (7.4 MB/s)
+[cache] downloading ch4 2026-04-19 08:00:00 → 2026-04-19 08:30:00
+[cache] done 133 MB in 17s (7.7 MB/s)
+[cache] downloading ch1 2026-04-19 04:00:00 → 2026-04-19 04:30:00
+[cache] done 1809 MB in 197s (9.2 MB/s)
+[cache] downloading ch1 2026-04-19 03:30:00 → 2026-04-19 04:00:00
+[cache] done 1814 MB in 187s (9.7 MB/s)
+[cache] downloading ch2 2026-04-19 07:30:00 → 2026-04-19 08:00:00
+[cache] done 113 MB in 16s (6.9 MB/s)
+[cache] downloading ch3 2026-04-19 07:30:00 → 2026-04-19 08:00:00
+[cache] done 94 MB in 12s (7.6 MB/s)
+[cache] downloading ch4 2026-04-19 07:30:00 → 2026-04-19 08:00:00
+[cache] done 134 MB in 18s (7.6 MB/s)
+[cache] downloading ch1 2026-04-19 03:00:00 → 2026-04-19 03:30:00
+[cache] done 1810 MB in 196s (9.2 MB/s)
+[cache] downloading ch1 2026-04-19 02:30:00 → 2026-04-19 03:00:00
+[cache] done 1809 MB in 195s (9.3 MB/s)
+[cache] downloading ch2 2026-04-19 07:00:00 → 2026-04-19 07:30:00
+[cache] done 117 MB in 15s (7.9 MB/s)
+[cache] downloading ch3 2026-04-19 07:00:00 → 2026-04-19 07:30:00
+[cache] done 96 MB in 13s (7.4 MB/s)
+[cache] downloading ch4 2026-04-19 07:00:00 → 2026-04-19 07:30:00
+[cache] done 134 MB in 19s (6.9 MB/s)
+[cache] downloading ch1 2026-04-19 02:00:00 → 2026-04-19 02:30:00
+[cache] done 1809 MB in 193s (9.4 MB/s)
+[cache] downloading ch1 2026-04-19 01:30:00 → 2026-04-19 02:00:00
+[cache] done 1808 MB in 182s (9.9 MB/s)
+[cache] downloading ch2 2026-04-19 06:30:00 → 2026-04-19 07:00:00
+[cache] done 132 MB in 18s (7.6 MB/s)
+[cache] downloading ch3 2026-04-19 06:30:00 → 2026-04-19 07:00:00
+[cache] done 106 MB in 14s (7.8 MB/s)
+[cache] downloading ch4 2026-04-19 06:30:00 → 2026-04-19 07:00:00
+[cache] done 140 MB in 19s (7.3 MB/s)
+[cache] downloading ch1 2026-04-19 01:00:00 → 2026-04-19 01:30:00
+[cache] done 1810 MB in 186s (9.8 MB/s)
+[cache] downloading ch1 2026-04-19 00:30:00 → 2026-04-19 01:00:00
+[cache] done 1813 MB in 177s (10.2 MB/s)
+[cache] downloading ch2 2026-04-19 06:00:00 → 2026-04-19 06:30:00
+[cache] done 497 MB in 55s (9.0 MB/s)
+[cache] downloading ch3 2026-04-19 06:00:00 → 2026-04-19 06:30:00
+[cache] done 364 MB in 44s (8.2 MB/s)
+[cache] downloading ch4 2026-04-19 06:00:00 → 2026-04-19 06:30:00
+[cache] done 733 MB in 82s (8.9 MB/s)
+[cache] downloading ch1 2026-04-19 00:00:00 → 2026-04-19 00:30:00
+[cache] done 1815 MB in 190s (9.5 MB/s)
+[cache] downloading ch1 2026-04-18 23:30:00 → 2026-04-19 00:00:00
+[cache] done 1820 MB in 189s (9.7 MB/s)
+[cache] downloading ch2 2026-04-19 05:30:00 → 2026-04-19 06:00:00
+[cache] done 1421 MB in 147s (9.7 MB/s)
+[cache] downloading ch3 2026-04-19 05:30:00 → 2026-04-19 06:00:00
+[cache] done 985 MB in 104s (9.5 MB/s)
+[cache] downloading ch4 2026-04-19 05:30:00 → 2026-04-19 06:00:00
+[cache] done 1386 MB in 152s (9.1 MB/s)
+[cache] downloading ch1 2026-04-18 23:00:00 → 2026-04-18 23:30:00
+[cache] done 1822 MB in 184s (9.9 MB/s)
+[cache] downloading ch1 2026-04-18 22:30:00 → 2026-04-18 23:00:00
+[cache] done 1857 MB in 193s (9.6 MB/s)
+[cache] downloading ch2 2026-04-19 05:00:00 → 2026-04-19 05:30:00
+[cache] done 982 MB in 97s (10.1 MB/s)
+[cache] downloading ch3 2026-04-19 05:00:00 → 2026-04-19 05:30:00
+[cache] done 627 MB in 69s (9.1 MB/s)
+[cache] downloading ch4 2026-04-19 05:00:00 → 2026-04-19 05:30:00
+[cache] done 366 MB in 42s (8.6 MB/s)
+[cache] downloading ch1 2026-04-18 22:00:00 → 2026-04-18 22:30:00
+[cache] done 1917 MB in 200s (9.6 MB/s)
+[cache] downloading ch1 2026-04-18 21:30:00 → 2026-04-18 22:00:00
+[cache] done 1955 MB in 195s (10.0 MB/s)
+[cache] downloading ch2 2026-04-19 04:30:00 → 2026-04-19 05:00:00
+[cache] done 945 MB in 97s (9.8 MB/s)
+[cache] downloading ch3 2026-04-19 04:30:00 → 2026-04-19 05:00:00
+[cache] done 607 MB in 67s (9.0 MB/s)
+[cache] downloading ch4 2026-04-19 04:30:00 → 2026-04-19 05:00:00
+[cache] done 392 MB in 45s (8.8 MB/s)
+[cache] downloading ch1 2026-04-18 21:00:00 → 2026-04-18 21:30:00
+[cache] done 1463 MB in 158s (9.2 MB/s)
+[cache] downloading ch1 2026-04-18 20:30:00 → 2026-04-18 21:00:00
+[cache] done 183 MB in 21s (8.6 MB/s)
+[cache] downloading ch2 2026-04-19 04:00:00 → 2026-04-19 04:30:00
+[cache] done 941 MB in 106s (8.9 MB/s)
+[cache] downloading ch3 2026-04-19 04:00:00 → 2026-04-19 04:30:00
+[cache] done 606 MB in 67s (9.1 MB/s)
+[cache] downloading ch4 2026-04-19 04:00:00 → 2026-04-19 04:30:00
+[cache] done 394 MB in 46s (8.5 MB/s)
+[cache] downloading ch1 2026-04-18 20:00:00 → 2026-04-18 20:30:00
+[cache] done 193 MB in 23s (8.4 MB/s)
+[cache] downloading ch1 2026-04-18 19:30:00 → 2026-04-18 20:00:00
+[cache] done 127 MB in 17s (7.6 MB/s)
+[cache] downloading ch2 2026-04-19 03:30:00 → 2026-04-19 04:00:00

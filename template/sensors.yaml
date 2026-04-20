@@ -266,10 +266,10 @@
       unit_of_measurement: "psi"
       icon: mdi:car-tire-alert
       state: >
-        {% set fl = (states('sensor.192_168_10_90_tyre_p_fl') | float(0)) * 0.0725190 %}
-        {% set fr = (states('sensor.192_168_10_90_tyre_p_fr') | float(0)) * 0.0725190 %}
-        {% set rl = (states('sensor.192_168_10_90_tyre_p_rl') | float(0)) * 0.0725190 %}
-        {% set rr = (states('sensor.192_168_10_90_tyre_p_rr') | float(0)) * 0.0725190 %}
+        {% set fl = states('sensor.192_168_10_90_tyre_p_fl') | float(0) %}
+        {% set fr = states('sensor.192_168_10_90_tyre_p_fr') | float(0) %}
+        {% set rl = states('sensor.192_168_10_90_tyre_p_rl') | float(0) %}
+        {% set rr = states('sensor.192_168_10_90_tyre_p_rr') | float(0) %}
         {% set pressures = [fl, fr, rl, rr] | select('gt', 0) | reject('gt', 200) | list %}
         {{ pressures | min | round(1) if pressures | length > 0 else 0 }}
 

@@ -40,13 +40,8 @@
       state: >
         {% set rpm_entity = states.sensor['192_168_10_90_0c_enginerpm'] %}
         {% set rpm_state = rpm_entity.state if rpm_entity else 'unavailable' %}
-        {% set ecu_connected = is_state('binary_sensor.meatpi_pro_ecu_status', 'on') %}
-        {% if not ecu_connected %}
+        {% if rpm_state in ['unknown', 'unavailable'] %}
           false
-        {% elif rpm_state in ['unknown', 'unavailable'] %}
-          {# RPM unavailable but ECU connected — fall back to alternator voltage #}
-          {% set ecu_v = states('sensor.192_168_10_90_42_controlmodulevolt') | float(0) %}
-          {{ ecu_v > 13.2 }}
         {% else %}
           {% set age = (now() - rpm_entity.last_updated).total_seconds() %}
           {{ rpm_state | float(0) > 0 and age < 120 }}
@@ -73,18 +68,18 @@
       device_class: problem
       icon: mdi:car-tire-alert
       state: >
-        {% set fl = (states('sensor.192_168_10_90_tyre_p_fl') | float(0)) * 0.0725190 %}
-        {% set fr = (states('sensor.192_168_10_90_tyre_p_fr') | float(0)) * 0.0725190 %}
-        {% set rl = (states('sensor.192_168_10_90_tyre_p_rl') | float(0)) * 0.0725190 %}
-        {% set rr = (states('sensor.192_168_10_90_tyre_p_rr') | float(0)) * 0.0725190 %}
+        {% set fl = states('sensor.192_168_10_90_tyre_p_fl') | float(0) %}
+        {% set fr = states('sensor.192_168_10_90_tyre_p_fr') | float(0) %}
+        {% set rl = states('sensor.192_168_10_90_tyre_p_rl') | float(0) %}
+        {% set rr = states('sensor.192_168_10_90_tyre_p_rr') | float(0) %}
         {% set threshold = 35 %}
         {% set pressures = [fl, fr, rl, rr] | select('gt', 0) | reject('gt', 200) | list %}
         {{ pressures | select('lt', threshold) | list | length > 0 if pressures | length > 0 else false }}
       attributes:
-        fl_psi: "{{ ((states('sensor.192_168_10_90_tyre_p_fl') | float(0)) * 0.0725190) | round(1) }}"
-        fr_psi: "{{ ((states('sensor.192_168_10_90_tyre_p_fr') | float(0)) * 0.0725190) | round(1) }}"
-        rl_psi: "{{ ((states('sensor.192_168_10_90_tyre_p_rl') | float(0)) * 0.0725190) | round(1) }}"
-        rr_psi: "{{ ((states('sensor.192_168_10_90_tyre_p_rr') | float(0)) * 0.0725190) | round(1) }}"
+        fl_psi: "{{ states('sensor.192_168_10_90_tyre_p_fl') | float(0) | round(1) }}"
+        fr_psi: "{{ states('sensor.192_168_10_90_tyre_p_fr') | float(0) | round(1) }}"
+        rl_psi: "{{ states('sensor.192_168_10_90_tyre_p_rl') | float(0) | round(1) }}"
+        rr_psi: "{{ states('sensor.192_168_10_90_tyre_p_rr') | float(0) | round(1) }}"
 
 # ─── Check Engine Light (MIL from PID 0x01) ───
 - binary_sensor:

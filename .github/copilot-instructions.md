@@ -51,7 +51,7 @@ entertainment, and safety subsystems for full-time van life.
 |---|---|---|
 | **Simarine A32 Pro** (ESP32-S3) | Primary controller — switches, sensors, MPPT, tank levels, BME280s, S5140 current sensors, DAC outputs | ESPHome via WiFi |
 | **AG Pro** (ESPHome) | Roof fan (speed, direction, lid), additional controls | ESPHome via WiFi |
-| **WiCAN Pro** (v4.48) | Vehicle OBD2 data — speed, fuel, RPM, coolant, tire pressure, gear, trans temp, etc. | HACS `ha-wican` integration (HTTP webhooks, IP 192.168.10.90) |
+| **WiCAN Pro** (v4.48) | Vehicle OBD2 data — speed, fuel, RPM, coolant, tire pressure, gear, trans temp, etc. | MQTT (native WiCAN MQTT mode → core-mosquitto, IP 192.168.10.90) |
 | **Starlink** | Internet + GPS location tracking | Native integration + MQTT filtered tracker |
 | **Apollo MSR-2** | mmWave radar presence/occupancy sensor | ESPHome |
 | **Shelly EM** | AC power monitoring (inverter output voltage, power) | Native integration (ping-based) |
@@ -444,11 +444,45 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 | `button.a32_pro_inverter_on_off_toggle` | Inverter toggle (momentary) |
 | `binary_sensor.192_168_10_174` | Shelly EM ping → inverter AC is live |
 
-### Vehicle / OBD — WiCAN Pro Native Integration (`ha-wican` HACS)
+### Vehicle / OBD — WiCAN Pro via MQTT
 
-The WiCAN Pro connects via **HTTP webhooks** (not MQTT). All entities are created by the
-`ha-wican` HACS integration (jay-oswald/ha-wican v1.0.0). Entity IDs follow the pattern
-`sensor.192_168_10_90_*` (derived from the device IP).
+The WiCAN Pro connects via **MQTT** to `core-mosquitto` (192.168.10.173:1883). Entities are
+created by **MQTT discovery** (retained configs under `homeassistant/sensor/wican_pro/`).
+Entity IDs follow the pattern `sensor.192_168_10_90_*` (preserved from the old ha-wican
+integration for backward compatibility). The old `ha-wican` HACS integration has been removed.
+
+**WiCAN MQTT topics**: Each PID publishes to its own topic (e.g. `wican/EngineRPM`,
+`wican/GEAR`, `wican/TYRE_P_FL`). Payloads are JSON with a single key-value pair
+(e.g. `{"0C-EngineRPM": 1826}`). The discovery `value_template` is
+`{{ value_json.values() | first }}`.
+
+> **⚠ WiCAN CONFIG SAFETY**: The WiCAN `/store_config` HTTP endpoint **replaces ALL
+> settings at once** — including WiFi SSID/password/mode. If you POST only MQTT fields,
+> it **wipes WiFi settings** and the device reverts to AP-only mode, dropping off the
+> network. **NEVER send a partial config.** Always `GET /get_config` first, modify only
+> the needed fields in the full JSON, then POST the complete config back. This caused an
+> outage on 2026-04-19.
+>
+> **Note**: `/get_config` and `/api/get_config` both return 404 on firmware v4.48. The
+> only way to read or change config is via the WiCAN web UI at `http://192.168.10.90`.
+> Use browser automation (Playwright) for scripted changes.
+>
+> **Required fields in any `/store_config` POST** (must ALL be present):
+> - `wifi_mode`: `"STA+AP"` — Station + AP mode. Never set to `"AP"` alone or device drops off network.
+> - `ssid`: `"Olins Van 2.4G"` — WiFi SSID
+> - `password`: `"OlinsVanWifiIsFast"` — WiFi password
+> - `wifi_security`: `"WPA2"` — security type
+> - `ap_ssid`: `"WiCAN_48ca43343365"` — AP SSID
+> - `ap_password`: `"wican1234"` — AP password
+> - `mqtt_en`: `"enable"`
+> - `mqtt_url`: `"mqtt://192.168.10.173"` — core-mosquitto broker IP
+> - `mqtt_port`: `1883`
+> - `mqtt_user`: `"mqtt_user"`
+> - `mqtt_pass`: `"mqtt_password"`
+> - `mqtt_rx_en`: `"disable"` — raw incoming CAN frames; keep disabled or broker floods
+> - `mqtt_tx_en`: `"disable"`
+> - `webhook_en`: `"disable"` — old ha-wican webhook mode; keep disabled
+> - `protocol`: `"AutoPID"` — enables OBD PID polling mode
 
 **Standard OBD PIDs (Mode 01):**
 | Entity | PID | Description |
@@ -505,15 +539,10 @@ The WiCAN Pro connects via **HTTP webhooks** (not MQTT). All entities are create
 - Ford Mode 22 IPW Bank 2 (`22F44B`) — no positive response (V6 uses shared injection timing)
 - Ford Mode 22 Barometric Pressure (`22F402`) — no positive response
 
-**WiCAN device entities:**
+**WiCAN device entities (MQTT discovery):**
 | Entity | Description |
 |---|---|
-| `binary_sensor.meatpi_pro_ecu_status` | WiCAN connected to ECU (on/off) |
-| `binary_sensor.meatpi_pro_ble_status` | WiCAN BLE status |
-| `sensor.meatpi_pro_batt_voltage` | WiCAN battery voltage (V) |
-| `sensor.meatpi_pro_uptime` | WiCAN uptime |
-| `device_tracker.meatpi_pro_location` | WiCAN GPS (if available) |
-| `update.meatpi_pro_firmware` | Firmware update entity |
+| `binary_sensor.meatpi_pro_ecu_status` | WiCAN connected to ECU — based on `wican/status` topic; **unreliable** (reports "offline" even while publishing PID data). Use RPM freshness instead. |
 
 ### Vehicle Computed Sensors (templates)
 | Entity | Description |
@@ -838,8 +867,15 @@ Used in `old_home.yaml`:
 - **Fuel level** is noisy from OBD — use `sensor.stable_fuel_level` or `sensor.wican_fuel_5_min_mean`.
 - **Roof fan direction**: `forward` = exhaust, `reverse` = intake.
 - **Scenes are all dynamic** — `scenes.yaml` is empty. They're created via `scene.create` in scripts/automations.
-- **Tire pressure raw kPa values from WiCAN are ~2× actual.** All template sensors and
-  dashboards use `* 0.0725190` (= `0.145038 / 2`) for kPa→psi conversion.
+- **Tire pressure raw kPa values from WiCAN are ~2× actual.** The MQTT discovery `value_template`
+  divides by 2 (`/ 2`), so entities like `sensor.192_168_10_90_tyre_p_fl` already report in psi.
+  **Do NOT apply `* 0.0725190`** in templates or Van.tsx — that was the old wrong conversion.
+- **`binary_sensor.engine_is_running`** uses RPM freshness only (RPM > 0 and last_updated < 120s).
+  Do NOT gate it on `binary_sensor.meatpi_pro_ecu_status` — that entity uses the WiCAN MQTT LWT
+  topic which is unreliable (stays `on` even when ECU has no response).
+- **WiCAN MQTT discovery configs** have no `expire_after` — entities keep last known value forever.
+  The ECU status entity (`binary_sensor.meatpi_pro_ecu_status`) also has no `expire_after`; it
+  reflects the retained `wican/status` LWT (`online`/`offline`).
 - **Fuel consumption uses speed-density estimation** — via Ford Mode 22 MAP PID (`22F404`)
   combined with RPM + IAT. The formula uses a volumetric efficiency (VE) correction factor
   (`input_number.fuel_ve_correction`, default 0.55) that should be calibrated against
