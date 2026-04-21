@@ -57,6 +57,7 @@ function BlowerModeCard() {
 }
 
 export default function Climate() {
+
   return (
     <PageContainer title="Climate & Heating">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
@@ -117,7 +118,7 @@ export default function Climate() {
           />
         </div>
 
-        {/* Column 3: Fan + Controls + Air Fryer */}
+        {/* Column 3: Fan + Controls + Air Fryer + Wind + Radar */}
         <div className="space-y-4">
           <FanControl />
           <BlowerModeCard />

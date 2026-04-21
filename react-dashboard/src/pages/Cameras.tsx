@@ -16,12 +16,13 @@ import {
   Pause,
   Undo2,
   Redo2,
-  Scissors,
   Download,
   Trash2,
   Film,
   X,
   Check,
+  ScissorsLineDashed,
+  Save,
 } from 'lucide-react';
 
 const CAMERAS = [
@@ -950,11 +951,9 @@ function getPlaybackStreamUrl(): string {
  * - Trim only on QuotaExceededError or every 15s (minimize trim-related stalls)
  */
 function PlaybackFeed({
-  speed = 1,
   paused = false,
   onError,
 }: {
-  speed?: number;
   paused?: boolean;
   onError?: () => void;
 }) {
@@ -962,7 +961,6 @@ function PlaybackFeed({
   const [state, setState] = useState<StreamState>('connecting');
   const onErrorRef = useRef(onError);
   onErrorRef.current = onError;
-  const rateHintRef = useRef(speed);
 
   // Pause/resume
   useEffect(() => {
@@ -975,14 +973,6 @@ function PlaybackFeed({
     }
   }, [paused]);
 
-  // Set initial playbackRate. The buffer monitor (inside the MSE effect)
-  // adaptively adjusts this to prevent buffer underrun at >1x speeds.
-  useEffect(() => {
-    const video = videoRef.current;
-    if (!video) return;
-    video.playbackRate = rateHintRef.current;
-  }, [speed]);
-
   useEffect(() => {
     const video = videoRef.current;
     if (!video || !MSEClass) return;
@@ -992,7 +982,6 @@ function PlaybackFeed({
     let reader: ReadableStreamDefaultReader<Uint8Array> | null = null;
     let trimInterval: ReturnType<typeof setInterval> | undefined;
     let stallWatchdog: ReturnType<typeof setInterval> | undefined;
-    let bufferMonitor: ReturnType<typeof setInterval> | undefined;
     const abortCtrl = new AbortController();
 
     async function start() {
@@ -1011,15 +1000,6 @@ function PlaybackFeed({
           onErrorRef.current?.();
           return;
         }
-
-        // Server tells us the effective playback rate via X-Rate-Hint header.
-        // When FMP4Rewriter is active (go2rtc + Scale path), rate hint = 1
-        // because the DVR Scale already provides fast-forward speed and the
-        // rewriter adjusts fragment durations accordingly.  For the ffmpeg
-        // cache path, rate hint = speed (browser must play at Nx to achieve
-        // the desired speed).  Falls back to speed if header is absent.
-        const rateHint = parseFloat(resp.headers.get('X-Rate-Hint') || '') || speed;
-        rateHintRef.current = rateHint;
 
         // Determine MSE codec — HA go2rtc proxy may strip codecs from Content-Type
         let mimeType = '';
@@ -1204,34 +1184,6 @@ function PlaybackFeed({
           lastTime = ct;
         }, 3000);
 
-        // --- Buffer monitor for accelerated playback ---
-        // Proportional controller: smoothly adjusts playbackRate based on
-        // buffer health.  Uses rateHint (1.0 for go2rtc Scale path, speed
-        // for ffmpeg cache) as the center point.  With rate hint = 1.0, a
-        // 2-second buffer gives 2 WALL-SECONDS of headroom (vs 0.13s when
-        // rate was speed=16) — virtually eliminates stall-burst cycling.
-        if (speed > 1) {
-          const targetRate = rateHintRef.current;
-          let smoothRate = targetRate;
-          bufferMonitor = setInterval(() => {
-            if (cancelled || !video || video.paused) return;
-            if (sb.buffered.length === 0 || ms.readyState !== 'open') return;
-            const ahead = sb.buffered.end(sb.buffered.length - 1) - video.currentTime;
-            const TARGET_AHEAD = 2.0;  // media-seconds target buffer
-            const error = ahead - TARGET_AHEAD;
-            // Gain: gentle adjustments around the target rate
-            const rawRate = targetRate + error * 0.15;
-            // Clamp: floor at targetRate×0.5, cap at max(targetRate×2, speed/2)
-            // to handle DVR delivery rates that outpace the base target rate.
-            const maxRate = Math.max(targetRate * 2.0, speed / 2);
-            const clampedRate = Math.max(targetRate * 0.5, Math.min(maxRate, rawRate));
-            // EMA smoothing to avoid jitter
-            smoothRate = smoothRate * 0.7 + clampedRate * 0.3;
-            if (Math.abs(video.playbackRate - smoothRate) > 0.02) {
-              video.playbackRate = Math.round(smoothRate * 100) / 100;
-            }
-          }, 500);
-        }
 
         // Pump fetch stream → SourceBuffer (with initial buffering)
         let started = false;
@@ -1247,9 +1199,8 @@ function PlaybackFeed({
         //   speed=1 → pause@8,  resume@4  (8/4 wall-seconds)
         //   speed=2 → pause@16, resume@8  (8/4 wall-seconds)
         //   speed=8 → pause@64, resume@32 (8/4 wall-seconds)
-        const effectiveRate = rateHintRef.current;
-        const FC_PAUSE_AHEAD = 8 * Math.max(1, effectiveRate);   // ~8 wall-seconds
-        const FC_RESUME_AHEAD = 4 * Math.max(1, effectiveRate);  // ~4 wall-seconds
+        const FC_PAUSE_AHEAD = 8;   // ~8 seconds ahead
+        const FC_RESUME_AHEAD = 4;  // ~4 seconds ahead
 
         while (!cancelled) {
           // Flow control check — wait if buffer is too far ahead
@@ -1297,12 +1248,11 @@ function PlaybackFeed({
                 const bufStart = sb.buffered.start(0);
                 // Seek slightly past bufStart to land within the first keyframe.
                 const seekOffset = 0.1;
-                console.log(`[playback] Starting: bufStart=${bufStart.toFixed(1)}s, ${initialBytes} bytes, speed=${speed}x`);
+                console.log(`[playback] Starting: bufStart=${bufStart.toFixed(1)}s, ${initialBytes} bytes`);
                 video.currentTime = bufStart + seekOffset;
               } else {
-                console.log(`[playback] Starting (no buffer yet): ${initialBytes} bytes, speed=${speed}x — watchdog will seek`);
+                console.log(`[playback] Starting (no buffer yet): ${initialBytes} bytes — watchdog will seek`);
               }
-              video.playbackRate = rateHintRef.current;
               video.play().catch(() => {});
             }
           }
@@ -1377,7 +1327,6 @@ function PlaybackFeed({
       abortCtrl.abort();
       clearInterval(trimInterval);
       clearInterval(stallWatchdog);
-      clearInterval(bufferMonitor);
       video.removeEventListener('playing', onPlaying);
       video.removeEventListener('error', onVideoError);
       reader?.cancel().catch(() => {});
@@ -1423,80 +1372,397 @@ function TimelineBar({
   date,
   selectedTime,
   onSelectTime,
+  clipMode = false,
+  clipStart = '',
+  clipEnd = '',
+  onClipStartChange,
+  onClipEndChange,
+  onDragTimeChange,
 }: {
   segments: TimelineSegment[];
   date: string;
   selectedTime: string;
   onSelectTime: (time: string) => void;
+  clipMode?: boolean;
+  clipStart?: string;
+  clipEnd?: string;
+  onClipStartChange?: (time: string) => void;
+  onClipEndChange?: (time: string) => void;
+  onDragTimeChange?: (time: string | null) => void;
 }) {
   const barRef = useRef<HTMLDivElement>(null);
   const HOURS = 24;
   const dayStart = new Date(`${date}T00:00:00`).getTime();
   const dayEnd = dayStart + HOURS * 3600000;
 
+  // Zoom state (active in clip mode, scroll wheel to zoom)
+  const [viewStart, setViewStart] = useState(dayStart);
+  const [viewEnd, setViewEnd] = useState(dayEnd);
+
+  // Reset zoom when date changes or clip mode is entered
+  useEffect(() => {
+    setViewStart(dayStart);
+    setViewEnd(dayEnd);
+  }, [dayStart, dayEnd]);
+
+  // When clip mode activates, zoom timeline to show the clip window with padding
+  useEffect(() => {
+    if (!clipMode || !clipStart || !clipEnd) return;
+    const cs = new Date(clipStart.replace(' ', 'T')).getTime();
+    const ce = new Date(clipEnd.replace(' ', 'T')).getTime();
+    const range = ce - cs;
+    const pad = range * 0.5; // 50% padding each side
+    const newStart = Math.max(dayStart, cs - pad);
+    const newEnd = Math.min(dayEnd, ce + pad);
+    setViewStart(newStart);
+    setViewEnd(newEnd);
+  }, [clipMode]); // only fire when clip mode first activates
+
   const toPercent = (time: string) => {
     const t = new Date(time.replace(' ', 'T')).getTime();
-    return ((t - dayStart) / (dayEnd - dayStart)) * 100;
+    return ((t - viewStart) / (viewEnd - viewStart)) * 100;
   };
 
   const selectedPercent = (() => {
-    if (!selectedTime) return 0;
+    if (!selectedTime) return -1;
     const t = new Date(selectedTime.replace(' ', 'T')).getTime();
-    return Math.max(0, Math.min(100, ((t - dayStart) / (dayEnd - dayStart)) * 100));
+    return ((t - viewStart) / (viewEnd - viewStart)) * 100;
   })();
 
-  const handleClick = (e: React.MouseEvent) => {
-    if (!barRef.current) return;
-    const rect = barRef.current.getBoundingClientRect();
-    const pct = (e.clientX - rect.left) / rect.width;
-    const ts = dayStart + pct * (dayEnd - dayStart);
+  const [dragTime, setDragTimeLocal] = useState<string | null>(null);
+  const [dragPct, setDragPct] = useState(0);
+  const isDraggingRef = useRef(false);
+
+  // Pan state — used when zoomed in to drag the view window
+  const isPanningRef = useRef(false);
+  const panStartXRef = useRef(0);
+  const panStartViewRef = useRef({ start: dayStart, end: dayEnd });
+  const pointerDownXRef = useRef(0);
+  const pointerDownTimeRef = useRef(0);
+
+  const setDragTime = useCallback((time: string | null) => {
+    setDragTimeLocal(time);
+    onDragTimeChange?.(time);
+  }, [onDragTimeChange]);
+
+  const pctToTimeStr = useCallback((pct: number) => {
+    const ts = viewStart + Math.max(0, Math.min(1, pct)) * (viewEnd - viewStart);
     const d = new Date(ts);
     const pad = (n: number) => String(n).padStart(2, '0');
-    const timeStr = `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    return `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+  }, [viewStart, viewEnd, date]);
+
+  // Clamp time string to clip range when clip mode is active
+  const clampToClipRange = useCallback((timeStr: string): string => {
+    if (!clipMode || !clipStart || !clipEnd) return timeStr;
+    const t = new Date(timeStr.replace(' ', 'T')).getTime();
+    const cs = new Date(clipStart.replace(' ', 'T')).getTime();
+    const ce = new Date(clipEnd.replace(' ', 'T')).getTime();
+    if (t < cs) return clipStart;
+    if (t > ce) return clipEnd;
+    return timeStr;
+  }, [clipMode, clipStart, clipEnd]);
+
+  // Whether the view is currently zoomed in
+  const isZoomed = viewEnd - viewStart < dayEnd - dayStart - 1000;
+
+  const handlePointerDown = (e: React.PointerEvent) => {
+    if (!barRef.current) return;
+    e.preventDefault();
+    (e.target as HTMLElement).setPointerCapture?.(e.pointerId);
+    pointerDownXRef.current = e.clientX;
+    pointerDownTimeRef.current = Date.now();
+
+    if (isZoomed && !clipMode) {
+      // Start pan mode
+      isPanningRef.current = true;
+      panStartXRef.current = e.clientX;
+      panStartViewRef.current = { start: viewStart, end: viewEnd };
+    } else {
+      // Normal seek drag
+      isDraggingRef.current = true;
+      const rect = barRef.current.getBoundingClientRect();
+      const pct = (e.clientX - rect.left) / rect.width;
+      const timeStr = pctToTimeStr(pct);
+      setDragTime(timeStr);
+      setDragPct(Math.max(0, Math.min(100, pct * 100)));
+    }
+  };
+
+  const handlePointerMove = (e: React.PointerEvent) => {
+    if (!barRef.current) return;
+
+    if (isPanningRef.current) {
+      const rect = barRef.current.getBoundingClientRect();
+      const dx = e.clientX - panStartXRef.current;
+      const range = panStartViewRef.current.end - panStartViewRef.current.start;
+      const shift = -(dx / rect.width) * range;
+      let newStart = panStartViewRef.current.start + shift;
+      let newEnd = panStartViewRef.current.end + shift;
+      if (newStart < dayStart) { newEnd += dayStart - newStart; newStart = dayStart; }
+      if (newEnd > dayEnd) { newStart -= newEnd - dayEnd; newEnd = dayEnd; }
+      setViewStart(Math.max(dayStart, newStart));
+      setViewEnd(Math.min(dayEnd, newEnd));
+      return;
+    }
+
+    if (!isDraggingRef.current) return;
+    const rect = barRef.current.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    const timeStr = pctToTimeStr(pct);
+    setDragTime(timeStr);
+    setDragPct(Math.max(0, Math.min(100, pct * 100)));
+  };
+
+  const handlePointerUp = (e: React.PointerEvent) => {
+    if (!barRef.current) return;
+    const movedPx = Math.abs(e.clientX - pointerDownXRef.current);
+
+    if (isPanningRef.current) {
+      isPanningRef.current = false;
+      // If barely moved, treat as a click-to-seek
+      if (movedPx < 5) {
+        const rect = barRef.current.getBoundingClientRect();
+        const pct = (e.clientX - rect.left) / rect.width;
+        let timeStr = pctToTimeStr(pct);
+        if (clipMode) timeStr = clampToClipRange(timeStr);
+        onSelectTime(timeStr);
+      }
+      return;
+    }
+
+    if (!isDraggingRef.current) return;
+    isDraggingRef.current = false;
+    const rect = barRef.current.getBoundingClientRect();
+    const pct = (e.clientX - rect.left) / rect.width;
+    let timeStr = pctToTimeStr(pct);
+    if (clipMode) timeStr = clampToClipRange(timeStr);
+    setDragTime(null);
     onSelectTime(timeStr);
   };
 
-  // Hour labels
+  const handleClick = (e: React.MouseEvent) => {
+    // Pointer up already handles seek; click only fires for true static taps
+    // that didn't trigger pointer capture (e.g. touch without pointer events).
+    // We suppress it here to avoid double-seeking on pointer-enabled devices.
+    e.stopPropagation();
+  };
+
+  // Scroll wheel zoom (works in both playback and clip mode)
+  const handleWheel = useCallback((e: React.WheelEvent) => {
+    if (!barRef.current) return;
+    e.preventDefault();
+    const rect = barRef.current.getBoundingClientRect();
+    const mouseRatio = (e.clientX - rect.left) / rect.width;
+    const currentRange = viewEnd - viewStart;
+    const MIN_RANGE = 5 * 60 * 1000;
+    const MAX_RANGE = 24 * 3600 * 1000;
+    const zoomFactor = e.deltaY > 0 ? 1.3 : 0.7;
+    let newRange = currentRange * zoomFactor;
+    newRange = Math.max(MIN_RANGE, Math.min(MAX_RANGE, newRange));
+    const mouseTime = viewStart + mouseRatio * currentRange;
+    let newStart = mouseTime - mouseRatio * newRange;
+    let newEnd = mouseTime + (1 - mouseRatio) * newRange;
+    if (newStart < dayStart) { newEnd += (dayStart - newStart); newStart = dayStart; }
+    if (newEnd > dayEnd) { newStart -= (newEnd - dayEnd); newEnd = dayEnd; }
+    newStart = Math.max(dayStart, newStart);
+    newEnd = Math.min(dayEnd, newEnd);
+    setViewStart(newStart);
+    setViewEnd(newEnd);
+  }, [clipMode, viewStart, viewEnd, dayStart, dayEnd]);
+
+  // Double-click to reset zoom
+  const handleDoubleClick = useCallback(() => {
+    setViewStart(dayStart);
+    setViewEnd(dayEnd);
+  }, [dayStart, dayEnd]);
+
+  // Separate event segments from regular segments
+  const regularSegments = useMemo(() => segments.filter(s => s.flags !== 'Event'), [segments]);
+  const eventSegments = useMemo(() => segments.filter(s => s.flags === 'Event'), [segments]);
+
+  // Hour labels (responsive to zoom level)
   const hourLabels = useMemo(() => {
     const labels = [];
-    for (let h = 0; h < 24; h += 3) {
+    const rangeH = (viewEnd - viewStart) / 3600000;
+    let step: number;
+    if (rangeH <= 1) step = 0.25;
+    else if (rangeH <= 3) step = 0.5;
+    else if (rangeH <= 8) step = 1;
+    else if (rangeH <= 16) step = 2;
+    else step = 3;
+    const startH = (viewStart - dayStart) / 3600000;
+    const endH = (viewEnd - dayStart) / 3600000;
+    const firstH = Math.ceil(startH / step) * step;
+    for (let h = firstH; h <= endH; h += step) {
+      const pct = ((h - startH) / (endH - startH)) * 100;
+      if (pct < -1 || pct > 101) continue;
+      let label: string;
+      const hour = Math.floor(h);
+      const min = Math.round((h - hour) * 60);
+      if (min > 0) {
+        const hh = hour % 12 || 12;
+        label = `${hh}:${String(min).padStart(2, '0')}`;
+      } else {
+        label = h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`;
+      }
       labels.push(
         <span
           key={h}
-          className="absolute text-[9px] text-white/50 -bottom-4"
-          style={{ left: `${(h / 24) * 100}%`, transform: 'translateX(-50%)' }}
+          className="absolute text-[9px] text-white/50 -bottom-2.5"
+          style={{ left: `${pct}%`, transform: 'translateX(-50%)' }}
         >
-          {h === 0 ? '12a' : h < 12 ? `${h}a` : h === 12 ? '12p' : `${h - 12}p`}
+          {label}
         </span>,
       );
     }
     return labels;
-  }, []);
+  }, [viewStart, viewEnd, dayStart]);
 
   return (
-    <div className="relative px-1 pt-1 pb-5">
+    <div className="relative px-1 pt-1 pb-3">
       <div
         ref={barRef}
-        className="relative w-full h-5 bg-white/15 rounded cursor-pointer border border-white/20 overflow-hidden"
+        className={`relative w-full h-5 bg-white/15 rounded border border-white/20 overflow-hidden touch-none ${isZoomed && !clipMode ? 'cursor-grab active:cursor-grabbing' : 'cursor-pointer'}`}
         onClick={handleClick}
+        onPointerDown={handlePointerDown}
+        onPointerMove={handlePointerMove}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={() => { isDraggingRef.current = false; isPanningRef.current = false; setDragTime(null); }}
+        onWheel={handleWheel}
+        onDoubleClick={handleDoubleClick}
       >
         {/* Recording segments */}
-        {segments.map((seg, i) => {
-          const left = Math.max(0, toPercent(seg.start));
-          const right = Math.min(100, toPercent(seg.end));
+        {regularSegments.map((seg, i) => {
+          const left = toPercent(seg.start);
+          const right = toPercent(seg.end);
+          if (right <= 0 || left >= 100) return null;
           return (
             <div
-              key={i}
+              key={`r${i}`}
               className="absolute top-0 bottom-0 bg-blue-400/50"
-              style={{ left: `${left}%`, width: `${right - left}%` }}
+              style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100, right) - Math.max(0, left)}%` }}
+            />
+          );
+        })}
+        {/* Event/motion segments (overlay in amber) */}
+        {eventSegments.map((seg, i) => {
+          const left = toPercent(seg.start);
+          const right = toPercent(seg.end);
+          if (right <= 0 || left >= 100) return null;
+          return (
+            <div
+              key={`e${i}`}
+              className="absolute top-0 bottom-0 bg-amber-400/60"
+              style={{ left: `${Math.max(0, left)}%`, width: `${Math.min(100, right) - Math.max(0, left)}%` }}
             />
           );
         })}
         {/* Selected time indicator */}
-        <div
-          className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
-          style={{ left: `${selectedPercent}%` }}
-        />
+        {selectedPercent >= 0 && selectedPercent <= 100 && (
+          <div
+            className="absolute top-0 bottom-0 w-0.5 bg-red-500 z-10"
+            style={{ left: `${selectedPercent}%` }}
+          />
+        )}
+        {/* Drag indicator + tooltip */}
+        {dragTime && (
+          <>
+            <div
+              className="absolute top-0 bottom-0 w-0.5 bg-yellow-400 z-10"
+              style={{ left: `${dragPct}%` }}
+            />
+            <div
+              className="absolute -top-7 z-50 pointer-events-none"
+              style={{ left: `${dragPct}%`, transform: 'translateX(-50%)' }}
+            >
+              <span className="bg-black/90 text-white text-[10px] font-mono px-1.5 py-0.5 rounded whitespace-nowrap">
+                {dragTime.slice(11)}
+              </span>
+            </div>
+          </>
+        )}
+        {/* Clip range overlay */}
+        {clipMode && clipStart && clipEnd && (() => {
+          const clipStartPct = (() => {
+            const t = new Date(clipStart.replace(' ', 'T')).getTime();
+            return Math.max(0, Math.min(100, ((t - viewStart) / (viewEnd - viewStart)) * 100));
+          })();
+          const clipEndPct = (() => {
+            const t = new Date(clipEnd.replace(' ', 'T')).getTime();
+            return Math.max(0, Math.min(100, ((t - viewStart) / (viewEnd - viewStart)) * 100));
+          })();
+
+          const MIN_CLIP_S = 5;
+          const MAX_CLIP_S = 600;
+
+          const handleDrag = (which: 'start' | 'end') => (e: React.PointerEvent) => {
+            e.stopPropagation();
+            e.preventDefault();
+            if (!barRef.current) return;
+            // Prevent the timeline drag from firing
+            isDraggingRef.current = false;
+            const rect = barRef.current.getBoundingClientRect();
+            const pad = (n: number) => String(n).padStart(2, '0');
+
+            const onMove = (ev: PointerEvent) => {
+              const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+              const ts = viewStart + pct * (viewEnd - viewStart);
+              const d = new Date(ts);
+              const timeStr = `${date} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+
+              if (which === 'start') {
+                const endMs = new Date(clipEnd.replace(' ', 'T')).getTime();
+                const diff = (endMs - ts) / 1000;
+                if (diff >= MIN_CLIP_S && diff <= MAX_CLIP_S) {
+                  onClipStartChange?.(timeStr);
+                }
+              } else {
+                const startMs = new Date(clipStart.replace(' ', 'T')).getTime();
+                const diff = (ts - startMs) / 1000;
+                if (diff >= MIN_CLIP_S && diff <= MAX_CLIP_S) {
+                  onClipEndChange?.(timeStr);
+                }
+              }
+            };
+
+            const onUp = () => {
+              window.removeEventListener('pointermove', onMove);
+              window.removeEventListener('pointerup', onUp);
+            };
+
+            window.addEventListener('pointermove', onMove);
+            window.addEventListener('pointerup', onUp);
+          };
+
+          return (
+            <>
+              {/* Clip range highlight */}
+              <div
+                className="absolute top-0 bottom-0 bg-blue-500/25 border-y border-blue-400/40 z-20 pointer-events-none"
+                style={{ left: `${clipStartPct}%`, width: `${clipEndPct - clipStartPct}%` }}
+              />
+              {/* Start handle */}
+              <div
+                className="absolute z-30 cursor-ew-resize group/handle"
+                style={{ left: `${clipStartPct}%`, transform: 'translateX(-50%)', width: '20px', top: '-4px', bottom: '-4px' }}
+                onPointerDown={handleDrag('start')}
+              >
+                <div className="absolute top-1 bottom-1 left-1/2 -translate-x-1/2 w-1.5 bg-blue-400 group-hover/handle:bg-blue-300 transition-colors rounded-full" />
+                <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-400 group-hover/handle:bg-blue-300 rounded-full border-2 border-blue-300 shadow" />
+              </div>
+              {/* End handle */}
+              <div
+                className="absolute z-30 cursor-ew-resize group/handle"
+                style={{ left: `${clipEndPct}%`, transform: 'translateX(-50%)', width: '20px', top: '-4px', bottom: '-4px' }}
+                onPointerDown={handleDrag('end')}
+              >
+                <div className="absolute top-1 bottom-1 left-1/2 -translate-x-1/2 w-1.5 bg-blue-400 group-hover/handle:bg-blue-300 transition-colors rounded-full" />
+                <div className="absolute -top-0.5 left-1/2 -translate-x-1/2 w-3 h-3 bg-blue-400 group-hover/handle:bg-blue-300 rounded-full border-2 border-blue-300 shadow" />
+              </div>
+            </>
+          );
+        })()}
       </div>
       {hourLabels}
     </div>
@@ -1546,7 +1812,7 @@ function ClipsList({ clips, onRefresh }: { clips: SavedClip[]; onRefresh: () => 
   if (clips.length === 0) {
     return (
       <div className="text-center text-muted-foreground text-sm py-6">
-        No saved clips yet. Use the <Scissors className="inline h-3.5 w-3.5 mx-0.5" /> button during playback to save a clip.
+        No saved clips yet. Use the Clip button during playback to create a clip.
       </div>
     );
   }
@@ -1633,23 +1899,24 @@ function PlaybackModeInner() {
   const [selectedTime, setSelectedTime] = useState('');
   const [playbackKey, setPlaybackKey] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
-  const [speed, setSpeed] = useState(1);
   const [paused, setPaused] = useState(false);
   const [dateRange, setDateRange] = useState<{ min: string; max: string } | null>(null);
-  // Source type: "cache" (speed controls available) or "dvr" (1x only)
-  const [source, setSource] = useState<'cache' | 'dvr' | null>(null);
-  // Cache download progress when source is "dvr"
-  const [cacheProgress, setCacheProgress] = useState<{ segs_done: number; segs_total: number } | null>(null);
   // Track pending resume state for channel switches
   const pendingResumeRef = useRef<{ time: string; wasPlaying: boolean } | null>(null);
-  // Track the start/end times for cache polling
-  const playbackRangeRef = useRef<{ channel: number; start: string; end: string } | null>(null);
 
   // Clips state
   const [clips, setClips] = useState<SavedClip[]>([]);
   const [showClips, setShowClips] = useState(false);
   const [savingClip, setSavingClip] = useState(false);
   const [clipSaved, setClipSaved] = useState(false);
+
+  // Drag time from timeline (for live preview while scrubbing)
+  const [dragTime, setDragTime] = useState<string | null>(null);
+
+  // Clip scrubber mode
+  const [clipMode, setClipMode] = useState(false);
+  const [clipStart, setClipStart] = useState('');
+  const [clipEnd, setClipEnd] = useState('');
 
   // Fetch clips
   const fetchClips = useCallback(async () => {
@@ -1671,24 +1938,42 @@ function PlaybackModeInner() {
     return () => clearInterval(iv);
   }, [clips, fetchClips]);
 
-  // Save current playback position as a 30s clip
-  const saveClip = async () => {
-    if (!selectedTime || !playbackKey) return;
+
+  // Open clip mode: default to current playback position + 30s
+  const openClipMode = useCallback(() => {
+    if (!selectedTime) return;
+    setClipMode(true);
+    // Default: 10-minute window centered on the current playback position
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const toTimeStr = (ms: number) => {
+      const d = new Date(ms);
+      return `${selectedTime.slice(0, 10)} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+    };
+    const centerMs = new Date(selectedTime.replace(' ', 'T')).getTime();
+    const dayStartMs = new Date(`${selectedTime.slice(0, 10)}T00:00:00`).getTime();
+    const dayEndMs = dayStartMs + 24 * 3600_000;
+    const halfWindow = 5 * 60_000; // 5 min each side = 10 min total
+    const startMs = Math.max(dayStartMs, centerMs - halfWindow);
+    const endMs = Math.min(dayEndMs, startMs + 10 * 60_000);
+    setClipStart(toTimeStr(startMs));
+    setClipEnd(toTimeStr(endMs));
+  }, [selectedTime]);
+
+  // Save clip from scrubber range
+  const saveClipFromRange = async () => {
+    if (!clipStart || !clipEnd) return;
     setSavingClip(true);
     try {
-      const startDate = new Date(selectedTime.replace(' ', 'T'));
-      const endDate = new Date(startDate.getTime() + 30_000);
-      const pad = (n: number) => String(n).padStart(2, '0');
-      const endStr = `${date} ${pad(endDate.getHours())}:${pad(endDate.getMinutes())}:${pad(endDate.getSeconds())}`;
       const chLabel = CAMERAS.find((c) => c.channel === channel)?.label ?? `Ch${channel}`;
-      const name = `${chLabel} ${selectedTime.slice(11, 19)}`;
+      const name = `${chLabel} ${clipStart.slice(11, 19)}`;
       await dvrFetch('/clips', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel, startTime: selectedTime, endTime: endStr, name }),
+        body: JSON.stringify({ channel, startTime: clipStart, endTime: clipEnd, name }),
       });
       setClipSaved(true);
       setTimeout(() => setClipSaved(false), 2000);
+      setClipMode(false);
       fetchClips();
     } catch (err) {
       console.error('Save clip error:', err);
@@ -1696,6 +1981,18 @@ function PlaybackModeInner() {
       setSavingClip(false);
     }
   };
+
+  // Compute clip duration string
+  const clipDuration = useMemo(() => {
+    if (!clipStart || !clipEnd) return '';
+    const s = new Date(clipStart.replace(' ', 'T')).getTime();
+    const e = new Date(clipEnd.replace(' ', 'T')).getTime();
+    const diff = Math.max(0, Math.round((e - s) / 1000));
+    if (diff < 60) return `${diff}s`;
+    const mins = Math.floor(diff / 60);
+    const secs = diff % 60;
+    return `${mins}m ${secs}s`;
+  }, [clipStart, clipEnd]);
 
   // Find extended end time by walking contiguous segments forward from the
   // segment containing the given time.  Falls back to +30min if no match.
@@ -1750,9 +2047,6 @@ function PlaybackModeInner() {
 
     setSegments([]);
     setPlaybackKey(null);
-    setSource(null);
-    setCacheProgress(null);
-    playbackRangeRef.current = null;
     setLoading(true);
     dvrFetch(`/timeline?channel=${channel}&date=${date}`).then(async (r) => {
       const segs: TimelineSegment[] = r.segments || [];
@@ -1784,14 +2078,8 @@ function PlaybackModeInner() {
             const resp = await dvrFetch('/playback/start', {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ channel, startTime, endTime, speed }),
+              body: JSON.stringify({ channel, startTime, endTime }),
             });
-            const src = resp.source as 'cache' | 'dvr' | undefined;
-            setSource(src ?? 'cache');
-            if (src === 'dvr') {
-              setSpeed(1);
-            }
-            playbackRangeRef.current = { channel, start: startTime, end: endTime };
             setPlaybackKey(Date.now());
           } catch (err) {
             console.error('Auto-playback start error:', err);
@@ -1809,7 +2097,9 @@ function PlaybackModeInner() {
     const s = d.toISOString().slice(0, 10);
     if (!dateRange || s >= dateRange.min) {
       setDate(s);
-      setSelectedTime('');
+      if (selectedTime) {
+        setSelectedTime(`${s} ${selectedTime.slice(11)}`);
+      }
     }
   };
   const nextDate = () => {
@@ -1818,18 +2108,17 @@ function PlaybackModeInner() {
     const s = d.toISOString().slice(0, 10);
     if (!dateRange || s <= dateRange.max) {
       setDate(s);
-      setSelectedTime('');
+      if (selectedTime) {
+        setSelectedTime(`${s} ${selectedTime.slice(11)}`);
+      }
     }
   };
 
-  const startPlayback = async (overrideTime?: string, overrideSpeed?: number) => {
+  const startPlayback = async (overrideTime?: string) => {
     const playTime = overrideTime ?? selectedTime;
-    const playSpeed = overrideSpeed ?? speed;
     if (!playTime) return;
     setLoading(true);
     setPlaybackKey(null);
-    setSource(null);
-    setCacheProgress(null);
 
     // Find end time: walk contiguous segments forward from the one containing
     // playTime.  This ensures playback doesn't stop after just a few seconds
@@ -1840,16 +2129,8 @@ function PlaybackModeInner() {
       const resp = await dvrFetch('/playback/start', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ channel, startTime: playTime, endTime, speed: playSpeed }),
+        body: JSON.stringify({ channel, startTime: playTime, endTime }),
       });
-      const src = resp.source as 'cache' | 'dvr' | undefined;
-      setSource(src ?? 'cache');
-      // If DVR source, force speed to 1
-      if (src === 'dvr') {
-        setSpeed(1);
-      }
-      // Store range for cache polling
-      playbackRangeRef.current = { channel, start: playTime, end: endTime };
       setPlaybackKey(Date.now());
     } catch (err) {
       console.error('Playback start error:', err);
@@ -1861,50 +2142,8 @@ function PlaybackModeInner() {
   const stopPlayback = () => {
     setPlaybackKey(null);
     setPaused(false);
-    setSource(null);
-    setCacheProgress(null);
-    playbackRangeRef.current = null;
     dvrFetch('/playback/stop', { method: 'POST' }).catch(() => {});
   };
-
-  // Poll cache download progress when playing from DVR.
-  // Auto-restarts playback from cache when download completes.
-  useEffect(() => {
-    if (source !== 'dvr' || !playbackKey || !playbackRangeRef.current) return;
-    const range = playbackRangeRef.current;
-    let cancelled = false;
-
-    const poll = async () => {
-      while (!cancelled) {
-        await new Promise(r => setTimeout(r, 2000));
-        if (cancelled) break;
-        try {
-          const params = new URLSearchParams({
-            channel: String(range.channel),
-            start: range.start,
-            end: range.end,
-          });
-          const data = await dvrFetch(`/cache/check?${params}`);
-          if (cancelled) break;
-          if (data.status === 'ready') {
-            setCacheProgress({ segs_done: data.segs_total, segs_total: data.segs_total });
-            // Cache is ready — restart from cache at current speed
-            // Brief interruption but now with speed controls + HD quality.
-            console.log('[playback] Cache ready, switching from DVR to cache');
-            startPlayback(selectedTime || range.start);
-            return;
-          }
-          if (data.status === 'downloading' || data.status === 'queued') {
-            setCacheProgress({ segs_done: data.segs_done ?? 0, segs_total: data.segs_total ?? 0 });
-          }
-        } catch {
-          // ignore poll errors
-        }
-      }
-    };
-    poll();
-    return () => { cancelled = true; };
-  }, [source, playbackKey]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // When timeline is clicked during playback, auto-restart at the new time
   const handleTimeSelect = (time: string) => {
@@ -1914,26 +2153,6 @@ function PlaybackModeInner() {
     }
   };
 
-  const handleSpeedChange = async (newSpeed: number) => {
-    // DVR streams are always 1x — speed controls are disabled in the UI,
-    // but guard here too.
-    if (source === 'dvr') return;
-    setSpeed(newSpeed);
-    if (playbackKey) {
-      // Update server-side ffmpeg for the new speed
-      try {
-        await dvrFetch('/playback/speed', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ speed: newSpeed }),
-        });
-      } catch (err) {
-        console.error('Speed change error:', err);
-      }
-      // Restart feed to pick up new stream
-      setPlaybackKey(Date.now());
-    }
-  };
 
   const channelLabel = CAMERAS.find((c) => c.channel === channel)?.label ?? `Ch ${channel}`;
 
@@ -1946,7 +2165,6 @@ function PlaybackModeInner() {
       {playbackKey ? (
         <PlaybackFeed
           key={playbackKey}
-          speed={speed}
           paused={paused}
           onError={stopPlayback}
         />
@@ -2010,8 +2228,11 @@ function PlaybackModeInner() {
                 min={dateRange?.min}
                 max={dateRange?.max}
                 onChange={(e) => {
-                  setDate(e.target.value);
-                  setSelectedTime('');
+                  const newDate = e.target.value;
+                  setDate(newDate);
+                  if (selectedTime) {
+                    setSelectedTime(`${newDate} ${selectedTime.slice(11)}`);
+                  }
                 }}
                 className="bg-white/10 border border-white/20 rounded-md px-2 py-0.5 text-xs text-white [color-scheme:dark]"
               />
@@ -2081,66 +2302,25 @@ function PlaybackModeInner() {
               </button>
             )}
 
-            {/* Save clip button (when playing) */}
+            {/* Clip button (when playing) */}
             {playbackKey && (
               <button
-                onClick={saveClip}
-                disabled={savingClip}
-                className={`flex items-center justify-center w-7 h-7 rounded-full transition-colors ${
-                  clipSaved
-                    ? 'bg-green-500/30 text-green-400'
-                    : 'bg-white/15 hover:bg-white/25 text-white/80'
-                }`}
-                title="Save 30s clip"
+                onClick={openClipMode}
+                className="flex items-center justify-center w-7 h-7 rounded-full bg-white/15 hover:bg-white/25 text-white/80 transition-colors"
+                title="Create clip"
               >
-                {savingClip ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                ) : clipSaved ? (
-                  <Check className="h-3.5 w-3.5" />
-                ) : (
-                  <Scissors className="h-3.5 w-3.5" />
-                )}
+                <ScissorsLineDashed className="h-3.5 w-3.5" />
               </button>
             )}
 
             {/* Time display */}
-            {selectedTime && (
-              <span className="text-xs text-white/70">
-                {channelLabel} · {selectedTime.slice(11)}
+            {(dragTime || selectedTime) && (
+              <span className={`text-xs ${dragTime ? 'text-yellow-300' : 'text-white/70'}`}>
+                {channelLabel} · {(dragTime || selectedTime).slice(11)}
               </span>
             )}
 
-            {/* Speed selector — disabled for DVR streams (always 1x) */}
-            <div className="flex items-center gap-0.5 ml-auto">
-              {source === 'dvr' ? (
-                <>
-                  <span className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-white/25 text-white">
-                    1x
-                  </span>
-                  {cacheProgress && cacheProgress.segs_total > 0 && (
-                    <span className="text-[10px] text-amber-400/80 ml-1 flex items-center gap-1">
-                      <Loader2 className="h-2.5 w-2.5 animate-spin" />
-                      {cacheProgress.segs_done}/{cacheProgress.segs_total}
-                    </span>
-                  )}
-                </>
-              ) : (
-                [1, 2, 4, 8, 16].map((s) => (
-                  <button
-                    key={s}
-                    data-testid={`playback-speed-${s}x`}
-                    onClick={() => handleSpeedChange(s)}
-                    className={`px-1.5 py-0.5 rounded text-[10px] font-medium transition-colors ${
-                      speed === s
-                        ? 'bg-white/25 text-white'
-                        : 'text-white/50 hover:text-white hover:bg-white/10'
-                    }`}
-                  >
-                    {s}x
-                  </button>
-                ))
-              )}
-            </div>
+
           </div>
 
           {/* Timeline */}
@@ -2150,11 +2330,78 @@ function PlaybackModeInner() {
               date={date}
               selectedTime={selectedTime}
               onSelectTime={handleTimeSelect}
+              clipMode={clipMode}
+              clipStart={clipStart}
+              clipEnd={clipEnd}
+              onClipStartChange={setClipStart}
+              onClipEndChange={setClipEnd}
+              onDragTimeChange={setDragTime}
             />
           )}
         </div>
       </div>
     </div>
+
+    {/* Clip scrubber panel */}
+    {clipMode && (
+      <div className="mt-2 p-3 rounded-lg bg-card border border-border">
+        <div className="flex items-center justify-between mb-2">
+          <div className="flex items-center gap-2">
+            <ScissorsLineDashed className="h-4 w-4 text-blue-400" />
+            <span className="text-sm font-medium">Create Clip</span>
+          </div>
+          <button
+            onClick={() => setClipMode(false)}
+            className="p-1 rounded-md hover:bg-muted text-muted-foreground hover:text-foreground transition-colors"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+        <div className="flex items-center gap-3 text-sm">
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground text-xs">Start:</span>
+            <span className="font-mono text-xs">{clipStart.slice(11)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground text-xs">End:</span>
+            <span className="font-mono text-xs">{clipEnd.slice(11)}</span>
+          </div>
+          <div className="flex items-center gap-1.5">
+            <span className="text-muted-foreground text-xs">Duration:</span>
+            <span className="font-mono text-xs font-medium text-blue-400">{clipDuration}</span>
+          </div>
+          <div className="flex items-center gap-1.5 ml-auto">
+            {clipSaved ? (
+              <span className="flex items-center gap-1 text-xs text-green-400">
+                <Check className="h-3.5 w-3.5" /> Saved
+              </span>
+            ) : (
+              <button
+                onClick={saveClipFromRange}
+                disabled={savingClip}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-md text-xs font-medium bg-blue-500/20 text-blue-400 hover:bg-blue-500/30 transition-colors disabled:opacity-50"
+              >
+                {savingClip ? (
+                  <Loader2 className="h-3 w-3 animate-spin" />
+                ) : (
+                  <Save className="h-3 w-3" />
+                )}
+                Save Clip
+              </button>
+            )}
+            <button
+              onClick={() => setClipMode(false)}
+              className="px-2 py-1 rounded-md text-xs text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+        <div className="text-[10px] text-muted-foreground mt-1.5">
+          Drag the blue handles on the timeline to adjust clip range. Min 5s, max 10min.
+        </div>
+      </div>
+    )}
 
     {/* Saved Clips section */}
     <div className="mt-3">

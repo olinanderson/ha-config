@@ -12,6 +12,7 @@ import { ToggleButton } from '@/components/ToggleButton';
 import { LightControl } from '@/components/LightControl';
 import { InverterButton } from '@/components/InverterButton';
 import { StatusDot } from '@/components/StatusDot';
+import { WeatherMapCard } from '@/components/WeatherMapCard';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useToggle, useService } from '@/hooks/useService';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
@@ -294,6 +295,10 @@ function ModeToggles() {
 // ─── Page ───
 
 export default function Home() {
+  const starlink = useEntity('device_tracker.starlink_device_location');
+  const lat = starlink?.attributes?.latitude as number | undefined;
+  const lon = starlink?.attributes?.longitude as number | undefined;
+
   return (
     <PageContainer title="Home">
       <BadgeBar />
@@ -340,6 +345,8 @@ export default function Home() {
           <WeatherCard />
         </div>
       </div>
+
+      {/* Full-width Weather/Map card — moved to Climate tab */}
     </PageContainer>
   );
 }

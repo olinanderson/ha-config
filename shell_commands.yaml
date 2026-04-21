@@ -57,19 +57,22 @@ start_gps_filter: >
     echo "GPS filter daemon already running";
   fi'
 
-# Start DVR proxy — camera playback API + RTSP Scale proxy
+# Start DVR proxy — camera playback API + RTSP proxy
+# Installs ffmpeg if missing (apk packages don't persist across HAOS reboots)
 start_dvr_proxy: >
-  /bin/sh -c 'if ! nc -z 127.0.0.1 8766 2>/dev/null; then
-    cd /config/www/react-dashboard &&
-    nohup python3 dvr_proxy.py > /config/www/react-dashboard/dvr_proxy.log 2>&1 &
-    echo "DVR proxy started";
-  else
-    echo "DVR proxy already running";
-  fi'
+  /bin/sh -c 'which ffmpeg >/dev/null 2>&1 || apk add --no-cache ffmpeg >/dev/null 2>&1;
+    if ! nc -z 127.0.0.1 8766 2>/dev/null; then
+      cd /config/www/react-dashboard &&
+      nohup python3 dvr_proxy.py > /config/www/react-dashboard/dvr_proxy.log 2>&1 &
+      echo "DVR proxy started";
+    else
+      echo "DVR proxy already running";
+    fi'
 
 # Restart DVR proxy — kill existing and start fresh
 restart_dvr_proxy: >
-  /bin/sh -c 'pkill -f "python3.*dvr_proxy" 2>/dev/null;
+  /bin/sh -c 'which ffmpeg >/dev/null 2>&1 || apk add --no-cache ffmpeg >/dev/null 2>&1;
+    pkill -f "python3.*dvr_proxy" 2>/dev/null;
     sleep 2;
     cd /config/www/react-dashboard &&
     nohup python3 dvr_proxy.py > /config/www/react-dashboard/dvr_proxy.log 2>&1 &

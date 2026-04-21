@@ -26,6 +26,7 @@ import {
   X,
   Loader2,
   Navigation,
+  Wind,
 } from 'lucide-react';
 import { DatePicker } from '@/components/ui/date-picker';
 
@@ -102,6 +103,13 @@ export default function VanlifeMap() {
   const [status, setStatus] = useState('');
   const [travels, setTravels] = useState<Travel[]>([]);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
+  const [windyView, setWindyView] = useState(false);
+
+  // Close sidebar when opening Windy view for full-width map
+  const toggleWindy = () => {
+    if (!windyView) setSidebarOpen(false);
+    setWindyView(v => !v);
+  };
   const [places, setPlaces] = useState<NamedPlace[]>([]);
   const [routePlaceIds, setRoutePlaceIds] = useState<Set<string>>(new Set());
   const [sidebarOpen, setSidebarOpen] = useState(true);
@@ -764,11 +772,41 @@ export default function VanlifeMap() {
         <div className="ml-auto flex items-center gap-2">
           {loading && <Loader2 className="h-4 w-4 animate-spin text-muted-foreground" />}
           <span className="text-muted-foreground text-xs whitespace-nowrap">{status}</span>
+          <div className="w-px h-5 bg-border" />
+          {/* Windy toggle */}
+          <button
+            onClick={() => toggleWindy()}
+            className={`flex items-center gap-1.5 px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+              windyView ? 'bg-cyan-500/20 text-cyan-300 ring-1 ring-cyan-500/40' : 'bg-muted text-muted-foreground hover:bg-muted/80'
+            }`}
+          >
+            <Wind className="h-3.5 w-3.5" />
+            {windyView ? 'Map' : 'Windy'}
+          </button>
         </div>
       </div>
 
       {/* Map + sidebar */}
       <div className="flex-1 flex relative" style={{ minHeight: 0 }}>
+        {/* Windy overlay — full area when active */}
+        {windyView && vanPos && (() => {
+          // Build the windy-route.html URL with route data params
+          const hass = (window as any).__HASS__;
+          const hassUrl = hass?.auth?.data?.hassUrl || `${window.location.protocol}//${window.location.hostname}:8123`;
+          const windyUrl = `${hassUrl}/local/react-dashboard/windy-route.html`
+            + `?lat=${vanPos[0].toFixed(4)}&lon=${vanPos[1].toFixed(4)}`
+            + `&zoom=8`;
+          return (
+            <div className="absolute inset-0 z-[600] flex flex-col bg-background">
+              <iframe
+                src={windyUrl}
+                className="flex-1 border-0"
+                title="Windy"
+                allow="fullscreen"
+              />
+            </div>
+          );
+        })()}
         {/* Map container */}
         <div className="flex-1 relative" style={{ minHeight: 0 }}>
           <div ref={mapRef} className="absolute inset-0" />

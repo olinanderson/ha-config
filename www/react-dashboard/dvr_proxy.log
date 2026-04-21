@@ -1,306 +1,271 @@
-RTSP Scale proxy listening on port 8767
-[dvr_proxy] recording cache daemon queued
 DVR proxy listening on port 8766
-[cache] recording cache daemon started
-[cache] ch1: 48 segments to download
-[cache] ch2: 144 segments to download
-[cache] ch3: 96 segments to download
-[cache] ch4: 144 segments to download
-[cache] low disk (0 GB free), pausing
-[cache] pruned ch1/2026-04-15
-[cache] pruned ch1/2026-04-18
-[cache] pruned ch1/2026-04-13
-[cache] pruned ch1/2026-04-14
-[cache] pruned ch1/2026-04-17
-[cache] pruned ch1/2026-04-16
-[cache] pruned ch2/2026-04-15
-[cache] pruned ch2/2026-04-13
-[cache] pruned ch2/2026-04-14
-[cache] pruned ch2/2026-04-17
-[cache] pruned ch2/2026-04-16
-[cache] pruned ch4/2026-04-15
-[cache] pruned ch4/2026-04-13
-[cache] pruned ch4/2026-04-14
-[cache] pruned ch4/2026-04-17
-[cache] pruned ch4/2026-04-16
-[cache] pruned ch3/2026-04-15
-[cache] pruned ch3/2026-04-18
-[cache] pruned ch3/2026-04-13
-[cache] pruned ch3/2026-04-14
-[cache] pruned ch3/2026-04-17
-[cache] pruned ch3/2026-04-16
-[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_18_23_30_00→2026_04_19_11_38_22 speed=1x (sub-stream, DVR fallback)
-----------------------------------------
-Exception occurred during processing of request from ('127.0.0.1', 41650)
-Traceback (most recent call last):
-  File "/usr/lib/python3.12/socketserver.py", line 697, in process_request_thread
-    self.finish_request(request, client_address)
-  File "/usr/lib/python3.12/socketserver.py", line 362, in finish_request
-    self.RequestHandlerClass(request, client_address, self)
-  File "/usr/lib/python3.12/socketserver.py", line 766, in __init__
-    self.handle()
-  File "/usr/lib/python3.12/http/server.py", line 436, in handle
-    self.handle_one_request()
-  File "/usr/lib/python3.12/http/server.py", line 424, in handle_one_request
-    method()
-  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1722, in do_POST
-    proc, source = _start_ffmpeg(channel, rtsp_start, rtsp_end, speed,
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1111, in _start_ffmpeg
-    return subprocess.Popen(
-           ^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.12/subprocess.py", line 1026, in __init__
-    self._execute_child(args, executable, preexec_fn, close_fds,
-  File "/usr/lib/python3.12/subprocess.py", line 1955, in _execute_child
-    raise child_exception_type(errno_num, err_msg, err_filename)
-FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'
-----------------------------------------
-[dvr_proxy] ffmpeg: ch3 RTSP 2026_04_18_23_30_00→2026_04_19_11_38_34 speed=1x (sub-stream, DVR fallback)
-----------------------------------------
-Exception occurred during processing of request from ('127.0.0.1', 59242)
-Traceback (most recent call last):
-  File "/usr/lib/python3.12/socketserver.py", line 697, in process_request_thread
-    self.finish_request(request, client_address)
-  File "/usr/lib/python3.12/socketserver.py", line 362, in finish_request
-    self.RequestHandlerClass(request, client_address, self)
-  File "/usr/lib/python3.12/socketserver.py", line 766, in __init__
-    self.handle()
-  File "/usr/lib/python3.12/http/server.py", line 436, in handle
-    self.handle_one_request()
-  File "/usr/lib/python3.12/http/server.py", line 424, in handle_one_request
-    method()
-  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1722, in do_POST
-    proc, source = _start_ffmpeg(channel, rtsp_start, rtsp_end, speed,
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1111, in _start_ffmpeg
-    return subprocess.Popen(
-           ^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.12/subprocess.py", line 1026, in __init__
-    self._execute_child(args, executable, preexec_fn, close_fds,
-  File "/usr/lib/python3.12/subprocess.py", line 1955, in _execute_child
-    raise child_exception_type(errno_num, err_msg, err_filename)
-FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'
-----------------------------------------
-[dvr_proxy] ffmpeg: ch3 RTSP 2026_04_19_07_38_02→2026_04_19_11_38_34 speed=1x (sub-stream, DVR fallback)
-----------------------------------------
-Exception occurred during processing of request from ('127.0.0.1', 45280)
-Traceback (most recent call last):
-  File "/usr/lib/python3.12/socketserver.py", line 697, in process_request_thread
-    self.finish_request(request, client_address)
-  File "/usr/lib/python3.12/socketserver.py", line 362, in finish_request
-    self.RequestHandlerClass(request, client_address, self)
-  File "/usr/lib/python3.12/socketserver.py", line 766, in __init__
-    self.handle()
-  File "/usr/lib/python3.12/http/server.py", line 436, in handle
-    self.handle_one_request()
-  File "/usr/lib/python3.12/http/server.py", line 424, in handle_one_request
-    method()
-  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1722, in do_POST
-    proc, source = _start_ffmpeg(channel, rtsp_start, rtsp_end, speed,
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1111, in _start_ffmpeg
-    return subprocess.Popen(
-           ^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.12/subprocess.py", line 1026, in __init__
-    self._execute_child(args, executable, preexec_fn, close_fds,
-  File "/usr/lib/python3.12/subprocess.py", line 1955, in _execute_child
-    raise child_exception_type(errno_num, err_msg, err_filename)
-FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'
-----------------------------------------
-[dvr_proxy] ffmpeg: ch3 RTSP 2026_04_19_07_38_02→2026_04_19_11_38_34 speed=1x (sub-stream, DVR fallback)
-----------------------------------------
-Exception occurred during processing of request from ('127.0.0.1', 45308)
-Traceback (most recent call last):
-  File "/usr/lib/python3.12/socketserver.py", line 697, in process_request_thread
-    self.finish_request(request, client_address)
-  File "/usr/lib/python3.12/socketserver.py", line 362, in finish_request
-    self.RequestHandlerClass(request, client_address, self)
-  File "/usr/lib/python3.12/socketserver.py", line 766, in __init__
-    self.handle()
-  File "/usr/lib/python3.12/http/server.py", line 436, in handle
-    self.handle_one_request()
-  File "/usr/lib/python3.12/http/server.py", line 424, in handle_one_request
-    method()
-  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1722, in do_POST
-    proc, source = _start_ffmpeg(channel, rtsp_start, rtsp_end, speed,
-                   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
-  File "/homeassistant/www/react-dashboard/dvr_proxy.py", line 1111, in _start_ffmpeg
-    return subprocess.Popen(
-           ^^^^^^^^^^^^^^^^^
-  File "/usr/lib/python3.12/subprocess.py", line 1026, in __init__
-    self._execute_child(args, executable, preexec_fn, close_fds,
-  File "/usr/lib/python3.12/subprocess.py", line 1955, in _execute_child
-    raise child_exception_type(errno_num, err_msg, err_filename)
-FileNotFoundError: [Errno 2] No such file or directory: 'ffmpeg'
-----------------------------------------
-[cache] ch1: 73 segments to download
-[cache] ch2: 146 segments to download
-[cache] ch3: 146 segments to download
-[cache] ch4: 146 segments to download
-[cache] downloading ch1 2026-04-19 11:30:00 → 2026-04-19 11:56:26
-[cache] done 112 MB in 18s (6.4 MB/s)
-[cache] downloading ch2 2026-04-19 11:30:00 → 2026-04-19 11:56:27
-[cache] done 88 MB in 12s (7.1 MB/s)
-[cache] downloading ch3 2026-04-19 11:30:00 → 2026-04-19 11:56:27
-[cache] done 86 MB in 12s (7.1 MB/s)
-[cache] downloading ch4 2026-04-19 11:30:00 → 2026-04-19 11:56:31
-[cache] done 120 MB in 16s (7.8 MB/s)
-[cache] downloading ch1 2026-04-19 11:00:00 → 2026-04-19 11:30:00
-[cache] done 129 MB in 16s (8.1 MB/s)
-[cache] downloading ch2 2026-04-19 11:30:00 → 2026-04-19 11:56:31
-[cache] done 89 MB in 13s (7.0 MB/s)
-[cache] downloading ch3 2026-04-19 11:30:00 → 2026-04-19 11:56:31
-[cache] done 86 MB in 12s (7.3 MB/s)
-[cache] downloading ch1 2026-04-19 10:30:00 → 2026-04-19 11:00:00
-[cache] done 127 MB in 16s (7.9 MB/s)
-[cache] downloading ch2 2026-04-19 11:00:00 → 2026-04-19 11:30:00
-[cache] done 102 MB in 14s (7.3 MB/s)
-[cache] downloading ch3 2026-04-19 11:00:00 → 2026-04-19 11:30:00
-[cache] done 95 MB in 12s (7.7 MB/s)
-[cache] downloading ch4 2026-04-19 11:00:00 → 2026-04-19 11:30:00
-[cache] done 135 MB in 19s (7.1 MB/s)
-[cache] downloading ch1 2026-04-19 10:00:00 → 2026-04-19 10:30:00
-[cache] done 128 MB in 16s (8.0 MB/s)
-[cache] downloading ch1 2026-04-19 09:30:00 → 2026-04-19 10:00:00
-[cache] done 128 MB in 17s (7.6 MB/s)
-[cache] downloading ch2 2026-04-19 10:30:00 → 2026-04-19 11:00:00
-[cache] done 102 MB in 13s (7.7 MB/s)
-[cache] downloading ch3 2026-04-19 10:30:00 → 2026-04-19 11:00:00
-[cache] done 93 MB in 13s (7.3 MB/s)
-[cache] downloading ch4 2026-04-19 10:30:00 → 2026-04-19 11:00:00
-[cache] done 134 MB in 18s (7.7 MB/s)
-[cache] downloading ch1 2026-04-19 09:00:00 → 2026-04-19 09:30:00
-[cache] done 125 MB in 18s (7.1 MB/s)
-[cache] downloading ch1 2026-04-19 08:30:00 → 2026-04-19 09:00:00
-[cache] done 110 MB in 14s (7.7 MB/s)
-[cache] downloading ch2 2026-04-19 10:00:00 → 2026-04-19 10:30:00
-[cache] done 99 MB in 14s (7.1 MB/s)
-[cache] downloading ch3 2026-04-19 10:00:00 → 2026-04-19 10:30:00
-[cache] done 91 MB in 12s (7.4 MB/s)
-[cache] downloading ch4 2026-04-19 10:00:00 → 2026-04-19 10:30:00
-[cache] done 135 MB in 18s (7.6 MB/s)
-[cache] downloading ch1 2026-04-19 08:00:00 → 2026-04-19 08:30:00
-[cache] done 97 MB in 13s (7.4 MB/s)
-[cache] downloading ch1 2026-04-19 07:30:00 → 2026-04-19 08:00:00
-[cache] done 114 MB in 16s (7.1 MB/s)
-[cache] downloading ch2 2026-04-19 09:30:00 → 2026-04-19 10:00:00
-[cache] done 98 MB in 13s (7.6 MB/s)
-[cache] downloading ch3 2026-04-19 09:30:00 → 2026-04-19 10:00:00
-[cache] done 90 MB in 13s (7.1 MB/s)
-[cache] downloading ch4 2026-04-19 09:30:00 → 2026-04-19 10:00:00
-[cache] done 136 MB in 19s (7.0 MB/s)
-[cache] downloading ch1 2026-04-19 07:00:00 → 2026-04-19 07:30:00
-[cache] done 120 MB in 15s (7.9 MB/s)
-[cache] downloading ch1 2026-04-19 06:30:00 → 2026-04-19 07:00:00
-[cache] done 133 MB in 17s (7.8 MB/s)
-[cache] downloading ch2 2026-04-19 09:00:00 → 2026-04-19 09:30:00
-[cache] done 101 MB in 14s (7.0 MB/s)
-[cache] downloading ch3 2026-04-19 09:00:00 → 2026-04-19 09:30:00
-[cache] done 91 MB in 12s (7.3 MB/s)
-[cache] downloading ch4 2026-04-19 09:00:00 → 2026-04-19 09:30:00
-[cache] done 138 MB in 17s (8.2 MB/s)
-[cache] downloading ch1 2026-04-19 06:00:00 → 2026-04-19 06:30:00
-[cache] done 361 MB in 41s (8.7 MB/s)
-[cache] downloading ch1 2026-04-19 05:30:00 → 2026-04-19 06:00:00
-[cache] done 1948 MB in 209s (9.3 MB/s)
-[cache] downloading ch2 2026-04-19 08:30:00 → 2026-04-19 09:00:00
-[cache] done 118 MB in 15s (7.7 MB/s)
-[cache] downloading ch3 2026-04-19 08:30:00 → 2026-04-19 09:00:00
-[cache] done 89 MB in 12s (7.5 MB/s)
-[cache] downloading ch4 2026-04-19 08:30:00 → 2026-04-19 09:00:00
-[cache] done 131 MB in 18s (7.2 MB/s)
-[cache] downloading ch1 2026-04-19 05:00:00 → 2026-04-19 05:30:00
-[cache] done 1822 MB in 199s (9.1 MB/s)
-[cache] downloading ch1 2026-04-19 04:30:00 → 2026-04-19 05:00:00
-[cache] done 1810 MB in 208s (8.7 MB/s)
-[cache] downloading ch2 2026-04-19 08:00:00 → 2026-04-19 08:30:00
-[cache] done 111 MB in 15s (7.6 MB/s)
-[cache] downloading ch3 2026-04-19 08:00:00 → 2026-04-19 08:30:00
-[cache] done 91 MB in 12s (7.4 MB/s)
-[cache] downloading ch4 2026-04-19 08:00:00 → 2026-04-19 08:30:00
-[cache] done 133 MB in 17s (7.7 MB/s)
-[cache] downloading ch1 2026-04-19 04:00:00 → 2026-04-19 04:30:00
-[cache] done 1809 MB in 197s (9.2 MB/s)
-[cache] downloading ch1 2026-04-19 03:30:00 → 2026-04-19 04:00:00
-[cache] done 1814 MB in 187s (9.7 MB/s)
-[cache] downloading ch2 2026-04-19 07:30:00 → 2026-04-19 08:00:00
-[cache] done 113 MB in 16s (6.9 MB/s)
-[cache] downloading ch3 2026-04-19 07:30:00 → 2026-04-19 08:00:00
-[cache] done 94 MB in 12s (7.6 MB/s)
-[cache] downloading ch4 2026-04-19 07:30:00 → 2026-04-19 08:00:00
-[cache] done 134 MB in 18s (7.6 MB/s)
-[cache] downloading ch1 2026-04-19 03:00:00 → 2026-04-19 03:30:00
-[cache] done 1810 MB in 196s (9.2 MB/s)
-[cache] downloading ch1 2026-04-19 02:30:00 → 2026-04-19 03:00:00
-[cache] done 1809 MB in 195s (9.3 MB/s)
-[cache] downloading ch2 2026-04-19 07:00:00 → 2026-04-19 07:30:00
-[cache] done 117 MB in 15s (7.9 MB/s)
-[cache] downloading ch3 2026-04-19 07:00:00 → 2026-04-19 07:30:00
-[cache] done 96 MB in 13s (7.4 MB/s)
-[cache] downloading ch4 2026-04-19 07:00:00 → 2026-04-19 07:30:00
-[cache] done 134 MB in 19s (6.9 MB/s)
-[cache] downloading ch1 2026-04-19 02:00:00 → 2026-04-19 02:30:00
-[cache] done 1809 MB in 193s (9.4 MB/s)
-[cache] downloading ch1 2026-04-19 01:30:00 → 2026-04-19 02:00:00
-[cache] done 1808 MB in 182s (9.9 MB/s)
-[cache] downloading ch2 2026-04-19 06:30:00 → 2026-04-19 07:00:00
-[cache] done 132 MB in 18s (7.6 MB/s)
-[cache] downloading ch3 2026-04-19 06:30:00 → 2026-04-19 07:00:00
-[cache] done 106 MB in 14s (7.8 MB/s)
-[cache] downloading ch4 2026-04-19 06:30:00 → 2026-04-19 07:00:00
-[cache] done 140 MB in 19s (7.3 MB/s)
-[cache] downloading ch1 2026-04-19 01:00:00 → 2026-04-19 01:30:00
-[cache] done 1810 MB in 186s (9.8 MB/s)
-[cache] downloading ch1 2026-04-19 00:30:00 → 2026-04-19 01:00:00
-[cache] done 1813 MB in 177s (10.2 MB/s)
-[cache] downloading ch2 2026-04-19 06:00:00 → 2026-04-19 06:30:00
-[cache] done 497 MB in 55s (9.0 MB/s)
-[cache] downloading ch3 2026-04-19 06:00:00 → 2026-04-19 06:30:00
-[cache] done 364 MB in 44s (8.2 MB/s)
-[cache] downloading ch4 2026-04-19 06:00:00 → 2026-04-19 06:30:00
-[cache] done 733 MB in 82s (8.9 MB/s)
-[cache] downloading ch1 2026-04-19 00:00:00 → 2026-04-19 00:30:00
-[cache] done 1815 MB in 190s (9.5 MB/s)
-[cache] downloading ch1 2026-04-18 23:30:00 → 2026-04-19 00:00:00
-[cache] done 1820 MB in 189s (9.7 MB/s)
-[cache] downloading ch2 2026-04-19 05:30:00 → 2026-04-19 06:00:00
-[cache] done 1421 MB in 147s (9.7 MB/s)
-[cache] downloading ch3 2026-04-19 05:30:00 → 2026-04-19 06:00:00
-[cache] done 985 MB in 104s (9.5 MB/s)
-[cache] downloading ch4 2026-04-19 05:30:00 → 2026-04-19 06:00:00
-[cache] done 1386 MB in 152s (9.1 MB/s)
-[cache] downloading ch1 2026-04-18 23:00:00 → 2026-04-18 23:30:00
-[cache] done 1822 MB in 184s (9.9 MB/s)
-[cache] downloading ch1 2026-04-18 22:30:00 → 2026-04-18 23:00:00
-[cache] done 1857 MB in 193s (9.6 MB/s)
-[cache] downloading ch2 2026-04-19 05:00:00 → 2026-04-19 05:30:00
-[cache] done 982 MB in 97s (10.1 MB/s)
-[cache] downloading ch3 2026-04-19 05:00:00 → 2026-04-19 05:30:00
-[cache] done 627 MB in 69s (9.1 MB/s)
-[cache] downloading ch4 2026-04-19 05:00:00 → 2026-04-19 05:30:00
-[cache] done 366 MB in 42s (8.6 MB/s)
-[cache] downloading ch1 2026-04-18 22:00:00 → 2026-04-18 22:30:00
-[cache] done 1917 MB in 200s (9.6 MB/s)
-[cache] downloading ch1 2026-04-18 21:30:00 → 2026-04-18 22:00:00
-[cache] done 1955 MB in 195s (10.0 MB/s)
-[cache] downloading ch2 2026-04-19 04:30:00 → 2026-04-19 05:00:00
-[cache] done 945 MB in 97s (9.8 MB/s)
-[cache] downloading ch3 2026-04-19 04:30:00 → 2026-04-19 05:00:00
-[cache] done 607 MB in 67s (9.0 MB/s)
-[cache] downloading ch4 2026-04-19 04:30:00 → 2026-04-19 05:00:00
-[cache] done 392 MB in 45s (8.8 MB/s)
-[cache] downloading ch1 2026-04-18 21:00:00 → 2026-04-18 21:30:00
-[cache] done 1463 MB in 158s (9.2 MB/s)
-[cache] downloading ch1 2026-04-18 20:30:00 → 2026-04-18 21:00:00
-[cache] done 183 MB in 21s (8.6 MB/s)
-[cache] downloading ch2 2026-04-19 04:00:00 → 2026-04-19 04:30:00
-[cache] done 941 MB in 106s (8.9 MB/s)
-[cache] downloading ch3 2026-04-19 04:00:00 → 2026-04-19 04:30:00
-[cache] done 606 MB in 67s (9.1 MB/s)
-[cache] downloading ch4 2026-04-19 04:00:00 → 2026-04-19 04:30:00
-[cache] done 394 MB in 46s (8.5 MB/s)
-[cache] downloading ch1 2026-04-18 20:00:00 → 2026-04-18 20:30:00
-[cache] done 193 MB in 23s (8.4 MB/s)
-[cache] downloading ch1 2026-04-18 19:30:00 → 2026-04-18 20:00:00
-[cache] done 127 MB in 17s (7.6 MB/s)
-[cache] downloading ch2 2026-04-19 03:30:00 → 2026-04-19 04:00:00
+DVR proxy listening on port 8766
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_10_00_00→2026_04_20_10_30_00 1x
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_06 1x
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_10_09_12→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f6169aff380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f61652b3940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=1&starttime=2026_04_20_10_09_12&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_10_09_12→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f347e252380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f3479a06940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=1&starttime=2026_04_20_10_09_12&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_10_09_12→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7fee9986a380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7fee9501e940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=1&starttime=2026_04_20_10_09_12&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_10_48_04→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7fc1a3d09380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7fc19f4bd940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=1&starttime=2026_04_20_10_48_04&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_10_48_04→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f8ccc0a4380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f8cc7858940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=1&starttime=2026_04_20_10_48_04&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_10_48_04→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f54826a6380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f547de5a940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=1&starttime=2026_04_20_10_48_04&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_10_48_04→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f386f3ce380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f386ab82940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=1&starttime=2026_04_20_10_48_04&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_10_48_04→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7fdb3746c380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7fdb32c20940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=1&starttime=2026_04_20_10_48_04&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_10_48_04→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f41e3e6a380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f41df61e940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=1&starttime=2026_04_20_10_48_04&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_19_23_30_00→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_10_44_11→2026_04_20_07_25_24 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f880453e380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f87ffcf2940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=1&subtype=1&starttime=2026_04_20_10_44_11&endtime=2026_04_20_07_25_24.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_04_43→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_03_38_31→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_07_25_56→2026_04_20_07_55_56 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_08_30_04→2026_04_20_07_25_24 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f398b632380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f3986de6940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=1&subtype=1&starttime=2026_04_20_08_30_04&endtime=2026_04_20_07_25_24.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_08_30_04→2026_04_20_07_25_24 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f77438d1380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f773f085940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=1&subtype=1&starttime=2026_04_20_08_30_04&endtime=2026_04_20_07_25_24.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_08_06_45→2026_04_20_07_25_24 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f70c49f8380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f70c01ac940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=1&subtype=1&starttime=2026_04_20_08_06_45&endtime=2026_04_20_07_25_24.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_08_06_45→2026_04_20_07_25_24 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f67b1b99380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f67ad34d940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=1&subtype=1&starttime=2026_04_20_08_06_45&endtime=2026_04_20_07_25_24.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_07_49_15→2026_04_20_07_25_24 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f03b6a1a380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f03b21ce940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=1&subtype=1&starttime=2026_04_20_07_49_15&endtime=2026_04_20_07_25_24.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_07_49_15→2026_04_20_07_25_24 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f7b216f1380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f7b1cea5940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=1&subtype=1&starttime=2026_04_20_07_49_15&endtime=2026_04_20_07_25_24.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_07_35_39→2026_04_20_07_25_24 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7fcad4cd3380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7fcad0487940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=1&subtype=1&starttime=2026_04_20_07_35_39&endtime=2026_04_20_07_25_24.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_07_35_39→2026_04_20_07_25_24 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f5454fde380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f5450792940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=1&subtype=1&starttime=2026_04_20_07_35_39&endtime=2026_04_20_07_25_24.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_07_20_06→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_07_20_16→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_07_20_16→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_07_22_03→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_07_25_56→2026_04_20_07_55_56 1x
+[dvr_proxy] ffmpeg stderr: [out#0/mp4 @ 0x7f4d831277c0] Output file does not contain any stream
+Error opening output file pipe:1.
+Error opening output files: Invalid argument
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_07_25_56→2026_04_20_07_55_56 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_10_30_00→2026_04_20_11_00_00 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_10_30_00→2026_04_20_11_00_00 1x
+DVR proxy listening on port 8766
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_10_00_00→2026_04_20_10_30_00 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7fe35acb5380] method OPTIONS failed: 503Service Unavailable
+[in#0 @ 0x7fe356469940] Error opening input: Server returned 5XX Server Error reply
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=1&subtype=0&starttime=2026_04_20_00_00_00&endtime=2026_04_20_07_25_19.
+Error opening input files: Server returned 5XX Server Error reply
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7fdb3bf61380] method OPTIONS failed: 503Service Unavailable
+[in#0 @ 0x7fdb37715940] Error opening input: Server returned 5XX Server Error reply
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=1&subtype=0&starttime=2026_04_20_00_00_00&endtime=2026_04_20_07_25_19.
+Error opening input files: Server returned 5XX Server Error reply
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_08_54_44→2026_04_20_12_28_40 1x
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_08_54_44→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7fd7a4c91380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7fd7a0445940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_20_08_54_44&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_08_54_44→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f0fd3eea380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f0fcf69e940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_20_08_54_44&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_08_54_44→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f2e598a7380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f2e5505b940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_20_08_54_44&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_08_54_44→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f452b3b5380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f4526b69940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_20_08_54_44&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_08_54_44→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f2fa5d46380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f2fa14fa940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_20_08_54_44&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_08_54_44→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f41160f1380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f41118a5940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_20_08_54_44&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_08_54_44→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7fd741932380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7fd73d0e6940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_20_08_54_44&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_08_54_44→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f4864c55380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f4860409940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_20_08_54_44&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_08_54_44→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f0fda181380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f0fd5935940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_20_08_54_44&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_08_54_44→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f3190aa3380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f318c257940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_20_08_54_44&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_19_00_00_00→2026_04_20_00_00_00 1x
+[dvr_proxy] ffmpeg stderr: [in#0 @ 0x7f93bb951940] Error opening input: Invalid data found when processing input
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_19_00_00_00&endtime=2026_04_20_00_00_00.
+Error opening input files: Invalid data found when processing input
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_18_00_00_00→2026_04_18_11_20_45 1x
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_17_00_00_00→2026_04_17_12_06_12 1x
+[dvr_proxy] ffmpeg stderr: [out#0/mp4 @ 0x7f4738fca7c0] Output file does not contain any stream
+Error opening output file pipe:1.
+Error opening output files: Invalid argument
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_16_00_00_00→2026_04_17_00_00_00 1x
+[dvr_proxy] ffmpeg stderr: [in#0 @ 0x7fd58d5eb940] Error opening input: Invalid data found when processing input
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_16_00_00_00&endtime=2026_04_17_00_00_00.
+Error opening input files: Invalid data found when processing input
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_16_09_02_36→2026_04_17_00_00_00 1x
+[dvr_proxy] ffmpeg stderr: [out#0/mp4 @ 0x7f3429b357c0] Output file does not contain any stream
+Error opening output file pipe:1.
+Error opening output files: Invalid argument
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_16_08_56_18→2026_04_17_00_00_00 1x
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_16_09_04_57→2026_04_17_00_00_00 1x
+[dvr_proxy] ffmpeg stderr: [in#0 @ 0x7f7e09cb5940] Error opening input: Invalid data found when processing input
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_16_09_04_57&endtime=2026_04_17_00_00_00.
+Error opening input files: Invalid data found when processing input
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_16_09_04_57→2026_04_17_00_00_00 1x
+[dvr_proxy] ffmpeg stderr: [out#0/mp4 @ 0x7fb16af637c0] Output file does not contain any stream
+Error opening output file pipe:1.
+Error opening output files: Invalid argument
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_16_09_04_57→2026_04_17_00_00_00 1x
+[dvr_proxy] ffmpeg stderr: [in#0 @ 0x7fcf97e8b940] Error opening input: Invalid data found when processing input
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_16_09_04_57&endtime=2026_04_17_00_00_00.
+Error opening input files: Invalid data found when processing input
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_16_09_05_42→2026_04_17_00_00_00 1x
+[dvr_proxy] ffmpeg stderr: [in#0 @ 0x7fb9aced0940] Error opening input: Invalid data found when processing input
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_16_09_05_42&endtime=2026_04_17_00_00_00.
+Error opening input files: Invalid data found when processing input
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_16_08_55_43→2026_04_17_00_00_00 1x
+[dvr_proxy] ffmpeg stderr: [in#0 @ 0x7f4dd48ea940] Error opening input: Invalid data found when processing input
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_16_08_55_43&endtime=2026_04_17_00_00_00.
+Error opening input files: Invalid data found when processing input
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_16_09_05_41→2026_04_17_00_00_00 1x
+[dvr_proxy] ffmpeg stderr: [out#0/mp4 @ 0x7fb9138017c0] Output file does not contain any stream
+Error opening output file pipe:1.
+Error opening output files: Invalid argument
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_16_09_05_41→2026_04_17_00_00_00 1x
+[clips] exporting 1776710289_2: ch2 2026-04-16 08:55:43 → 2026-04-16 09:05:41
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_17_00_00_00→2026_04_17_12_06_12 1x
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_17_11_39_56→2026_04_17_12_06_12 1x
+[dvr_proxy] ffmpeg stderr: [in#0 @ 0x7f13fb814940] Error opening input: Invalid data found when processing input
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_17_11_39_56&endtime=2026_04_17_12_06_12.
+Error opening input files: Invalid data found when processing input
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_16_00_00_00→2026_04_17_00_00_00 1x
+[dvr_proxy] ffmpeg stderr: [in#0 @ 0x7f0c5dc8a940] Error opening input: Invalid data found when processing input
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_16_00_00_00&endtime=2026_04_17_00_00_00.
+Error opening input files: Invalid data found when processing input
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_14_00_00_00→2026_04_15_00_00_00 1x
+[dvr_proxy] ffmpeg stderr: [in#0/rtsp @ 0x7f343f24c940] Error during demuxing: Immediate exit requested
+[out#0/mp4 @ 0x7f3443a3f7c0] Error closing file: Immediate exit requested
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_13_00_00_00→2026_04_13_01_00_00 1x
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_15_00_00_00→2026_04_15_15_01_42 1x
+[clips] exported 1776710289_2: 19.5 MB
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_00_30→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_09_58→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_09_58→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_09_58→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_00_30→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch3 RTSP 2026_04_20_11_53_49→2026_04_20_07_25_24 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7feec68f3380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7feec20a7940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=3&subtype=0&starttime=2026_04_20_11_53_49&endtime=2026_04_20_07_25_24.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch3 RTSP 2026_04_20_11_53_49→2026_04_20_07_25_24 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7fa3e8c04380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7fa3e43b8940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=3&subtype=0&starttime=2026_04_20_11_53_49&endtime=2026_04_20_07_25_24.
+Error opening input files: Server returned 404 Not Found
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_10_00→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg stderr: [in#0 @ 0x7fe67459d940] Error opening input: Invalid data found when processing input
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=1&subtype=0&starttime=2026_04_20_00_10_00&endtime=2026_04_20_07_25_19.
+Error opening input files: Invalid data found when processing input
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_01_13→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch3 RTSP 2026_04_20_00_01_13→2026_04_20_07_25_08 1x
+[dvr_proxy] ffmpeg: ch3 RTSP 2026_04_20_00_01_13→2026_04_20_07_25_08 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_06 1x
+[dvr_proxy] ffmpeg: ch3 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_08 1x
+[dvr_proxy] ffmpeg: ch4 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_12 1x
+[dvr_proxy] ffmpeg: ch1 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_19 1x
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_00_00_00→2026_04_20_07_25_06 1x
+[dvr_proxy] ffmpeg: ch2 RTSP 2026_04_20_08_56_18→2026_04_20_07_25_23 1x
+[dvr_proxy] ffmpeg stderr: [rtsp @ 0x7f21d7861380] method DESCRIBE failed: 404Not Found
+[in#0 @ 0x7f21d3015940] Error opening input: Server returned 404 Not Found
+Error opening input file rtsp://admin:30031541Treehouse18!@192.168.10.156:554/cam/playback?channel=2&subtype=0&starttime=2026_04_20_08_56_18&endtime=2026_04_20_07_25_23.
+Error opening input files: Server returned 404 Not Found
