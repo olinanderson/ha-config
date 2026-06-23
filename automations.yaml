@@ -731,7 +731,7 @@
       data:
         latitude: "{{ state_attr('device_tracker.ublox_gps', 'latitude')  }}"
         longitude: "{{ state_attr('device_tracker.ublox_gps', 'longitude') }}"
-        elevation: "{{ state_attr('device_tracker.ublox_gps', 'altitude')  | default(0) }}"
+        elevation: "{{ (state_attr('device_tracker.ublox_gps', 'altitude') | float(0)) | round(0) | int }}"
 
 # ───────────────────────────────────────────────
 # Rolling snapshot of "last active state" @ 1 Hz
