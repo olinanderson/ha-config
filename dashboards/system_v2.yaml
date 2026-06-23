@@ -422,7 +422,7 @@ views:
           # ── Location ──
           - type: map
             entities:
-              - entity: device_tracker.filtered_starlink_location
+              - entity: device_tracker.ublox_gps_filtered
             default_zoom: 14
             hours_to_show: 24
             grid_options:

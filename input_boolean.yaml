@@ -44,3 +44,11 @@ inverter_state:
   name: "Inverter State"
   icon: mdi:power-plug
   initial: off
+
+# When ON, suppresses the automatic inverter_ensure_on toggle so a manual
+# "off" is always respected. Set/cleared automatically by the
+# "Inverter • Manual lock follows user press" automation when YOU press the
+# inverter button; scripts/automations pressing the button do not touch it.
+inverter_manual_lock:
+  name: "Inverter Manual Lock"
+  icon: mdi:lock

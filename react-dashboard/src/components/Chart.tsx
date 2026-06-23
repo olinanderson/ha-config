@@ -68,6 +68,8 @@ interface ChartProps {
   height?: number;
   color?: string;
   unit?: string;
+  /** Overlay an EWMA trend line + show a regression rate (weight-tracker style) */
+  trend?: boolean;
 }
 
 function formatTime(ms: number): string {
@@ -90,7 +92,7 @@ function niceStep(range: number, ticks: number): number {
   return 10 * mag;
 }
 
-export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6', unit = '' }: ChartProps) {
+export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6', unit = '', trend = false }: ChartProps) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
   const [viewRange, setViewRange] = useState<[number, number] | null>(null);
@@ -381,6 +383,35 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
       ` L${toX(visibleData[visibleData.length - 1].t).toFixed(1)},${(margin.top + h).toFixed(1)}` +
       ` L${toX(visibleData[0].t).toFixed(1)},${(margin.top + h).toFixed(1)} Z`;
 
+    // Optional EWMA trend (time-aware, so irregular sampling is handled) +
+    // least-squares slope for the rate readout.
+    let trendPath = '';
+    let slopePerMs = 0;
+    if (trend && visibleData.length >= 2) {
+      const tau = (maxT - minT) / 8 || 1; // smoothing half-life ~ 1/8 of the view
+      let ewma = visibleData[0].v;
+      const segs: string[] = [];
+      for (let i = 0; i < visibleData.length; i++) {
+        const p = visibleData[i];
+        if (i > 0) {
+          const dt = p.t - visibleData[i - 1].t;
+          const alpha = 1 - Math.exp(-dt / tau);
+          ewma = ewma + alpha * (p.v - ewma);
+        }
+        segs.push(`${i === 0 ? 'M' : 'L'}${toX(p.t).toFixed(1)},${toY(ewma).toFixed(1)}`);
+      }
+      trendPath = segs.join(' ');
+
+      const n = visibleData.length;
+      let sx = 0, sy = 0, sxx = 0, sxy = 0;
+      for (const p of visibleData) {
+        const x = p.t - minT;
+        sx += x; sy += p.v; sxx += x * x; sxy += x * p.v;
+      }
+      const denom = n * sxx - sx * sx;
+      slopePerMs = denom !== 0 ? (n * sxy - sx * sy) / denom : 0;
+    }
+
     const yStep = niceStep(rangeV, 5);
     const yTicks: number[] = [];
     const yStart = Math.ceil(minV / yStep) * yStep;
@@ -400,8 +431,8 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
     const max = Math.max(...visibleData.map((p) => p.v));
     const current = visibleData[visibleData.length - 1].v;
 
-    return { margin, w, h, linePath, areaPath, toX, toY, fromX, yTicks, xTicks, showDates, minV, maxV, stats: { avg, min, max, current } };
-  }, [visibleData, width, height]);
+    return { margin, w, h, linePath, areaPath, trendPath, slopePerMs, spanMs: maxT - minT, toX, toY, fromX, yTicks, xTicks, showDates, minV, maxV, stats: { avg, min, max, current } };
+  }, [visibleData, width, height, trend]);
 
   // Mouse move: hover tooltip or drag-to-pan
   // Shared pan logic (used by both SVG onMouseMove and window mousemove)
@@ -519,9 +550,17 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
     );
   }
 
-  const { margin, h: chartH, linePath, areaPath, toX, toY, yTicks, xTicks, showDates, stats } = layout;
+  const { margin, h: chartH, linePath, areaPath, trendPath, slopePerMs, spanMs, toX, toY, yTicks, xTicks, showDates, stats } = layout;
   const decimals = Math.abs(stats.max - stats.min) < 10 ? 1 : 0;
   const fmtV = (v: number) => v.toFixed(decimals);
+
+  // Trend rate readout: pick a per-week / per-day / per-hour unit by span.
+  let rate = slopePerMs * 86400_000; // per day
+  let rateUnit = '/day';
+  if (spanMs >= 14 * 86400_000) { rate = slopePerMs * 7 * 86400_000; rateUnit = '/wk'; }
+  else if (spanMs < 2 * 86400_000) { rate = slopePerMs * 3600_000; rateUnit = '/hr'; }
+  const rateArrow = rate > 0.05 ? '▲' : rate < -0.05 ? '▼' : '→';
+  const trendLabel = `${rateArrow} ${fmtV(Math.abs(rate))}${unit ? ' ' + unit : ''}${rateUnit}`;
 
   const hoverPoint = hoverIdx != null ? visibleData[hoverIdx] : null;
   const isZoomed = viewRange != null;
@@ -588,9 +627,19 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
           </text>
         ))}
 
-        {/* Area + line */}
-        <path d={areaPath} fill={color} opacity={0.1} />
-        <path d={linePath} fill="none" stroke={color} strokeWidth={2} strokeLinejoin="round" />
+        {/* Area + line (raw series fades back when a trend line is shown) */}
+        <path d={areaPath} fill={color} opacity={trend ? 0.06 : 0.1} />
+        <path
+          d={linePath}
+          fill="none"
+          stroke={color}
+          strokeWidth={trend ? 1.25 : 2}
+          strokeLinejoin="round"
+          opacity={trend ? 0.4 : 1}
+        />
+        {trend && trendPath && (
+          <path d={trendPath} fill="none" stroke={color} strokeWidth={2.5} strokeLinejoin="round" />
+        )}
 
         {/* Hover crosshair + dot */}
         {hoverPoint && (
@@ -657,6 +706,11 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
             <span className="text-muted-foreground">
               Avg: <strong className="text-foreground">{fmtV(stats.avg)}{unit}</strong>
             </span>
+            {trend && (
+              <span className="text-muted-foreground">
+                Trend: <strong style={{ color }}>{trendLabel}</strong>
+              </span>
+            )}
           </>
         )}
       </div>

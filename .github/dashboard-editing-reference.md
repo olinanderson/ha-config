@@ -121,7 +121,7 @@ binary_sensor.wican_connected
 binary_sensor.vehicle_is_moving
 binary_sensor.vehicle_is_stable
 binary_sensor.engine_is_running
-device_tracker.filtered_starlink_location
+device_tracker.ublox_gps_filtered
 sensor.road_grade_deg
 sensor.road_grade_percent
 sensor.hill_aggression

@@ -571,9 +571,8 @@ integration for backward compatibility). The old `ha-wican` HACS integration has
 ### GPS / Location
 | Entity | Description |
 |---|---|
-| `device_tracker.starlink_device_location` | Raw Starlink GPS |
-| `device_tracker.filtered_starlink_location` | MQTT filtered GPS (1Hz while moving) |
-| `device_tracker.starlink` | Starlink tracker (used for home zone) |
+| `device_tracker.ublox_gps` | Raw u-blox USB GPS (also used for home zone) |
+| `device_tracker.ublox_gps_filtered` | MQTT filtered GPS (1Hz while moving) |
 | `device_tracker.olin_andersons_iphone_16_pro_max` | iPhone location |
 
 ### Road Grade (template sensors from Starlink GPS)
@@ -1075,7 +1074,7 @@ A custom HA panel for GPS trip tracking, map visualization, and named places man
 
 ### GPS Filter Pipeline
 
-- **Source**: `device_tracker.starlink_device_location` (5–10s update interval from Starlink)
+- **Source**: `device_tracker.ublox_gps` (5–10s update interval from Starlink)
 - **Filter constants**: `MIN_PARK_DURATION_S=180`, `FILTER_RADIUS_M=15`, `CONFIRM_COUNT=3`, `MIN_SEGMENT_DISTANCE_M=300`
 - **Database**: `www/vanlife-panel/filtered_gps.db` (SQLite)
 - **Tables**: `gps_points`, `segments` (with pre-routed geometry), `named_places`

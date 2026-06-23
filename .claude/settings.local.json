@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell($env:Path = \"C:\\\\Program Files\\\\nodejs;$env:APPDATA\\\\npm;$env:Path\"; openclaw --version; Write-Output '---'; openclaw --help 2>&1 | Select-Object -First 80)",
+      "PowerShell($env:Path = \"C:\\\\Program Files\\\\nodejs;$env:APPDATA\\\\npm;$env:Path\"; & \"$env:APPDATA\\\\npm\\\\openclaw.cmd\" --version; Write-Output '---'; & \"$env:APPDATA\\\\npm\\\\openclaw.cmd\" --help 2>&1 | Select-Object -First 80)",
+      "PowerShell(& \"C:\\Users\\Olin\\Documents\\Workspace\\ha_config\\.claude\\scripts\\ha-states.ps1\")",
+      "PowerShell(& \"C:\\Users\\Olin\\Documents\\Workspace\\ha_config\\.claude\\scripts\\ha-states.ps1\":*)"
+    ]
+  }
+}

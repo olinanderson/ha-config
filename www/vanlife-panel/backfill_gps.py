@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Backfill gps_track from Starlink device_location in HA recorder.
+"""Backfill gps_track from the raw GPS device_tracker in the HA recorder.
 
 Run on HA host: sudo python3 /config/www/vanlife-panel/backfill_gps.py
 """
@@ -9,13 +9,23 @@ import time
 
 HA_DB = "/config/home-assistant_v2.db"
 VL_DB = "/config/vanlife_tracker.db"
-METADATA_ID = 366  # device_tracker.starlink_device_location
+# Raw GPS source. Pre-migration history lives under the old Starlink entity
+# (device_tracker.starlink_device_location); point this there to backfill the
+# gap from before the u-blox switch.
+ENTITY_ID = "device_tracker.ublox_gps"
 DAYS_BACK = 30
 
 ha = sqlite3.connect(HA_DB)
 vl = sqlite3.connect(VL_DB)
 vl.execute("PRAGMA journal_mode=WAL")
 vl.execute("PRAGMA synchronous=NORMAL")
+
+_meta = ha.execute(
+    "SELECT metadata_id FROM states_meta WHERE entity_id = ?", (ENTITY_ID,)
+).fetchone()
+if not _meta:
+    raise SystemExit("No recorder history for %s" % ENTITY_ID)
+METADATA_ID = _meta[0]
 
 min_ts_row = vl.execute("SELECT MIN(ts) FROM gps_track").fetchone()
 min_ts = min_ts_row[0] if min_ts_row[0] else time.time()

@@ -6,6 +6,7 @@ import {
   fetchFilteredGps,
   fetchNamedPlaces,
   fetchDataRange,
+  fetchFuelTrips,
   createNamedPlace,
   deleteNamedPlace,
   mergeParkingSpots,
@@ -17,6 +18,7 @@ import {
   type Segment,
   type ParkingSpot,
   type NamedPlace,
+  type FuelTripApi,
 } from '@/lib/vanlife-api';
 import {
   ChevronLeft,
@@ -41,6 +43,7 @@ interface Travel {
   fromLabel: string;
   toLabel: string;
   parkDurationS: number; // destination parking duration
+  l_per_100km?: number;  // fuel economy if available
 }
 
 /* ── Helpers ────────────────────────────────────────────────────────── */
@@ -86,6 +89,25 @@ function coordLabel(lat: number, lon: number, places: NamedPlace[]): string {
   return p ? p.name : `${lat.toFixed(4)}, ${lon.toFixed(4)}`;
 }
 
+/** Find the fuel trip that best overlaps a GPS segment by timestamp */
+function tripForSegment(segStart: number, segEnd: number, trips: FuelTripApi[]): FuelTripApi | null {
+  const overlapping = trips.filter(t => t.start_ts <= segEnd && t.end_ts >= segStart);
+  if (overlapping.length === 0) return null;
+  return overlapping.reduce((best, t) => {
+    const overlap = Math.min(t.end_ts, segEnd) - Math.max(t.start_ts, segStart);
+    const bestOverlap = Math.min(best.end_ts, segEnd) - Math.max(best.start_ts, segStart);
+    return overlap > bestOverlap ? t : best;
+  });
+}
+
+/** Segment stroke color based on fuel economy (L/100km) */
+function segmentColor(l100km: number | undefined): string {
+  if (l100km == null) return '#3b82f6'; // default blue
+  if (l100km < 12) return '#4ade80';    // green-400 (efficient)
+  if (l100km < 15) return '#fb923c';    // orange-400 (moderate)
+  return '#f87171';                      // red-400 (thirsty)
+}
+
 /* ── Component ─────────────────────────────────────────────────────── */
 
 export default function VanlifeMap() {
@@ -104,6 +126,7 @@ export default function VanlifeMap() {
   const [travels, setTravels] = useState<Travel[]>([]);
   const [selectedIdx, setSelectedIdx] = useState<number | null>(null);
   const [windyView, setWindyView] = useState(false);
+  const [fuelTrips, setFuelTrips] = useState<FuelTripApi[]>([]);
 
   // Close sidebar when opening Windy view for full-width map
   const toggleWindy = () => {
@@ -125,8 +148,8 @@ export default function VanlifeMap() {
 
   // HA van location entities
   const vanTracker1 = useEntity('device_tracker.vanlife_tracker_van_location');
-  const vanTracker2 = useEntity('device_tracker.starlink_device_location');
-  const vanTracker3 = useEntity('device_tracker.filtered_starlink_location');
+  const vanTracker2 = useEntity('device_tracker.ublox_gps');
+  const vanTracker3 = useEntity('device_tracker.ublox_gps_filtered');
 
   const vanPos = useMemo((): [number, number] | null => {
     for (const e of [vanTracker1, vanTracker2, vanTracker3]) {
@@ -405,7 +428,12 @@ export default function VanlifeMap() {
 
     try {
       const [start, end] = dateRange;
-      const data = await fetchFilteredGps(start, end, ac.signal);
+      const [data, fuelData] = await Promise.all([
+        fetchFilteredGps(start, end, ac.signal),
+        fetchFuelTrips(50, ac.signal),
+      ]);
+      const trips = fuelData?.trips ?? [];
+      setFuelTrips(trips);
       if (!data) {
         setStatus('No trips found');
         setRoutePlaceIds(new Set());
@@ -461,6 +489,7 @@ export default function VanlifeMap() {
           fromLabel: coordLabel(fromLat, fromLon, currentPlaces),
           toLabel: coordLabel(toLat, toLon, currentPlaces),
           parkDurationS: destPark?.duration_s ?? 0,
+          l_per_100km: tripForSegment(seg.start_ts, seg.end_ts, trips)?.l_per_100km,
         };
         newTravels.push(travel);
 
@@ -476,6 +505,9 @@ export default function VanlifeMap() {
       for (const { si, geom } of segGeoms) {
         const segDist = polylineDistanceM(geom);
         const segStartDist = cumDist;
+        const seg = validSegs[si];
+        const fuelTrip = tripForSegment(seg.start_ts, seg.end_ts, trips);
+        const segColor = segmentColor(fuelTrip?.l_per_100km);
 
         for (let i = 0; i < geom.length - 1; i += STRIDE) {
           // Overlap by 1 point to eliminate gaps between chunks
@@ -489,7 +521,7 @@ export default function VanlifeMap() {
           const t = totalDist > 0 ? globalDist / totalDist : 1;
 
           const pl = L.polyline(chunk, {
-            color: '#3b82f6',
+            color: segColor,
             weight: 5,
             opacity: timeOpacity(t),
             lineCap: 'butt',
@@ -972,6 +1004,12 @@ export default function VanlifeMap() {
                       <span>🚗 {fmtDuration(driveSec)}</span>
                       <span>📏 {distKm.toFixed(1)} km</span>
                       {travel.parkDurationS > 0 && <span>🅿️ {fmtDuration(travel.parkDurationS)}</span>}
+                      {travel.l_per_100km != null && (
+                        <span className={
+                          travel.l_per_100km < 12 ? 'text-green-400' :
+                          travel.l_per_100km < 15 ? 'text-amber-400' : 'text-red-400'
+                        }>⛽ {travel.l_per_100km.toFixed(1)} L/100km</span>
+                      )}
                     </div>
 
                   {isSelected && (

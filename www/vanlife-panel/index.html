@@ -273,7 +273,7 @@
       <div class="vl-route-toggle">
         <button id="vl-mode-snap" class="active" title="Road-snapped via Valhalla">🛣 Road</button>
         <button id="vl-mode-filtered" title="Filtered GPS track points (vanlife tracker DB)">📍 Filtered</button>
-        <button id="vl-mode-raw" title="Raw Starlink GPS history (unprocessed, from HA)">🛰 Raw</button>
+        <button id="vl-mode-raw" title="Raw u-blox USB GPS history (unprocessed, from HA)">🛰 Raw</button>
       </div>
     </div>
     <div id="vl-status" style="position:absolute;bottom:10px;left:50%;transform:translateX(-50%);z-index:9000;background:rgba(0,0,0,0.55);color:#fff;font-size:12px;padding:6px 14px;border-radius:20px;pointer-events:none;white-space:nowrap;display:block"></div>
@@ -514,7 +514,7 @@ async function getHistory(entityId, mode) {
           // also fetch HA history (Starlink raw GPS) for the gap period.
           if (coverageGapS > 3600) {
             const gapEnd = new Date(earliestPt * 1000).toISOString();
-            const gapUrl = `/api/history/period/${start.toISOString()}?filter_entity_id=device_tracker.starlink_device_location&end_time=${gapEnd}&significant_changes_only=false`;
+            const gapUrl = `/api/history/period/${start.toISOString()}?filter_entity_id=device_tracker.ublox_gps&end_time=${gapEnd}&significant_changes_only=false`;
             console.log(`[VL] gps_track gap-fill: fetching Starlink history for ${(coverageGapS/86400).toFixed(1)}d gap`);
             try {
               const gr = await fetch(gapUrl, { headers: { Authorization: `Bearer ${token}` } });
@@ -944,8 +944,8 @@ function setupTabs() {
 function getVanLocation() {
   const trackers = [
     "device_tracker.vanlife_tracker_van_location",
-    "device_tracker.starlink_device_location",
-    "device_tracker.filtered_starlink_location",
+    "device_tracker.ublox_gps",
+    "device_tracker.ublox_gps_filtered",
   ];
   for (const id of trackers) {
     const a = getStates()[id]?.attributes;
@@ -1015,7 +1015,7 @@ async function drawRoute() {
   if (_routeMode === "raw") {
     setStatus("Loading raw Starlink GPS...");
     try {
-      const url = `/api/history/period/${start.toISOString()}?filter_entity_id=device_tracker.starlink_device_location&end_time=${end.toISOString()}&significant_changes_only=false`;
+      const url = `/api/history/period/${start.toISOString()}?filter_entity_id=device_tracker.ublox_gps&end_time=${end.toISOString()}&significant_changes_only=false`;
       const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal });
       if (r.ok) {
         const data = await r.json();
@@ -1372,7 +1372,7 @@ async function _fetchAndFilterStarlink(start, end, token, signal) {
   const CONFIRM_COUNT = 3;
 
   try {
-    const url = `/api/history/period/${start.toISOString()}?filter_entity_id=device_tracker.starlink_device_location&end_time=${end.toISOString()}&significant_changes_only=false`;
+    const url = `/api/history/period/${start.toISOString()}?filter_entity_id=device_tracker.ublox_gps&end_time=${end.toISOString()}&significant_changes_only=false`;
     setStatus("Fetching raw GPS from HA history…");
     const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, signal });
     if (!r.ok) { setStatus("⚠ Failed to load Starlink history"); return null; }
@@ -2460,7 +2460,7 @@ function _updateRawButtonState() {
   rawBtn.style.cursor = isMultiDay ? "not-allowed" : "";
   rawBtn.title = isMultiDay
     ? "Raw mode disabled for multi-day ranges (too much data)"
-    : "Raw Starlink GPS history (unprocessed, from HA)";
+    : "Raw u-blox USB GPS history (unprocessed, from HA)";
   // If currently in raw mode and range became multi-day, switch to road
   if (isMultiDay && _routeMode === "raw") {
     _routeMode = "snap";

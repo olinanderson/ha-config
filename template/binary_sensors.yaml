@@ -53,6 +53,31 @@
           mdi:engine-off
         {% endif %}
 
+# ─── Debounced van occupancy (Apollo MSR-2 mmWave radar) ───
+# The raw radar target flickers on/off every ~30 s (still-target dropout),
+# which used to re-trigger the power-saving automations dozens of times an
+# hour. This holds "occupied" for 3 min after the last detection so presence
+# automations see a stable signal. `availability` keeps it from flipping to
+# "off" (and firing a false "left the van") while the sensor is offline.
+- binary_sensor:
+    - name: "Van Occupied"
+      unique_id: van_occupied_debounced
+      device_class: occupancy
+      icon: >
+        {% if is_state('binary_sensor.van_occupied', 'on') %}
+          mdi:account
+        {% else %}
+          mdi:account-off
+        {% endif %}
+      availability: >
+        {{ has_value('binary_sensor.apollo_msr_2_1731d8_radar_target') }}
+      state: >
+        {{ is_state('binary_sensor.apollo_msr_2_1731d8_radar_target', 'on')
+           or is_state('binary_sensor.apollo_msr_2_1731d8_radar_moving_target', 'on')
+           or is_state('binary_sensor.apollo_msr_2_1731d8_radar_still_target', 'on') }}
+      delay_on: "00:00:10"
+      delay_off: "00:03:00"
+
 # ─── Inverter reachability ───
 - binary_sensor:
     - name: "Inverter On"

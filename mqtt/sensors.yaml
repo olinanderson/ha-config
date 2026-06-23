@@ -12,7 +12,6 @@
 # ─── Standard OBD PIDs (Mode 01, 1s polling) ────────────────
 
 - name: "Engine RPM"
-  object_id: "192_168_10_90_0c_enginerpm"
   unique_id: "wican_0c_enginerpm"
   state_topic: "wican/EngineRPM"
   value_template: "{{ value_json.values() | first }}"
@@ -27,7 +26,6 @@
     model: "WiCAN Pro"
 
 - name: "Vehicle Speed"
-  object_id: "192_168_10_90_0d_vehiclespeed"
   unique_id: "wican_0d_vehiclespeed"
   state_topic: "wican/VehicleSpeed"
   value_template: "{{ value_json.values() | first }}"
@@ -39,7 +37,6 @@
   device: *wican_device
 
 - name: "Control Module Voltage"
-  object_id: "192_168_10_90_42_controlmodulevolt"
   unique_id: "wican_42_controlmodulevolt"
   state_topic: "wican/ControlModuleVolt"
   value_template: "{{ value_json.values() | first }}"
@@ -50,7 +47,6 @@
   device: *wican_device
 
 - name: "Intake Air Temperature"
-  object_id: "192_168_10_90_0f_intakeairtemperature"
   unique_id: "wican_0f_intakeairtemperature"
   state_topic: "wican/IntakeAirTemperature"
   value_template: "{{ value_json.values() | first }}"
@@ -61,7 +57,6 @@
   device: *wican_device
 
 - name: "Throttle Position"
-  object_id: "192_168_10_90_11_throttleposition"
   unique_id: "wican_11_throttleposition"
   state_topic: "wican/ThrottlePosition"
   value_template: "{{ value_json.values() | first }}"
@@ -72,7 +67,6 @@
   device: *wican_device
 
 - name: "Engine Coolant Temp"
-  object_id: "192_168_10_90_05_enginecoolanttemp"
   unique_id: "wican_05_enginecoolanttemp"
   state_topic: "wican/EngineCoolantTemp"
   value_template: "{{ value_json.values() | first }}"
@@ -83,7 +77,6 @@
   device: *wican_device
 
 - name: "Calculated Engine Load"
-  object_id: "192_168_10_90_04_calcengineload"
   unique_id: "wican_04_calcengineload"
   state_topic: "wican/CalcEngineLoad"
   value_template: "{{ value_json.values() | first }}"
@@ -94,7 +87,6 @@
   device: *wican_device
 
 - name: "Fuel Tank Level"
-  object_id: "192_168_10_90_2f_fueltanklevel"
   unique_id: "wican_2f_fueltanklevel"
   state_topic: "wican/FuelTankLevel"
   value_template: "{{ value_json.values() | first }}"
@@ -105,7 +97,6 @@
   device: *wican_device
 
 - name: "Monitor Status"
-  object_id: "192_168_10_90_01_monitorstatus"
   unique_id: "wican_01_monitorstatus"
   state_topic: "wican/MonitorStatus"
   value_template: "{{ value_json.values() | first }}"
@@ -113,7 +104,6 @@
   device: *wican_device
 
 - name: "Ambient Air Temp"
-  object_id: "192_168_10_90_46_ambientairtemp"
   unique_id: "wican_46_ambientairtemp"
   state_topic: "wican/AmbientAirTemp"
   value_template: "{{ value_json.values() | first }}"
@@ -124,7 +114,6 @@
   device: *wican_device
 
 - name: "Time Since Engine Start"
-  object_id: "192_168_10_90_1f_timesinceengstart"
   unique_id: "wican_1f_timesinceengstart"
   state_topic: "wican/TimeSinceEngStart"
   value_template: "{{ value_json.values() | first }}"
@@ -137,7 +126,6 @@
 # ─── User Custom PIDs ───────────────────────────────────────
 
 - name: "Short Term Fuel Trim Bank 1"
-  object_id: "192_168_10_90_stft_b1"
   unique_id: "wican_stft_b1"
   state_topic: "wican/STFT_B1"
   value_template: "{{ value_json.values() | first }}"
@@ -147,7 +135,6 @@
   device: *wican_device
 
 - name: "Long Term Fuel Trim Bank 1"
-  object_id: "192_168_10_90_ltft_b1"
   unique_id: "wican_ltft_b1"
   state_topic: "wican/LTFT_B1"
   value_template: "{{ value_json.values() | first }}"
@@ -157,7 +144,6 @@
   device: *wican_device
 
 - name: "Short Term Fuel Trim Bank 2"
-  object_id: "192_168_10_90_stft_b2"
   unique_id: "wican_stft_b2"
   state_topic: "wican/STFT_B2"
   value_template: "{{ value_json.values() | first }}"
@@ -167,7 +153,6 @@
   device: *wican_device
 
 - name: "Long Term Fuel Trim Bank 2"
-  object_id: "192_168_10_90_ltft_b2"
   unique_id: "wican_ltft_b2"
   state_topic: "wican/LTFT_B2"
   value_template: "{{ value_json.values() | first }}"
@@ -177,7 +162,6 @@
   device: *wican_device
 
 - name: "Lambda"
-  object_id: "192_168_10_90_lambda"
   unique_id: "wican_lambda"
   state_topic: "wican/LAMBDA"
   value_template: "{{ value_json.values() | first }}"
@@ -186,7 +170,6 @@
   device: *wican_device
 
 - name: "Injector Pulse Width"
-  object_id: "192_168_10_90_inj_pw"
   unique_id: "wican_inj_pw"
   state_topic: "wican/INJ_PW"
   value_template: "{{ value_json.values() | first }}"
@@ -195,7 +178,6 @@
   device: *wican_device
 
 - name: "Manifold Absolute Pressure"
-  object_id: "192_168_10_90_map"
   unique_id: "wican_map"
   state_topic: "wican/MAP"
   value_template: "{{ value_json.values() | first }}"
@@ -208,7 +190,6 @@
 # ─── Vehicle Specific PIDs (Ford Mode 22, 5s polling) ───────
 
 - name: "Tire Pressure FL"
-  object_id: "192_168_10_90_tyre_p_fl"
   unique_id: "wican_tyre_p_fl"
   state_topic: "wican/TYRE_P_FL"
   value_template: "{{ value_json.values() | first }}"
@@ -219,7 +200,6 @@
   device: *wican_device
 
 - name: "Tire Pressure FR"
-  object_id: "192_168_10_90_tyre_p_fr"
   unique_id: "wican_tyre_p_fr"
   state_topic: "wican/TYRE_P_FR"
   value_template: "{{ value_json.values() | first }}"
@@ -230,7 +210,6 @@
   device: *wican_device
 
 - name: "Tire Pressure RL"
-  object_id: "192_168_10_90_tyre_p_rl"
   unique_id: "wican_tyre_p_rl"
   state_topic: "wican/TYRE_P_RL"
   value_template: "{{ value_json.values() | first }}"
@@ -241,7 +220,6 @@
   device: *wican_device
 
 - name: "Tire Pressure RR"
-  object_id: "192_168_10_90_tyre_p_rr"
   unique_id: "wican_tyre_p_rr"
   state_topic: "wican/TYRE_P_RR"
   value_template: "{{ value_json.values() | first }}"
@@ -252,7 +230,6 @@
   device: *wican_device
 
 - name: "AC Compressor"
-  object_id: "192_168_10_90_ac_comp"
   unique_id: "wican_ac_comp"
   state_topic: "wican/AC_COMP"
   value_template: "{{ value_json.values() | first }}"
@@ -260,7 +237,6 @@
   device: *wican_device
 
 - name: "Parking Brake"
-  object_id: "192_168_10_90_park_brake"
   unique_id: "wican_park_brake"
   state_topic: "wican/PARK_BRAKE"
   value_template: "{{ value_json.values() | first }}"
@@ -268,7 +244,6 @@
   device: *wican_device
 
 - name: "Drive Mode"
-  object_id: "192_168_10_90_drive_mode"
   unique_id: "wican_drive_mode"
   state_topic: "wican/DRIVE_MODE"
   value_template: "{{ value_json.values() | first }}"
@@ -276,7 +251,6 @@
   device: *wican_device
 
 - name: "Coolant Temperature (Mode 22)"
-  object_id: "192_168_10_90_coolant_tmp"
   unique_id: "wican_coolant_tmp"
   state_topic: "wican/COOLANT_TMP"
   value_template: "{{ value_json.values() | first }}"
@@ -287,7 +261,6 @@
   device: *wican_device
 
 - name: "Fuel Rail Pressure"
-  object_id: "192_168_10_90_fuel_pressure"
   unique_id: "wican_fuel_pressure"
   state_topic: "wican/FUEL_PRESSURE"
   value_template: "{{ value_json.values() | first }}"
@@ -298,7 +271,6 @@
   device: *wican_device
 
 - name: "Fuel Rail Pressure (Direct)"
-  object_id: "192_168_10_90_fuel_pressure_d"
   unique_id: "wican_fuel_pressure_d"
   state_topic: "wican/FUEL_PRESSURE_D"
   value_template: "{{ value_json.values() | first }}"
@@ -309,7 +281,6 @@
   device: *wican_device
 
 - name: "Fuel Pump Duty Cycle"
-  object_id: "192_168_10_90_fuel_pump_duty"
   unique_id: "wican_fuel_pump_duty"
   state_topic: "wican/FUEL_PUMP_DUTY"
   value_template: "{{ value_json.values() | first }}"
@@ -319,7 +290,6 @@
   device: *wican_device
 
 - name: "Fuel System Status"
-  object_id: "192_168_10_90_fuel_sys_stat"
   unique_id: "wican_fuel_sys_stat"
   state_topic: "wican/FUEL_SYS_STAT"
   value_template: "{{ value_json.values() | first }}"
@@ -327,7 +297,6 @@
   device: *wican_device
 
 - name: "Intake Air Temp (Mode 22)"
-  object_id: "192_168_10_90_intake_air_tmp"
   unique_id: "wican_intake_air_tmp"
   state_topic: "wican/INTAKE_AIR_TMP"
   value_template: "{{ value_json.values() | first }}"
@@ -338,7 +307,6 @@
   device: *wican_device
 
 - name: "Intake Air Temp 2"
-  object_id: "192_168_10_90_intake_air_temp_2"
   unique_id: "wican_intake_air_temp_2"
   state_topic: "wican/INTAKE_AIR_TEMP_2"
   value_template: "{{ value_json.values() | first }}"
@@ -349,7 +317,6 @@
   device: *wican_device
 
 - name: "Octane Ratio"
-  object_id: "192_168_10_90_octane_ratio_l"
   unique_id: "wican_octane_ratio_l"
   state_topic: "wican/OCTANE_RATIO_L"
   value_template: "{{ value_json.values() | first }}"
@@ -359,7 +326,6 @@
   device: *wican_device
 
 - name: "Oil Life"
-  object_id: "192_168_10_90_oil_life"
   unique_id: "wican_oil_life"
   state_topic: "wican/OIL_LIFE"
   value_template: "{{ value_json.values() | first }}"
@@ -370,7 +336,6 @@
   device: *wican_device
 
 - name: "Transmission Fluid Temp"
-  object_id: "192_168_10_90_tran_f_temp"
   unique_id: "wican_tran_f_temp"
   state_topic: "wican/TRAN_F_TEMP"
   value_template: "{{ value_json.values() | first }}"
@@ -381,7 +346,6 @@
   device: *wican_device
 
 - name: "Current Gear"
-  object_id: "192_168_10_90_gear"
   unique_id: "wican_gear"
   state_topic: "wican/GEAR"
   value_template: "{{ value_json.values() | first }}"
@@ -390,7 +354,6 @@
   device: *wican_device
 
 - name: "Wastegate Position"
-  object_id: "192_168_10_90_wastegate"
   unique_id: "wican_wastegate"
   state_topic: "wican/WASTEGATE"
   value_template: "{{ value_json.values() | first }}"
@@ -398,3 +361,293 @@
   state_class: measurement
   expire_after: 60
   device: *wican_device
+
+
+# =========================================================
+# WiCAN Pro DTC Extraction (Active Fault Codes)
+# =========================================================
+  
+- name: "Transit Active DTCs"  
+  state_topic: "homeassistant/wican/transit/dtcs"  
+  icon: mdi:engine-outline  
+  value_template: >-  
+    {%- set raw_data = value_json.active_dtcs_raw if value_json is defined and value_json is mapping else value -%}  
+    {%- set payload = raw_data | string | replace(" ", "") | upper -%}  
+    {%- if payload.startswith("43") and payload | length >= 4 -%}  
+      {%- set count = payload[2:4] | int(base=16) -%}  
+      {{- "System Clear" if count == 0 else count ~ " Active Codes" -}}  
+    {%- else -%}  
+      Waiting for Data...  
+    {%- endif -%}  
+  json_attributes_topic: "homeassistant/wican/transit/dtcs"  
+  json_attributes_template: >-  
+    {%- from "ford_dtc.jinja" import get_meaning -%}  
+    {%- set raw_data = value_json.active_dtcs_raw if value_json is defined and value_json is mapping else value -%}  
+    {%- set payload = raw_data | string | replace(" ", "") | upper -%}  
+    {%- set ns = namespace(codes=[], details=[]) -%}  
+    {%- if payload.startswith("43") and payload | length >= 4 -%}  
+      {%- set count = payload[2:4] | int(base=16) -%}  
+      {%- if count > 0 -%}  
+        {%- set prefix_map = {  
+          "0":"P0", "1":"P1", "2":"P2", "3":"P3",  
+          "4":"C0", "5":"C1", "6":"C2", "7":"C3",  
+          "8":"B0", "9":"B1", "A":"B2", "B":"B3",  
+          "C":"U0", "D":"U1", "E":"U2", "F":"U3"  
+        } -%}  
+        {%- set codes_string = payload[4:] -%}  
+        {%- for i in range(0, count * 4, 4) -%}  
+          {%- set hex_code = codes_string[i:i+4] -%}  
+          {%- if hex_code | length == 4 -%}  
+            {%- set first_char = hex_code[0] -%}  
+            {%- if first_char in prefix_map -%}  
+              {%- set dtc = prefix_map[first_char] ~ hex_code[1:4] -%}  
+              {%- set meaning = get_meaning(dtc) | trim -%}  
+              {%- set ns.codes = ns.codes + [dtc] -%}  
+              {%- set ns.details = ns.details + [dtc ~ ": " ~ meaning] -%}  
+            {%- endif -%}  
+          {%- endif -%}  
+        {%- endfor -%}  
+      {%- endif -%}  
+    {%- endif -%}  
+    {{- {"active_codes": ns.codes, "descriptions": ns.details} | tojson -}}  
+
+# ============================================================
+# Apple Watch Ultra 3 - Apple Health via Health Auto Export (MQTT)
+# ============================================================
+# Source: "Health Auto Export" iOS app -> Automations -> MQTT.
+#   - Set the MQTT topic in the app to:  healthexport/data
+#   - Format: JSON.  Payload shape:
+#       {"data": {"metrics": [ {metric}, ... ], "workouts": [...]}}
+#     where each {metric} = {"name": "<id>", "units": "...", "data": [ {record}, ... ]}
+#       * aggregated metrics (e.g. heart_rate)  -> record has Min / Avg / Max
+#       * quantity metrics (steps, hrv, spo2..) -> record has qty
+#       * sleep_analysis -> record has asleep/deep/rem/core/inBed (seconds) + start/end strings
+#
+# NOTE: Health Auto Export does NOT use HA MQTT auto-discovery, so sensors are
+#       defined manually below. Location/presence is handled by the HA Companion
+#       app (continuous), NOT this app (its GPS only logs during workouts).
+#
+# VERIFY METRIC NAMES: the exact "name" strings can vary by app version.
+#   After the first sync, open Developer Tools -> States ->
+#   sensor.apple_watch_payload_metrics and read its "names" attribute to see
+#   the real names, then correct any selectattr('name','eq',...) below.
+# ============================================================
+
+# --- Diagnostic: list of metric names present in the latest payload ---
+- name: "Apple Watch Payload Metrics"
+  unique_id: "apple_watch_payload_metrics"
+  state_topic: "healthexport/data"
+  value_template: "{{ value_json.data.metrics | map(attribute='name') | list | length }}"
+  json_attributes_topic: "healthexport/data"
+  json_attributes_template: >-
+    {{ {'names': value_json.data.metrics | map(attribute='name') | list} | tojson }}
+  icon: mdi:format-list-bulleted
+
+# --- Vitals ---
+# Heart Rate comes from the main /data export: heart_rate has one record per
+# reading for the day, so the LAST record is the most recent reading (~live as
+# of the last export). The separate healthexport/heartrate automation is not
+# needed and can be deleted in the app.
+- name: "Apple Watch Heart Rate"
+  unique_id: "apple_watch_heart_rate"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','heart_rate') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ (r[-1].Avg | default(r[-1].qty, true) | float(0)) | round(0) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_heart_rate') }}{% endif %}
+  unit_of_measurement: "bpm"
+  state_class: measurement
+  icon: mdi:heart-pulse
+
+- name: "Apple Watch Resting Heart Rate"
+  unique_id: "apple_watch_resting_heart_rate"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','resting_heart_rate') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ r[-1].qty | default(r[-1].Avg, true) | default(states('sensor.apple_watch_ultra_apple_watch_resting_heart_rate'), true) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_resting_heart_rate') }}{% endif %}
+  unit_of_measurement: "bpm"
+  state_class: measurement
+  icon: mdi:heart
+
+- name: "Apple Watch Heart Rate Variability"
+  unique_id: "apple_watch_hrv"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','heart_rate_variability') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ (r[-1].qty | default(r[-1].Avg, true) | float(0)) | round(1) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_heart_rate_variability') }}{% endif %}
+  unit_of_measurement: "ms"
+  state_class: measurement
+  icon: mdi:heart-flash
+
+- name: "Apple Watch Respiratory Rate"
+  unique_id: "apple_watch_respiratory_rate"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','respiratory_rate') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ r[-1].qty | default(r[-1].Avg, true) | default(states('sensor.apple_watch_ultra_apple_watch_respiratory_rate'), true) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_respiratory_rate') }}{% endif %}
+  unit_of_measurement: "br/min"
+  state_class: measurement
+  icon: mdi:lungs
+
+- name: "Apple Watch Blood Oxygen"
+  unique_id: "apple_watch_blood_oxygen"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','blood_oxygen_saturation') | map(attribute='data') | first | default([]) %}
+    {% if r %}{% set v = r[-1].qty | float(0) %}{{ (v * 100) | round(0) if v <= 1 else v | round(0) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_blood_oxygen') }}{% endif %}
+  unit_of_measurement: "%"
+  state_class: measurement
+  icon: mdi:water-percent
+
+# --- Activity ---
+- name: "Apple Watch Steps Today"
+  unique_id: "apple_watch_steps_today"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','step_count') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ (r | sum(attribute='qty')) | round(0) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_steps_today') }}{% endif %}
+  unit_of_measurement: "steps"
+  state_class: total_increasing
+  icon: mdi:walk
+
+- name: "Apple Watch Active Energy Today"
+  unique_id: "apple_watch_active_energy_today"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','active_energy') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ (r | sum(attribute='qty')) | round(0) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_active_energy_today') }}{% endif %}
+  unit_of_measurement: "kcal"
+  state_class: total_increasing
+  icon: mdi:fire
+
+# --- Sleep (from sleep_analysis; durations are ALREADY in HOURS) ---
+# Fields: totalSleep (= asleep), core, deep, rem, awake (hours); sleepStart/End,
+# inBedStart/inBedEnd (timestamps). The 'asleep'/'inBed' keys are always 0 here.
+- name: "Apple Watch Sleep Asleep"
+  unique_id: "apple_watch_sleep_asleep"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','sleep_analysis') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ r[-1].totalSleep | float(0) | round(2) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_sleep_asleep') }}{% endif %}
+  unit_of_measurement: "h"
+  state_class: measurement
+  icon: mdi:sleep
+
+- name: "Apple Watch Sleep Deep"
+  unique_id: "apple_watch_sleep_deep"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','sleep_analysis') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ r[-1].deep | float(0) | round(2) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_sleep_deep') }}{% endif %}
+  unit_of_measurement: "h"
+  state_class: measurement
+  icon: mdi:sleep
+
+- name: "Apple Watch Sleep REM"
+  unique_id: "apple_watch_sleep_rem"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','sleep_analysis') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ r[-1].rem | float(0) | round(2) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_sleep_rem') }}{% endif %}
+  unit_of_measurement: "h"
+  state_class: measurement
+  icon: mdi:sleep
+
+- name: "Apple Watch Sleep Core"
+  unique_id: "apple_watch_sleep_core"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','sleep_analysis') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ r[-1].core | float(0) | round(2) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_sleep_core') }}{% endif %}
+  unit_of_measurement: "h"
+  state_class: measurement
+  icon: mdi:sleep
+
+- name: "Apple Watch Sleep In Bed"
+  unique_id: "apple_watch_sleep_in_bed"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','sleep_analysis') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ ((r[-1].totalSleep | float(0)) + (r[-1].awake | float(0))) | round(2) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_sleep_in_bed') }}{% endif %}
+  unit_of_measurement: "h"
+  state_class: measurement
+  icon: mdi:bed
+
+- name: "Apple Watch Sleep Start"
+  unique_id: "apple_watch_sleep_start"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','sleep_analysis') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ r[-1].sleepStart | default(states('sensor.apple_watch_ultra_apple_watch_sleep_start'), true) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_sleep_start') }}{% endif %}
+  icon: mdi:clock-start
+
+- name: "Apple Watch Sleep End"
+  unique_id: "apple_watch_sleep_end"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','sleep_analysis') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ r[-1].sleepEnd | default(states('sensor.apple_watch_ultra_apple_watch_sleep_end'), true) }}{% else %}{{ states('sensor.apple_watch_ultra_apple_watch_sleep_end') }}{% endif %}
+  icon: mdi:clock-end
+
+# --- Sleep Score: Apple's own Sleep Score is NOT exported via HealthKit (it is
+#     absent from the payload). This is a COMPUTED proxy (0-100) from the sleep
+#     stages: 50% duration vs an 8h target, 30% deep+REM quality, 20% low wake. ---
+- name: "Apple Watch Sleep Score"
+  unique_id: "apple_watch_sleep_score"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','sleep_analysis') | map(attribute='data') | first | default([]) %}
+    {% if r and (r[-1].totalSleep | float(0)) > 0 %}
+    {% set s = r[-1] %}{% set total = s.totalSleep | float(0) %}{% set dr = (s.deep | float(0)) + (s.rem | float(0)) %}{% set awake = s.awake | float(0) %}
+    {{ (50 * ([total / 8, 1] | min) + 30 * ([dr / (total * 0.5), 1] | min) + 20 * (1 - ([awake / total, 1] | min))) | round(0) | int }}
+    {% else %}{{ states('sensor.apple_watch_ultra_apple_watch_sleep_score') }}{% endif %}
+  unit_of_measurement: "/100"
+  state_class: measurement
+  icon: mdi:sleep
+
+# --- Body Composition (RENPHO Elis Go scale -> Apple Health -> Health Auto
+#     Export, on the main healthexport/data feed). KG metrics (weight, lean
+#     mass) are converted to LB; to use kg instead, delete "* 2.20462262" and
+#     set unit_of_measurement: kg. All are "latest wins" (no source lock), so
+#     the most recent Apple Health entry shows regardless of which app wrote it.
+#     The keep-last default holds the last value on days with no new reading. ---
+- name: "Apple Watch Weight"
+  unique_id: "apple_watch_weight"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','weight_body_mass') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ (r[-1].qty | float(0) * 2.20462262) | round(1) }}{% else %}{{ states('sensor.apple_watch_weight') }}{% endif %}
+  unit_of_measurement: "lb"
+  device_class: weight
+  state_class: measurement
+  icon: mdi:scale-bathroom
+
+- name: "Apple Watch Body Fat"
+  unique_id: "apple_watch_body_fat"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','body_fat_percentage') | map(attribute='data') | first | default([]) %}
+    {% if r %}{% set v = r[-1].qty | float(0) %}{{ (v * 100) | round(1) if v <= 1 else v | round(1) }}{% else %}{{ states('sensor.apple_watch_body_fat') }}{% endif %}
+  unit_of_measurement: "%"
+  state_class: measurement
+  icon: mdi:percent
+
+- name: "Apple Watch BMI"
+  unique_id: "apple_watch_bmi"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','body_mass_index') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ r[-1].qty | float(0) | round(1) }}{% else %}{{ states('sensor.apple_watch_bmi') }}{% endif %}
+  unit_of_measurement: "kg/m²"
+  state_class: measurement
+  icon: mdi:human
+
+- name: "Apple Watch Lean Body Mass"
+  unique_id: "apple_watch_lean_body_mass"
+  state_topic: "healthexport/data"
+  value_template: >-
+    {% set r = value_json.data.metrics | selectattr('name','eq','lean_body_mass') | map(attribute='data') | first | default([]) %}
+    {% if r %}{{ (r[-1].qty | float(0) * 2.20462262) | round(1) }}{% else %}{{ states('sensor.apple_watch_lean_body_mass') }}{% endif %}
+  unit_of_measurement: "lb"
+  device_class: weight
+  state_class: measurement
+  icon: mdi:arm-flex

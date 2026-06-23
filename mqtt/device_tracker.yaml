@@ -2,18 +2,30 @@
 # mqtt/device_tracker.yaml
 # ================================
 
-# ───── Filtered Starlink GPS tracker ─────
-- state_topic: "homeassistant/device_tracker/filtered_starlink/state"
-  json_attributes_topic: "homeassistant/device_tracker/filtered_starlink/attributes"
-  name: "Filtered Location"
+# ───── Raw u-blox USB GPS ─────
+# Published 1 Hz by gps_ublox.py (reads NMEA from /dev/ttyACM0 on the HA host).
+# Replaces the retired Starlink device_tracker as the van's raw GPS source.
+- state_topic: "homeassistant/device_tracker/ublox_gps/state"
+  json_attributes_topic: "homeassistant/device_tracker/ublox_gps/attributes"
+  name: "uBlox GPS"
+  unique_id: ublox_gps
+  icon: mdi:crosshairs-gps
+  payload_home: "home"
+  payload_not_home: "not_home"
+  source_type: gps
+  qos: 1
+
+# ───── Filtered GPS tracker ─────
+# Renamed from the old "filtered_starlink" tracker. unique_id is preserved so
+# Home Assistant keeps this as the SAME entity (all recorder history carries
+# over); the entity_id is then renamed to device_tracker.ublox_gps_filtered via
+# the registry. Fed by the filtered-coords automations in automations.yaml.
+- state_topic: "homeassistant/device_tracker/ublox_gps_filtered/state"
+  json_attributes_topic: "homeassistant/device_tracker/ublox_gps_filtered/attributes"
+  name: "uBlox GPS Filtered"
   unique_id: filtered_starlink_location
   icon: mdi:satellite-variant
   payload_home: "home"
   payload_not_home: "not_home"
   source_type: gps
   qos: 1
-  device:
-    identifiers: ["filtered_starlink"]
-    manufacturer: "Home Assistant"
-    model: "Filtered Location Tracker"
-    name: "Starlink"

@@ -1,6 +1,7 @@
 import { useEffect, useState, useCallback, useRef, type ComponentType } from 'react';
 import { HassProvider, useHassStore } from '@/context/HomeAssistantContext';
 import { HistoryDialogProvider } from '@/components/EntityHistoryDialog';
+import { DTCDialogProvider } from '@/components/DTCDialog';
 import { PortalProvider } from '@/context/PortalContext';
 import { cn } from '@/lib/utils';
 import {
@@ -13,6 +14,7 @@ import {
   Camera,
   Map,
   CalendarClock,
+  HeartPulse,
   type LucideIcon,
 } from 'lucide-react';
 import Home from '@/pages/Home';
@@ -20,6 +22,7 @@ import Power from '@/pages/Power';
 import Climate from '@/pages/Climate';
 import Water from '@/pages/Water';
 import Van from '@/pages/Van';
+import Health from '@/pages/Health';
 import System from '@/pages/System';
 import Cameras from '@/pages/Cameras';
 import VanlifeMap from '@/pages/VanlifeMap';
@@ -31,6 +34,7 @@ const pages: Record<string, ComponentType> = {
   climate: Climate,
   water: Water,
   van: Van,
+  health: Health,
   schedule: Schedule,
   cameras: Cameras,
   map: VanlifeMap,
@@ -49,6 +53,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'climate', label: 'Climate', icon: Thermometer },
   { id: 'water', label: 'Water', icon: Droplets },
   { id: 'van', label: 'Van', icon: Truck },
+  { id: 'health', label: 'Health', icon: HeartPulse },
   { id: 'schedule', label: 'Schedule', icon: CalendarClock },
   { id: 'cameras', label: 'Cameras', icon: Camera },
   { id: 'map', label: 'Map', icon: Map },
@@ -125,6 +130,7 @@ export default function App() {
       <div className={`van-dash-root ${isDark ? 'dark' : ''}`} style={{ position: 'relative' }}>
         <PortalProvider>
         <HistoryDialogProvider>
+        <DTCDialogProvider>
         <div className="h-screen flex flex-col bg-background text-foreground">
           {/* Tab navbar */}
           <nav className="flex-none border-b border-border bg-card/80 backdrop-blur-sm">
@@ -155,6 +161,7 @@ export default function App() {
             {page !== 'cameras' && <Page />}
           </div>
         </div>
+        </DTCDialogProvider>
         </HistoryDialogProvider>
         </PortalProvider>
       </div>

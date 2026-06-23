@@ -1,0 +1,55 @@
+name: Validate HA config
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  yamllint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: yamllint
+        uses: ibiqlik/action-yamllint@v3
+        with:
+          config_data: |
+            extends: relaxed
+            rules:
+              line-length: disable
+              truthy: disable
+              comments-indentation: disable
+              braces: disable
+              brackets: disable
+              indentation:
+                spaces: 2
+                indent-sequences: consistent
+          file_or_dir: |
+            configuration.yaml
+            automations.yaml
+            scripts.yaml
+            scenes.yaml
+            shell_commands.yaml
+            conversations.yaml
+            intent_scripts.yaml
+            input_boolean.yaml
+            input_number.yaml
+            input_text.yaml
+            input_select.yaml
+            filter.yaml
+            integrations
+            mqtt
+            template
+
+  hassfest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Home Assistant config check
+        uses: frenck/action-home-assistant@v1
+        with:
+          path: "."
+          secrets: ./secrets.fake.yaml
+          version: stable

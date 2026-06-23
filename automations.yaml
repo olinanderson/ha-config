@@ -63,56 +63,44 @@
               seconds: 60
 
 # ───────────────────────────────────────────────
-#  Starlink-filtered tracker – MQTT update logic
+#  Filtered GPS tracker – MQTT update logic
 # ───────────────────────────────────────────────
 
 # 1️⃣  (Optional) Republish last known fix on HA boot
 #     – only if broker has NO retained packet
 - id: starlink_bootstrap_if_missing
-  alias: "Starlink • bootstrap retained message if none"
+  alias: "GPS • bootstrap retained message if none"
   mode: single
   trigger:
     - trigger: homeassistant
       event: start
   condition:
     # Run only when tracker state is 'unknown' (means broker lost retain)
-    - "{{ states('device_tracker.filtered_starlink_location') in ['unknown', 'unavailable'] }}"
+    - "{{ states('device_tracker.ublox_gps_filtered') in ['unknown', 'unavailable'] }}"
   action:
     - action: mqtt.publish
       data:
-        topic: homeassistant/device_tracker/filtered_starlink/attributes
+        topic: homeassistant/device_tracker/ublox_gps_filtered/attributes
         qos: 1
         retain: true
         payload: >
           {
-            "latitude": {{ state_attr('device_tracker.starlink_device_location','latitude') | default(0) }},
-            "longitude": {{ state_attr('device_tracker.starlink_device_location','longitude') | default(0) }},
-            "gps_accuracy": {{ state_attr('device_tracker.starlink_device_location','gps_accuracy') | default(0) }},
-            "elevation": {{ state_attr('device_tracker.starlink_device_location','altitude') | default(0) }},
+            "latitude": {{ state_attr('device_tracker.ublox_gps','latitude') | default(0) }},
+            "longitude": {{ state_attr('device_tracker.ublox_gps','longitude') | default(0) }},
+            "gps_accuracy": {{ state_attr('device_tracker.ublox_gps','gps_accuracy') | default(0) }},
+            "elevation": {{ state_attr('device_tracker.ublox_gps','altitude') | default(0) }},
             "source_type": "gps"
           }
     - action: mqtt.publish
       data:
-        topic: homeassistant/device_tracker/filtered_starlink/state
+        topic: homeassistant/device_tracker/ublox_gps_filtered/state
         qos: 1
         retain: true
         payload: "home"
 
-# 2️⃣  Update Starlink entity itself every second (pulls fresh coords)
-- id: starlink_entity_refresh_1hz
-  alias: "Starlink • refresh built-in entity 1 Hz"
-  mode: single
-  trigger:
-    - trigger: time_pattern
-      seconds: "/1"
-  action:
-    - action: homeassistant.update_entity
-      target:
-        entity_id: device_tracker.starlink_device_location
-
-# 3️⃣  While the van is moving: publish new GPS fix each second
+# 2️⃣  While the van is moving: publish new GPS fix each second
 - id: starlink_filtered_while_moving
-  alias: "Starlink • filtered coords 1 Hz while moving"
+  alias: "GPS • filtered coords 1 Hz while moving"
   mode: queued
   max: 3
   trigger:
@@ -125,28 +113,28 @@
   action:
     - action: mqtt.publish
       data:
-        topic: homeassistant/device_tracker/filtered_starlink/attributes
+        topic: homeassistant/device_tracker/ublox_gps_filtered/attributes
         qos: 1
         retain: true
         payload: >
           {
-            "latitude": {{ state_attr('device_tracker.starlink_device_location','latitude') | default(0) }},
-            "longitude": {{ state_attr('device_tracker.starlink_device_location','longitude') | default(0) }},
-            "gps_accuracy": {{ state_attr('device_tracker.starlink_device_location','gps_accuracy') | default(0) }},
-            "elevation": {{ state_attr('device_tracker.starlink_device_location','altitude') | default(0) }},
+            "latitude": {{ state_attr('device_tracker.ublox_gps','latitude') | default(0) }},
+            "longitude": {{ state_attr('device_tracker.ublox_gps','longitude') | default(0) }},
+            "gps_accuracy": {{ state_attr('device_tracker.ublox_gps','gps_accuracy') | default(0) }},
+            "elevation": {{ state_attr('device_tracker.ublox_gps','altitude') | default(0) }},
             "source_type": "gps"
           }
     # Tracker’s textual state stays constant
     - action: mqtt.publish
       data:
-        topic: homeassistant/device_tracker/filtered_starlink/state
+        topic: homeassistant/device_tracker/ublox_gps_filtered/state
         qos: 1
         retain: true
         payload: "home"
 
 # 4️⃣  Snapshot when movement STARTS
 - id: starlink_filtered_start_move
-  alias: "Starlink • snapshot when movement starts"
+  alias: "GPS • snapshot when movement starts"
   trigger:
     - trigger: state
       entity_id: binary_sensor.vehicle_is_moving
@@ -155,27 +143,27 @@
   action:
     - action: mqtt.publish
       data:
-        topic: homeassistant/device_tracker/filtered_starlink/attributes
+        topic: homeassistant/device_tracker/ublox_gps_filtered/attributes
         qos: 1
         retain: true
         payload: >
           {
-            "latitude": {{ state_attr('device_tracker.starlink_device_location','latitude') | default(0) }},
-            "longitude": {{ state_attr('device_tracker.starlink_device_location','longitude') | default(0) }},
-            "gps_accuracy": {{ state_attr('device_tracker.starlink_device_location','gps_accuracy') | default(0) }},
-            "elevation": {{ state_attr('device_tracker.starlink_device_location','altitude') | default(0) }},
+            "latitude": {{ state_attr('device_tracker.ublox_gps','latitude') | default(0) }},
+            "longitude": {{ state_attr('device_tracker.ublox_gps','longitude') | default(0) }},
+            "gps_accuracy": {{ state_attr('device_tracker.ublox_gps','gps_accuracy') | default(0) }},
+            "elevation": {{ state_attr('device_tracker.ublox_gps','altitude') | default(0) }},
             "source_type": "gps"
           }
     - action: mqtt.publish
       data:
-        topic: homeassistant/device_tracker/filtered_starlink/state
+        topic: homeassistant/device_tracker/ublox_gps_filtered/state
         qos: 1
         retain: true
         payload: "home"
 
 # 5️⃣  Snapshot when movement STOPS
 - id: starlink_filtered_stop_move
-  alias: "Starlink • snapshot when movement stops"
+  alias: "GPS • snapshot when movement stops"
   trigger:
     - trigger: state
       entity_id: binary_sensor.vehicle_is_moving
@@ -184,20 +172,20 @@
   action:
     - action: mqtt.publish
       data:
-        topic: homeassistant/device_tracker/filtered_starlink/attributes
+        topic: homeassistant/device_tracker/ublox_gps_filtered/attributes
         qos: 1
         retain: true
         payload: >
           {
-            "latitude": {{ state_attr('device_tracker.starlink_device_location','latitude') | default(0) }},
-            "longitude": {{ state_attr('device_tracker.starlink_device_location','longitude') | default(0) }},
-            "gps_accuracy": {{ state_attr('device_tracker.starlink_device_location','gps_accuracy') | default(0) }},
-            "elevation": {{ state_attr('device_tracker.starlink_device_location','altitude') | default(0) }},
+            "latitude": {{ state_attr('device_tracker.ublox_gps','latitude') | default(0) }},
+            "longitude": {{ state_attr('device_tracker.ublox_gps','longitude') | default(0) }},
+            "gps_accuracy": {{ state_attr('device_tracker.ublox_gps','gps_accuracy') | default(0) }},
+            "elevation": {{ state_attr('device_tracker.ublox_gps','altitude') | default(0) }},
             "source_type": "gps"
           }
     - action: mqtt.publish
       data:
-        topic: homeassistant/device_tracker/filtered_starlink/state
+        topic: homeassistant/device_tracker/ublox_gps_filtered/state
         qos: 1
         retain: true
         payload: "home"
@@ -232,7 +220,8 @@
   action:
     - action: light.turn_on
       data:
-        color_temp: "{{ states('input_number.main_light_warmth') | int }}"
+        # input_number is in mireds (250-500); HA now requires kelvin. Convert.
+        color_temp_kelvin: "{{ (1000000 / (states('input_number.main_light_warmth') | int)) | int }}"
       target:
         entity_id: light.led_controller_cct_1
   mode: single
@@ -342,8 +331,8 @@
   mode: single
   trigger:
     - trigger: state
-      entity_id: binary_sensor.apollo_msr_2_1731d8_radar_target
-      from: "off" # sensor becomes occupied
+      entity_id: binary_sensor.van_occupied # debounced radar (smooths flicker)
+      from: "off" # occupancy confirmed
       to: "on"
   condition:
     # Suppress this welcome flow while sleeping
@@ -413,13 +402,13 @@
   trigger:
     - id: leave_van
       trigger: state
-      entity_id: binary_sensor.apollo_msr_2_1731d8_radar_target
+      entity_id: binary_sensor.van_occupied # debounced radar (smooths flicker)
       from: "on"
       to: "off"
       for: "00:01:00" # away for ≥ 1 min
     - id: return_van
       trigger: state
-      entity_id: binary_sensor.apollo_msr_2_1731d8_radar_target
+      entity_id: binary_sensor.van_occupied # debounced radar (smooths flicker)
       from: "off"
       to: "on"
   condition:
@@ -730,19 +719,19 @@
         entity_id: switch.a32_pro_switch27_bed_power_supply
 
 - id: keep_home_zone_on_starlink
-  alias: Keep Home zone on Starlink
+  alias: Keep Home zone on GPS
   mode: single
   trigger:
     - trigger: time_pattern # every 15 min
       minutes: "/5"
   condition:
-    - "{{ state_attr('device_tracker.starlink', 'latitude') not in [none, 'unknown', 'unavailable'] }}"
+    - "{{ state_attr('device_tracker.ublox_gps', 'latitude') not in [none, 'unknown', 'unavailable'] }}"
   action:
     - action: homeassistant.set_location
       data:
-        latitude: "{{ state_attr('device_tracker.starlink', 'latitude')  }}"
-        longitude: "{{ state_attr('device_tracker.starlink', 'longitude') }}"
-        elevation: "{{ state_attr('device_tracker.starlink', 'altitude')  | default(0) }}"
+        latitude: "{{ state_attr('device_tracker.ublox_gps', 'latitude')  }}"
+        longitude: "{{ state_attr('device_tracker.ublox_gps', 'longitude') }}"
+        elevation: "{{ state_attr('device_tracker.ublox_gps', 'altitude')  | default(0) }}"
 
 # ───────────────────────────────────────────────
 # Rolling snapshot of "last active state" @ 1 Hz
@@ -922,6 +911,16 @@
     - delay: "00:00:35"
     - action: shell_command.start_osrm_proxy
 
+- id: gps_ublox_start_on_boot
+  alias: "GPS u-blox • Start on HA boot"
+  mode: single
+  trigger:
+    - trigger: homeassistant
+      event: start
+  action:
+    - delay: "00:00:40"
+    - action: shell_command.start_gps_ublox
+
 - id: gps_filter_start_on_boot
   alias: "GPS Filter • Start on HA boot"
   mode: single
@@ -998,6 +997,44 @@
       target:
         entity_id: input_boolean.inverter_state
 
+# ───────────────────────────────────────────────
+#  Inverter manual lock (respect a manual off)
+# ───────────────────────────────────────────────
+# When YOU press the inverter button, remember the direction you chose so the
+# power-saving / wake "ensure on" flows don't fight you:
+#   • you turned it OFF  → set the lock  → ensure_on is suppressed
+#   • you turned it ON   → clear the lock → auto behavior resumes
+# Script/automation presses run without a user context, so they're ignored.
+- id: inverter_manual_lock_manager
+  alias: "Inverter • Manual lock follows user press"
+  mode: queued
+  max: 5
+  trigger:
+    - trigger: state
+      entity_id: button.a32_pro_inverter_on_off_toggle
+  condition:
+    # Only react to a DIRECT user press of the inverter button: a real user
+    # (user_id set) and not a press cascaded from a script/automation
+    # (parent_id is None). Scripts pressing the button never satisfy both.
+    - "{{ trigger.to_state is not none
+          and trigger.to_state.context.user_id is not none
+          and trigger.to_state.context.parent_id is none }}"
+  action:
+    # Let the 1 s ping → inverter_state settle after the toggle takes effect.
+    - delay: "00:00:10"
+    - if:
+        - condition: state
+          entity_id: input_boolean.inverter_state
+          state: "off"
+      then:
+        - action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.inverter_manual_lock
+      else:
+        - action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.inverter_manual_lock
+
 # ────────────────────────────────────────────────────────────────
 # WiCAN OBD — PID Logging on Engine Start (native integration)
 # ────────────────────────────────────────────────────────────────
@@ -1069,4 +1106,53 @@
           Speed: {{ states('sensor.192_168_10_90_0d_vehiclespeed') }} | RPM: {{ states('sensor.192_168_10_90_0c_enginerpm') }} | Fuel: {{ states('sensor.192_168_10_90_2f_fueltanklevel') }}%
           Coolant: {{ states('sensor.192_168_10_90_05_enginecoolanttemp') }}°C | Trans: {{ states('sensor.192_168_10_90_tran_f_temp') }}°C
           Tires FL/FR/RL/RR: {{ states('sensor.192_168_10_90_tyre_p_fl') }}/{{ states('sensor.192_168_10_90_tyre_p_fr') }}/{{ states('sensor.192_168_10_90_tyre_p_rl') }}/{{ states('sensor.192_168_10_90_tyre_p_rr') }} kPa
+
+# ────────────────────────────────────────────────────────────────
+# Host Python daemons — liveness watchdog
+# ────────────────────────────────────────────────────────────────
+# The osrm_proxy / gps_ublox / gps_filter / dvr_proxy daemons run inside the HA
+# Core container and are otherwise only (re)started on full HA boot. When one
+# crashes mid-run (e.g. osrm_proxy + gps_filter both found dead 2026-06-23,
+# gps_filter down since ~06-22) nothing relaunches it and the vanlife map goes
+# blank until the next restart.
+#
+# This re-runs the idempotent start_* commands every 3 min. Each one self-guards
+# (port nc-check for the proxies, /tmp pid-file + kill -0 for the gps daemons),
+# so it's a no-op when the daemon is alive and a clean relaunch when it's dead —
+# crash recovery within ~3 min instead of waiting for a reboot. When a daemon was
+# actually dead its start command prints "...started" (not "already running"), so
+# we log a warning naming it: a crash trail for root-causing repeat offenders.
+- id: daemons_liveness_watchdog
+  alias: "Daemons • Liveness watchdog"
+  mode: single
+  max_exceeded: silent
+  trigger:
+    - trigger: time_pattern
+      minutes: "/3"
+  action:
+    - action: shell_command.start_osrm_proxy
+      response_variable: osrm_r
+    - action: shell_command.start_gps_ublox
+      response_variable: ublox_r
+    - action: shell_command.start_gps_filter
+      response_variable: filter_r
+    - action: shell_command.start_dvr_proxy
+      response_variable: dvr_r
+    # A daemon that was alive prints "...already running"; anything else means the
+    # start command had to relaunch it (or failed to), so flag it by name.
+    - variables:
+        restarted: >-
+          {% set ns = namespace(d=[]) %}
+          {% if 'already running' not in (osrm_r.stdout | default('')) %}{% set ns.d = ns.d + ['osrm_proxy (8765)'] %}{% endif %}
+          {% if 'already running' not in (ublox_r.stdout | default('')) %}{% set ns.d = ns.d + ['gps_ublox'] %}{% endif %}
+          {% if 'already running' not in (filter_r.stdout | default('')) %}{% set ns.d = ns.d + ['gps_filter'] %}{% endif %}
+          {% if 'already running' not in (dvr_r.stdout | default('')) %}{% set ns.d = ns.d + ['dvr_proxy (8766)'] %}{% endif %}
+          {{ ns.d | join(', ') }}
+    - if: "{{ restarted | trim | length > 0 }}"
+      then:
+        - action: system_log.write
+          data:
+            level: warning
+            logger: watchdog.daemons
+            message: "Relaunched dead host daemon(s): {{ restarted | trim }}"
 

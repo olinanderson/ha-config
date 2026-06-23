@@ -4,7 +4,7 @@ import { isFresh } from '@/lib/utils';
 
 export function PresenceBar() {
   const radar = useEntity('binary_sensor.apollo_msr_2_1731d8_radar_target');
-  const starlink = useEntity('device_tracker.starlink');
+  const starlink = useEntity('device_tracker.ublox_gps');
   const powerSave = useEntity('input_boolean.power_saving_mode');
   const sleepMode = useEntity('input_boolean.sleep_mode');
   const engine = useEntity('binary_sensor.engine_is_running');

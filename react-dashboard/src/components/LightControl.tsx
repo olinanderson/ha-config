@@ -17,19 +17,20 @@ export function LightControl({ entityId, name, hasCct = false }: LightControlPro
   const isOn = entity?.state === 'on';
   const brightness = entity?.attributes?.brightness ?? 0;
   const pct = Math.round((brightness / 255) * 100);
-  const colorTemp = entity?.attributes?.color_temp ?? 250;
-  const minMireds = entity?.attributes?.min_mireds ?? 150;
-  const maxMireds = entity?.attributes?.max_mireds ?? 500;
+  // HA removed the mireds color_temp attributes; everything is kelvin now.
+  const colorTempK = entity?.attributes?.color_temp_kelvin ?? 4000;
+  const minK = entity?.attributes?.min_color_temp_kelvin ?? 2000;
+  const maxK = entity?.attributes?.max_color_temp_kelvin ?? 6535;
 
   // Local slider state for smooth dragging
   const [localBright, setLocalBright] = useState(pct);
-  const [localTemp, setLocalTemp] = useState(colorTemp);
+  const [localTempK, setLocalTempK] = useState(colorTempK);
   const brightTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const tempTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   // Sync from entity when not dragging
   useEffect(() => { setLocalBright(pct); }, [pct]);
-  useEffect(() => { setLocalTemp(colorTemp); }, [colorTemp]);
+  useEffect(() => { setLocalTempK(colorTempK); }, [colorTempK]);
 
   const commitBrightness = useCallback(
     (v: number) => {
@@ -43,11 +44,11 @@ export function LightControl({ entityId, name, hasCct = false }: LightControlPro
   );
 
   const commitTemp = useCallback(
-    (v: number) => {
-      setLocalTemp(v);
+    (kelvin: number) => {
+      setLocalTempK(kelvin);
       if (tempTimer.current) clearTimeout(tempTimer.current);
       tempTimer.current = setTimeout(() => {
-        callService('light', 'turn_on', { color_temp: v }, { entity_id: entityId });
+        callService('light', 'turn_on', { color_temp_kelvin: kelvin }, { entity_id: entityId });
       }, 200);
     },
     [callService, entityId],
@@ -103,10 +104,12 @@ export function LightControl({ entityId, name, hasCct = false }: LightControlPro
               <Thermometer className="h-3 w-3 text-muted-foreground shrink-0" />
               <input
                 type="range"
-                min={minMireds}
-                max={maxMireds}
-                value={localTemp}
-                onChange={(e) => commitTemp(Number(e.target.value))}
+                min={minK}
+                max={maxK}
+                // Kelvin runs cool→warm as it DECREASES, but we keep the slider
+                // cool-left/warm-right, so invert around (minK+maxK).
+                value={minK + maxK - localTempK}
+                onChange={(e) => commitTemp(minK + maxK - Number(e.target.value))}
                 className="w-full h-1.5 rounded-full appearance-none cursor-pointer
                   [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:w-4
                   [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-orange-400"

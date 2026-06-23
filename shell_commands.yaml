@@ -22,15 +22,32 @@ start_scream_receiver: >
   docker exec hassio_audio pkill -f scream || true ;
   docker exec -d hassio_audio scream -u -v -o pulse -s alsa_output.usb-Generic_USB_SPDIF_Adapter_202110200032-00.iec958-stereo -n WinPC'
 
-# Start routing CORS proxy so the vanlife panel can call GraphHopper without CORS errors
+# Restart routing CORS proxy
+restart_osrm_proxy: >
+  /bin/sh -c '
+    python3 /config/www/vanlife-panel/kill_osrm.py;
+    sleep 2;
+    cd /config/www/vanlife-panel &&
+    nohup python3 osrm_proxy.py > /config/www/vanlife-panel/osrm_proxy.log 2>&1 &
+    echo "Routing proxy restarted"'
+
+# Start routing CORS proxy so the vanlife panel can call GraphHopper without CORS
+# errors. Idempotent: no-ops if port 8765 is already listening (same nc guard as
+# start_dvr_proxy) so the watchdog can call it without killing a live proxy. Use
+# restart_osrm_proxy to force a fresh start.
 start_osrm_proxy: >
   /bin/sh -c 'if ! nc -z 127.0.0.1 8765 2>/dev/null; then
+    python3 /config/www/vanlife-panel/kill_osrm.py;
+    sleep 2;
     cd /config/www/vanlife-panel &&
     nohup python3 osrm_proxy.py > /config/www/vanlife-panel/osrm_proxy.log 2>&1 &
     echo "Routing proxy started";
   else
     echo "Routing proxy already running";
   fi'
+
+# Diagnostic: dump ps aux + netstat from inside HA container to a readable file
+diag_psout: sh /config/www/vanlife-panel/psout.sh
 
 # Start Syncthing for bidirectional config sync with PC over Tailscale
 start_syncthing: >
@@ -44,7 +61,29 @@ start_syncthing: >
     echo "Syncthing already running";
   fi'
 
-# Start GPS filter daemon — pre-processes Starlink GPS into filtered segments + routes
+# Start u-blox USB GPS bridge — reads NMEA from /dev/ttyACM0 and publishes the
+# device_tracker.ublox_gps MQTT tracker (raw GPS source for the whole system).
+start_gps_ublox: >
+  /bin/sh -c 'if [ ! -f /tmp/gps_ublox.pid ] || ! kill -0 $(cat /tmp/gps_ublox.pid) 2>/dev/null; then
+    cd /config/www/vanlife-panel &&
+    nohup python3 gps_ublox.py >> /config/www/vanlife-panel/gps_ublox.log 2>&1 &
+    echo $! > /tmp/gps_ublox.pid;
+    echo "u-blox GPS bridge started";
+  else
+    echo "u-blox GPS bridge already running";
+  fi'
+
+# Restart u-blox USB GPS bridge — kill existing and start fresh
+restart_gps_ublox: >
+  /bin/sh -c 'kill $(cat /tmp/gps_ublox.pid) 2>/dev/null;
+    pkill -f "python3.*gps_ublox" 2>/dev/null;
+    sleep 1;
+    cd /config/www/vanlife-panel &&
+    nohup python3 gps_ublox.py >> /config/www/vanlife-panel/gps_ublox.log 2>&1 &
+    echo $! > /tmp/gps_ublox.pid;
+    echo "u-blox GPS bridge restarted"'
+
+# Start GPS filter daemon — pre-processes raw GPS into filtered segments + routes
 start_gps_filter: >
   /bin/sh -c 'if [ ! -f /tmp/gps_filter.pid ] || ! kill -0 $(cat /tmp/gps_filter.pid) 2>/dev/null; then
     TOKEN=$(cat /config/.gps_filter_token 2>/dev/null);
@@ -56,6 +95,19 @@ start_gps_filter: >
   else
     echo "GPS filter daemon already running";
   fi'
+
+# Restart GPS filter daemon — kill existing and start fresh (e.g. after the
+# source ENTITY_ID changes) so it re-reads its config.
+restart_gps_filter: >
+  /bin/sh -c 'kill $(cat /tmp/gps_filter.pid) 2>/dev/null;
+    pkill -f "python3.*gps_filter" 2>/dev/null;
+    sleep 1;
+    TOKEN=$(cat /config/.gps_filter_token 2>/dev/null);
+    if [ -z "$TOKEN" ]; then echo "No token file at /config/.gps_filter_token"; exit 1; fi;
+    cd /config/www/vanlife-panel &&
+    nohup python3 gps_filter.py --token "$TOKEN" >> /config/www/vanlife-panel/gps_filter.log 2>&1 &
+    echo $! > /tmp/gps_filter.pid;
+    echo "GPS filter daemon restarted"'
 
 # Start DVR proxy — camera playback API + RTSP proxy
 # Installs ffmpeg if missing (apk packages don't persist across HAOS reboots)
@@ -83,3 +135,6 @@ restart_dvr_proxy: >
 # entry to input_text.ve_correction_history.
 # Arguments: from_ts (epoch ms of previous fill-up), to_ts (epoch ms of now)
 update_ve_from_fillup: "python3 /config/ve_update.py {{ from_ts }} {{ to_ts }}"
+
+# Debug: dump ps + port info inside HA container
+osrm_debug: "/bin/sh -c 'ps aux > /config/www/vanlife-panel/ps_debug.txt 2>&1; netstat -tlnp >> /config/www/vanlife-panel/ps_debug.txt 2>&1; echo done'"

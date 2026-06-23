@@ -19,7 +19,8 @@
 | **Simarine A32 Pro** (ESP32-S3) | Primary controller — switches, sensors, MPPT, tank levels, BME280s, S5140 current sensors, DAC outputs | ESPHome via WiFi |
 | **AG Pro** (ESPHome) | Roof fan (speed, direction, lid), additional controls | ESPHome via WiFi |
 | **WiCAN Pro** (v4.48) | Vehicle OBD2 data — speed, fuel, RPM, coolant, tire pressure, gear, trans temp | MQTT |
-| **Starlink** | Internet + GPS location tracking | Native integration + MQTT |
+| **Starlink** | Internet | Native integration + MQTT |
+| **u-blox USB GPS** | GPS location tracking (`device_tracker.ublox_gps`, filtered `device_tracker.ublox_gps_filtered`); drives the home zone | USB + MQTT |
 | **Apollo MSR-2** | mmWave radar presence/occupancy sensor | ESPHome |
 | **Shelly EM** | AC power monitoring (inverter output voltage, power) | Native integration (ping-based) |
 | **Olins Van BMS** | Battery management — SOC, voltage, current, temperature, cycles, stored energy | BLE via `bms_ble` |

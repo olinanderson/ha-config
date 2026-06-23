@@ -387,6 +387,108 @@ def _update_clip_status(clip_id, status, file_size=None):
         _save_clips_meta(clips)
 
 
+# ─── OBD-II DTC Lookup (scrapes engine-codes.com server-side to avoid CORS) ───
+
+_DTC_CACHE = {}  # { "P0420": {timestamp, data} }
+_DTC_CACHE_TTL = 86400 * 7  # one week
+
+
+def fetch_dtc_description(code):
+    """Fetch description of a DTC code from engine-codes.com. Cached 7 days in memory.
+
+    Returns a dict:
+      {
+        'code': 'P0420',
+        'title': '...',
+        'description': '...',
+        'causes': [...],
+        'symptoms': [...],
+        'fix': '...',
+        'source': 'engine-codes.com',
+      }
+    or {'error': 'message'} on failure.
+    """
+    import re
+    code = (code or '').strip().upper()
+    if not re.match(r'^[PBCU][0-9A-F]{4}$', code):
+        return {'error': f'invalid code format: {code!r}'}
+
+    now = _time.time()
+    cached = _DTC_CACHE.get(code)
+    if cached and now - cached['ts'] < _DTC_CACHE_TTL:
+        return cached['data']
+
+    url = f'https://www.engine-codes.com/{code.lower()}.html'
+    headers = {
+        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+        'Accept-Language': 'en-US,en;q=0.9',
+    }
+    try:
+        req = urllib.request.Request(url, headers=headers)
+        with urllib.request.urlopen(req, timeout=10) as resp:
+            html = resp.read().decode('utf-8', errors='ignore')
+    except urllib.error.HTTPError as e:
+        if e.code == 404:
+            return {'error': f'code {code} not found on engine-codes.com', 'code': code}
+        return {'error': f'HTTP {e.code}: {e.reason}', 'code': code}
+    except Exception as e:
+        return {'error': f'fetch failed: {e}', 'code': code}
+
+    # Parse h1 title
+    m = re.search(r'<h1[^>]*>([^<]+)</h1>', html)
+    title = m.group(1).strip() if m else f'Code {code}'
+
+    # Split the page into { section_header: body_text } by h2/h3
+    sections = re.split(r'<h[23][^>]*>([^<]+)</h[23]>', html)
+    parsed = {}
+    for i in range(1, len(sections), 2):
+        header = sections[i].strip()
+        body = sections[i + 1] if i + 1 < len(sections) else ''
+        # Strip scripts/styles
+        body = re.sub(r'<script[^>]*>.*?</script>', '', body, flags=re.DOTALL)
+        body = re.sub(r'<style[^>]*>.*?</style>', '', body, flags=re.DOTALL)
+        # Collect list items first
+        items = re.findall(r'<li[^>]*>([\s\S]*?)</li>', body)
+        items = [re.sub(r'<[^>]+>', '', it).strip() for it in items]
+        items = [re.sub(r'\s+', ' ', it) for it in items if it.strip()]
+        # Turn the body to plain text for prose paragraphs
+        text = re.sub(r'</p>', '\n\n', body)
+        text = re.sub(r'<br\s*/?>', '\n', text)
+        text = re.sub(r'<li[^>]*>', '\n- ', text)
+        text = re.sub(r'<[^>]+>', '', text)
+        text = re.sub(r'&nbsp;', ' ', text)
+        text = re.sub(r'&amp;', '&', text)
+        text = re.sub(r'&#?\w+;', '', text)
+        text = re.sub(r'\n\s*\n\s*\n+', '\n\n', text).strip()
+        parsed[header] = {'text': text[:2000], 'items': items[:12]}
+
+    # Map the generic headers -> our well-known keys (case-insensitive substring match)
+    def get(label):
+        for h, v in parsed.items():
+            if label.lower() in h.lower():
+                return v
+        return None
+
+    desc = get('Description')
+    causes = get('Common Causes')
+    symptoms = get('Symptoms')
+    fix = get('How to Fix') or get('Fix')
+
+    data = {
+        'code': code,
+        'title': title,
+        'description': (desc or {}).get('text', '') if desc else '',
+        'causes': (causes or {}).get('items', []) if causes else [],
+        'symptoms': (symptoms or {}).get('items', []) if symptoms else [],
+        'fix': (fix or {}).get('text', '')[:800] if fix else '',
+        'source_url': url,
+        'source': 'engine-codes.com',
+    }
+    _DTC_CACHE[code] = {'ts': now, 'data': data}
+    return data
+
+
 # ─── HTTP Handler ───
 
 class DVRHandler(BaseHTTPRequestHandler):
@@ -621,6 +723,15 @@ class DVRHandler(BaseHTTPRequestHandler):
 
         elif path == "/api/health":
             self._json_response({"status": "ok"})
+
+        elif path == "/api/dtc":
+            code = qs.get("code", "").strip().upper()
+            if not code:
+                self._json_response({"error": "code query param required"}, 400)
+                return
+            data = fetch_dtc_description(code)
+            status = 404 if data.get('error', '').startswith('code ') and 'not found' in data.get('error', '') else 200
+            self._json_response(data, status)
 
         elif path == "/api/playback/stream":
             self._proxy_mp4_stream()

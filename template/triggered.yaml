@@ -4,17 +4,17 @@
 # Trigger-based template sensors that use trigger: blocks
 
 # ───────────────────────────────────────────────
-# Road grade from Starlink GPS (deg & % + label)
+# Road grade from u-blox GPS (deg & % + label)
 # ───────────────────────────────────────────────
 - trigger:
     - trigger: state
-      entity_id: device_tracker.starlink_device_location
+      entity_id: device_tracker.ublox_gps
       attribute: latitude
     - trigger: state
-      entity_id: device_tracker.starlink_device_location
+      entity_id: device_tracker.ublox_gps
       attribute: longitude
     - trigger: state
-      entity_id: device_tracker.starlink_device_location
+      entity_id: device_tracker.ublox_gps
       attribute: elevation
   sensor:
     - name: "Road Grade (deg)"
@@ -175,9 +175,11 @@
                           not in ['unknown','unavailable'] %}
         {% set grade  = states('sensor.road_grade_deg') | float(0) | abs %}
         {% set accel  = states('sensor.vehicle_acceleration') | float(0) | abs %}
-        {% set thresh = states('input_number.acceleration_stability_threshold') | float(0.5) %}
+        {% set thresh = states('input_number.acceleration_stability_threshold') | float(1.0) %}
         {% set stable = grade <= 1.5 and accel <= thresh %}
-        {% if wican_ok and stable %}
+        {% set prev = this.state | float(-1) %}
+        {% set fillup = raw - prev > 10 and prev > 0 %}
+        {% if wican_ok and (stable or fillup) %}
           {{ raw | round(2) }}
         {% else %}
           {{ this.state if this.state not in ['unknown', 'unavailable'] else 0 }}

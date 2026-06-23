@@ -61,10 +61,15 @@ ota:
 # Victron Bluetooth Stuff
 
 victron_ble:
+  # MPPT 1: 250W array — four small Custom Marine Products panels, wired 2s2p:
+  #   2x CMP24060SR-065-BLG (65W, SunPower cells, semi-rigid black long)
+  #   2x 60W Walk-On semi-rigid (HJT cells)
   - id: MPPT_Controller_1
     mac_address: "d9601c9c69b2"  # Replace with the Bluetooth MAC address of MPPT 1
     bindkey: "fcee7ed9507bb605fba0c8ebd5ab3422"  # Replace with the encryption key for MPPT 1
 
+  # MPPT 2: 400W array — one CMP25400H semi-flexible panel
+  #   (108 PERC cells 6x18, 31V / 12.9A, 1127 x 1728 mm, junction box mid-panel)
   - id: MPPT_Controller_2
     mac_address: "c6a19a580ead"  # Replace with the Bluetooth MAC address of MPPT 2
     bindkey: "74d155c02b86c64b572853306bc74694"  # Replace with the encryption key for MPPT 2
@@ -2223,7 +2228,7 @@ sensor:
     filters:
       - lambda: "return x / 10.0;"
 
-  # MPPT Controller 1 (250W array)
+  # MPPT Controller 1 (250W array — 2x 65W SunPower + 2x 60W HJT walk-on, see victron_ble: block)
   - platform: victron_ble
     victron_ble_id: MPPT_Controller_1
     name: "MPPT1 Output Voltage"
@@ -2245,7 +2250,7 @@ sensor:
     name: "MPPT1 Load Current"
     type: LOAD_CURRENT
 
-# MPPT Controller 2 (400W array)
+# MPPT Controller 2 (400W array — single CMP25400H semi-flexible panel, see victron_ble: block)
   - platform: victron_ble
     victron_ble_id: MPPT_Controller_2
     name: "MPPT2 Output Voltage"

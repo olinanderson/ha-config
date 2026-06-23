@@ -1,7 +1,7 @@
 import * as React from 'react';
 import { DayPicker } from 'react-day-picker';
 import { format, parseISO } from 'date-fns';
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, ChevronLeft, ChevronRight } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
@@ -78,6 +78,12 @@ export function DatePicker({ value, onChange, min, max, className }: DatePickerP
             ...(minDate ? [{ before: minDate }] : []),
             ...(maxDate ? [{ after: maxDate }] : []),
           ]}
+          components={{
+            Chevron: ({ orientation, className, ...props }) => {
+              const Icon = orientation === 'left' ? ChevronLeft : ChevronRight;
+              return <Icon className={cn('h-4 w-4', className)} {...props} />;
+            },
+          }}
           classNames={{
             root: 'p-3',
             months: 'flex flex-col sm:flex-row gap-2',

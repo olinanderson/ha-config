@@ -1,0 +1,19 @@
+{%- macro get_meaning(dtc) -%}
+  {%- set dtc_map = {
+    'U060F': 'Lost Communication with Mass or Volume Air Flow Sensor A. Check wiring/connector to MAF sensor.',
+    'U068B': 'Lost Communication with Turbocharger/Supercharger Inlet Pressure Sensor A. Check wiring/connector to TCIP sensor.',
+    'P2104': 'Electronic Throttle Control System - Forced Idle. Often secondary to a sensor communication loss (MAF/TCIP) that puts ECU in limp mode.',
+    'P2112': 'Throttle Actuator Control System - Stuck Closed. ETC unable to open throttle plate — check throttle body for carbon buildup or failed actuator motor.',
+    'P0100': 'Mass or Volume Air Flow A Circuit Malfunction. Check MAF sensor or wiring.',
+    'P0101': 'Mass or Volume Air Flow Circuit Range/Performance. Check for air leaks or faulty MAF.',
+    'P0102': 'Mass or Volume Air Flow Circuit Low Input. Check MAF wiring for short/open or bad sensor.',
+    'P0128': 'Coolant Thermostat (Coolant Temperature Below Thermostat Regulating Temperature). Check thermostat.',
+    'P0234': 'Turbo/Supercharger Overboost Condition. Check wastegate or boost control solenoid.',
+    'P0299': 'Turbo/Supercharger Underboost Condition. Check for boost leaks or wastegate failure.',
+    'P0300': 'Random/Multiple Cylinder Misfire Detected. Check plugs, coils, or fuel delivery.',
+    'P0420': 'Catalyst System Efficiency Below Threshold (Bank 1). Usually requires catalytic converter replacement, but first rule out upstream/downstream O2 sensors or exhaust leaks.',
+    'P20BA': 'Reductant Heater A Control Performance. Check DEF heater circuit/tank assembly.',
+    'U0100': 'Lost Communication with ECM/PCM. Check CAN bus wiring or power to ECU.'
+  } -%}
+  {{- dtc_map.get(dtc, 'Unknown Code - Refer to Factory Service Manual or click for online lookup') -}}
+{%- endmacro %}

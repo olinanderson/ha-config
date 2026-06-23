@@ -24,6 +24,7 @@ secrets.yaml
 ssh_keys/
 .dvr_credentials
 .ha_login
+.mcp.json
 
 # --- DVR config (contains credentials in RTSP URLs) ---
 go2rtc.yaml
@@ -32,6 +33,10 @@ dvr_probe.py
 patch_streams.py
 react-dashboard/diag_streams.py
 react-dashboard/patch_streams.py
+
+# --- Playwright MCP cache (screenshots, snapshots, console logs) ---
+.playwright-mcp/
+playwright-test.png
 
 # --- HA runtime / internal ---
 .cloud/
@@ -61,7 +66,12 @@ www/images/
 www/vanlife-panel/route_cache.db
 www/vanlife-panel/osrm_proxy.log
 www/vanlife-panel/gps_filter.log
+www/vanlife-panel/gps_ublox.log
 .gps_filter_token
+
+# --- Diagnostic ps dumps (ps aux captures the daemon --token on its cmdline) ---
+www/vanlife-panel/ps_debug.txt
+www/vanlife-panel/ps_output.txt
 
 # --- Zigbee2MQTT (managed by Z2M, not hand-edited) ---
 zigbee2mqtt/
@@ -72,6 +82,21 @@ esphome/esphome-components/
 
 # --- Blueprints (stock HA blueprints, auto-managed) ---
 blueprints/
+
+# --- WiCAN / OBD scratch dumps (one-off diagnostic JSON, firmware blobs) ---
+after_flash_*.json
+current_*.json
+check_status_*.json
+updated_auto_pid.json
+status.json
+forks.json
+wican-pro_*.bin
+*_pre_replace.db
+
+# --- Dashboard build artifacts at repo root ---
+/build.js
+/main.js
+/test-results/
 
 # --- OS / Editor junk ---
 __pycache__/

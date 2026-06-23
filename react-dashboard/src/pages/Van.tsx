@@ -1,4 +1,5 @@
 import { PageContainer } from '@/components/layout/PageContainer';
+import { FuelTripHistory } from '@/components/FuelTripHistory';
 import { SparklineStat, ClickableValue } from '@/components/ClickableValue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -7,6 +8,7 @@ import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useHistory } from '@/hooks/useHistory';
 import { Sparkline } from '@/components/Chart';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
+import { useDTCDialog } from '@/components/DTCDialog';
 import { useToggle } from '@/hooks/useService';
 import { fmt, cn, isFresh } from '@/lib/utils';
 import {
@@ -19,7 +21,6 @@ import {
   Mountain,
   Battery,
   BatteryLow,
-  Zap,
   Sun,
 } from 'lucide-react';
 
@@ -233,21 +234,18 @@ function DiagnosticsCard() {
   const { value: afr } = useEntityNumeric('sensor.commanded_afr');
   const { value: fuelPumpDuty } = useEntityNumeric('sensor.192_168_10_90_fuel_pump_duty');
   const cel = useEntity('binary_sensor.check_engine_light');
-  const { value: dtcCount } = useEntityNumeric('sensor.dtc_count');
-  const isCel = cel?.state === 'on';
+  const dtcState = useEntity('sensor.transit_active_dtcs');
+  const dtcCount = dtcState?.state === 'System Clear' || !dtcState?.state ? 0 : parseInt(dtcState.state) || 0;
+  const isCel = cel?.state === 'on' || dtcCount > 0;
 
   return (
     <Card>
       <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Gauge className="h-4 w-4" />
-          Diagnostics
-          {isCel && (
-            <Badge variant="destructive" className="ml-auto text-[10px] flex items-center gap-1">
-              <AlertTriangle className="h-3 w-3" />
-              CEL ({dtcCount} DTC)
-            </Badge>
-          )}
+        <CardTitle className="flex items-center justify-between text-base">
+          <div className="flex items-center gap-2">
+            <Gauge className="h-4 w-4" />
+            Diagnostics
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-1">
@@ -266,22 +264,52 @@ function DiagnosticsCard() {
   );
 }
 
-/** Power at-a-glance — battery, solar, alternator, eco */
-function PowerHeroCard() {
+/**
+ * LiFePO4 safe temperature bands (van 24V pack).
+ *  • Charging is only allowed 0–45 °C — charging below 0 °C plates lithium and
+ *    permanently damages cells, so sub-freezing is the most critical limit.
+ *  • Discharge is tolerated roughly −20–60 °C; optimal cycle life is 15–35 °C.
+ * Colors: <0 critical-cold (blue) · 0–5 cold (cyan) · 5–40 good (green) ·
+ *         40–45 warm (orange) · >45 hot/critical (red).
+ */
+function battTempColor(t: number | null): string {
+  if (t == null) return 'text-foreground';
+  if (t < 0) return 'text-blue-500';
+  if (t < 5) return 'text-cyan-400';
+  if (t <= 40) return 'text-green-400';
+  if (t <= 45) return 'text-orange-400';
+  return 'text-red-500';
+}
+
+/** Main glance card — battery state plus the vitals watched while driving. */
+function MainHeroCard() {
+  // Power / battery
   const { value: soc } = useEntityNumeric('sensor.olins_van_bms_battery');
   const { value: battCurrent } = useEntityNumeric('sensor.olins_van_bms_current');
+  const { value: battTemp } = useEntityNumeric('sensor.olins_van_bms_temperature');
+  const { value: solarA } = useEntityNumeric('sensor.total_mppt_output_current');
   const estimateEntity = useEntity('sensor.battery_time_estimate');
-  const { value: solarW } = useEntityNumeric('sensor.total_mppt_pv_power');
-  const { value: altCurrent } = useEntityNumeric('sensor.a32_pro_s5140_channel_8_current_24v_alternator_charger');
   const ecoEntity = useEntity('input_boolean.power_saving_mode');
   const toggleEco = useToggle('input_boolean.power_saving_mode');
   const ecoOn = ecoEntity?.state === 'on';
+
+  // Driving vitals
+  const { value: coolant } = useEntityNumeric('sensor.192_168_10_90_05_enginecoolanttemp');
+  const { value: transTemp } = useEntityNumeric('sensor.192_168_10_90_tran_f_temp');
+  const { value: gradePct } = useEntityNumeric('sensor.road_grade');
+  const aggression = useEntity('sensor.hill_aggression');
+  const { value: rpm } = useEntityNumeric('sensor.192_168_10_90_0c_enginerpm');
+  const { value: ecuV } = useEntityNumeric('sensor.192_168_10_90_42_controlmodulevolt');
+
   const { open } = useHistoryDialog();
 
   const socColor = (soc ?? 0) < 20 ? 'text-red-500' : (soc ?? 0) < 40 ? 'text-orange-400' : 'text-green-400';
   const battCurrentVal = battCurrent ?? 0;
   const battColor = battCurrentVal > 0 ? 'text-green-400' : battCurrentVal < -5 ? 'text-orange-400' : 'text-foreground';
-  const solarColor = (solarW ?? 0) > 50 ? 'text-yellow-400' : 'text-muted-foreground';
+  const solarActive = (solarA ?? 0) > 0.5;
+  const coolantColor = (coolant ?? 0) > 105 ? 'text-red-500' : (coolant ?? 0) > 95 ? 'text-orange-400' : 'text-foreground';
+  const transColor = (transTemp ?? 0) > 110 ? 'text-red-500' : (transTemp ?? 0) > 95 ? 'text-orange-400' : 'text-foreground';
+
   const estimate = estimateEntity?.state;
   const estimateDisplay =
     !estimate || estimate === 'unknown' || estimate === 'unavailable'
@@ -292,125 +320,189 @@ function PowerHeroCard() {
 
   return (
     <Card>
-      <CardContent className="pt-4 pb-3">
-        {/* Top row: Battery SOC + Current */}
-        <div className="grid grid-cols-2 gap-3">
-          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.olins_van_bms_battery', 'Battery', '%')}>
-            <p className={cn('text-3xl font-bold tabular-nums', socColor)}>{fmt(soc, 0)}%</p>
-            <p className="text-[10px] text-muted-foreground">Battery</p>
-          </div>
-          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.olins_van_bms_current', 'Battery Current', 'A')}>
-            <p className={cn('text-3xl font-bold tabular-nums', battColor)}>{fmt(battCurrent, 1)} A</p>
-            <p className="text-[10px] text-muted-foreground">Batt Current</p>
-          </div>
-        </div>
-
-        {/* SOC bar */}
-        <div className="mt-2 px-1">
-          <Progress value={soc ?? 0} className="h-2.5" indicatorClassName={(soc ?? 0) < 20 ? 'bg-red-500' : (soc ?? 0) < 40 ? 'bg-orange-400' : 'bg-green-500'} />
-        </div>
-
-        {/* Estimate */}
-        <p className="text-center text-sm font-medium text-muted-foreground mt-1.5">{estimateDisplay}</p>
-
-        {/* Bottom row: Solar, Alternator, Eco */}
-        <div className="grid grid-cols-3 gap-3 mt-2">
-          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.total_mppt_pv_power', 'Solar', 'W')}>
-            <div className="flex items-center justify-center gap-1">
-              <Sun className={cn('h-3.5 w-3.5', solarColor)} />
-              <span className={cn('text-2xl font-bold tabular-nums', solarColor)}>{fmt(solarW, 0)}</span>
+      <CardContent className="pt-4 pb-4">
+        <div className="divide-y divide-border sm:grid sm:grid-cols-2 sm:divide-x sm:divide-y-0">
+          {/* ── Power / battery ── */}
+          <div className="pb-4 sm:pb-0 sm:pr-4">
+            <div className="mb-2 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                <Battery className="h-3.5 w-3.5" />
+                Power
+              </span>
+              <div className="flex items-center gap-1.5">
+                <Badge
+                  variant="outline"
+                  className={cn(
+                    'cursor-pointer gap-1 font-mono',
+                    solarActive ? 'border-yellow-500/40 text-yellow-400' : 'text-muted-foreground',
+                  )}
+                  onClick={() => open('sensor.total_mppt_output_current', 'Solar Current', 'A')}
+                >
+                  <Sun className="h-3 w-3" />
+                  {fmt(solarA, 1)} A
+                </Badge>
+                <Badge
+                  variant={ecoOn ? 'warning' : 'outline'}
+                  className={cn('cursor-pointer gap-1', !ecoOn && 'text-muted-foreground')}
+                  onClick={toggleEco}
+                >
+                  <BatteryLow className="h-3 w-3" />
+                  Eco
+                </Badge>
+              </div>
             </div>
-            <p className="text-[10px] text-muted-foreground">Solar W</p>
-          </div>
-          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.a32_pro_s5140_channel_8_current_24v_alternator_charger', 'Alternator', 'A')}>
-            <div className="flex items-center justify-center gap-1">
-              <Zap className="h-3.5 w-3.5 text-yellow-500" />
-              <span className="text-2xl font-bold tabular-nums">{fmt(altCurrent, 1)}</span>
+
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.olins_van_bms_battery', 'Battery', '%')}>
+                <p className={cn('text-3xl font-bold tabular-nums', socColor)}>{fmt(soc, 0)}%</p>
+                <p className="text-[10px] text-muted-foreground">Battery</p>
+              </div>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.olins_van_bms_current', 'Battery Current', 'A')}>
+                <p className={cn('text-3xl font-bold tabular-nums', battColor)}>{fmt(battCurrent, 1)}</p>
+                <p className="text-[10px] text-muted-foreground">Amps</p>
+              </div>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.olins_van_bms_temperature', 'Battery Temp', '°C')}>
+                <p className={cn('text-3xl font-bold tabular-nums', battTempColor(battTemp))}>{fmt(battTemp, 0)}°</p>
+                <p className="text-[10px] text-muted-foreground">Batt Temp</p>
+              </div>
             </div>
-            <p className="text-[10px] text-muted-foreground">Alt A</p>
+
+            {/* Long SOC bar */}
+            <div className="mt-2 px-1">
+              <Progress value={soc ?? 0} className="h-2.5" indicatorClassName={(soc ?? 0) < 20 ? 'bg-red-500' : (soc ?? 0) < 40 ? 'bg-orange-400' : 'bg-green-500'} />
+            </div>
+            <p className="mt-1.5 text-center text-sm font-medium text-muted-foreground">{estimateDisplay}</p>
           </div>
-          <button
-            onClick={toggleEco}
-            className={cn(
-              'rounded-lg p-2 text-center transition-colors border',
-              ecoOn
-                ? 'bg-yellow-500/15 border-yellow-500/50 text-yellow-400'
-                : 'bg-muted/30 border-border text-muted-foreground hover:bg-muted/50',
-            )}
-          >
-            <BatteryLow className="h-5 w-5 mx-auto" />
-            <p className="text-[10px] font-medium mt-0.5">Eco</p>
-          </button>
+
+          {/* ── Driving vitals ── */}
+          <div className="pt-4 sm:pt-0 sm:pl-4">
+            <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+              <Gauge className="h-3.5 w-3.5" />
+              Driving
+            </span>
+
+            {/* Most important: coolant, trans, grade */}
+            <div className="grid grid-cols-3 gap-2 text-center">
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_05_enginecoolanttemp', 'Coolant Temp', '°C')}>
+                <p className={cn('text-2xl font-bold tabular-nums', coolantColor)}>{fmt(coolant, 0)}°</p>
+                <p className="text-[10px] text-muted-foreground">Coolant</p>
+              </div>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_tran_f_temp', 'Trans Temp', '°C')}>
+                <p className={cn('text-2xl font-bold tabular-nums', transColor)}>{fmt(transTemp, 0)}°</p>
+                <p className="text-[10px] text-muted-foreground">Trans</p>
+              </div>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.road_grade', 'Road Grade', '%')}>
+                <p className="text-2xl font-bold tabular-nums">{fmt(gradePct, 1)}%</p>
+                <p className="text-[10px] text-muted-foreground">Grade{aggression?.state ? ` · ${aggression.state}` : ''}</p>
+              </div>
+            </div>
+
+            {/* Less important: rpm, ecu voltage */}
+            <div className="mt-2 grid grid-cols-2 gap-2 text-center">
+              <div className="cursor-pointer rounded-lg p-1 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_0c_enginerpm', 'RPM', 'rpm')}>
+                <p className="text-lg font-semibold tabular-nums text-muted-foreground">{fmt(rpm, 0)}</p>
+                <p className="text-[10px] text-muted-foreground">RPM</p>
+              </div>
+              <div className="cursor-pointer rounded-lg p-1 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_42_controlmodulevolt', 'ECU Voltage', 'V')}>
+                <p className="text-lg font-semibold tabular-nums text-muted-foreground">{fmt(ecuV, 2)}</p>
+                <p className="text-[10px] text-muted-foreground">ECU V</p>
+              </div>
+            </div>
+          </div>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-/** Driving vitals — RPM, voltage, temps, grade */
-function DrivingHeroCard() {
-  const { value: rpm } = useEntityNumeric('sensor.192_168_10_90_0c_enginerpm');
-  const { value: ecuV } = useEntityNumeric('sensor.192_168_10_90_42_controlmodulevolt');
-  const { value: coolant } = useEntityNumeric('sensor.192_168_10_90_05_enginecoolanttemp');
-  const { value: transTemp } = useEntityNumeric('sensor.192_168_10_90_tran_f_temp');
-  const { value: gradePct } = useEntityNumeric('sensor.road_grade');
-  const aggression = useEntity('sensor.hill_aggression');
-  const { open } = useHistoryDialog();
+/** DTC banner with clickable codes (each opens a modal with an online-fetched
+ *  description). Active codes (CEL on) pin to the TOP of the page; codes that
+ *  are merely stored (CEL off) render at the BOTTOM instead. The `placement`
+ *  prop lets the page mount one of each and the banner self-selects. */
+function DTCBanner({ placement }: { placement: 'top' | 'bottom' }) {
+  const dtcState = useEntity('sensor.transit_active_dtcs');
+  const cel = useEntity('binary_sensor.check_engine_light');
+  const celActive = cel?.state === 'on';
+  const { open } = useDTCDialog();
 
-  const coolantColor = (coolant ?? 0) > 105 ? 'text-red-500' : (coolant ?? 0) > 95 ? 'text-orange-400' : 'text-foreground';
-  const transColor = (transTemp ?? 0) > 110 ? 'text-red-500' : (transTemp ?? 0) > 95 ? 'text-orange-400' : 'text-foreground';
+  const codes: string[] = Array.isArray(dtcState?.attributes?.active_codes)
+    ? (dtcState!.attributes!.active_codes as string[])
+    : [];
+  const descriptions: string[] = Array.isArray(dtcState?.attributes?.descriptions)
+    ? (dtcState!.attributes!.descriptions as string[])
+    : [];
+
+  if (codes.length === 0) return null;
+  // Active → top only; stored-only → bottom only.
+  if (placement === 'top' && !celActive) return null;
+  if (placement === 'bottom' && celActive) return null;
+
+  // Map code -> local description (from jinja macro). Format is "P0420: blah blah".
+  const localMap: Record<string, string> = {};
+  for (const desc of descriptions) {
+    const m = desc.match(/^([A-Z0-9]+)\s*:\s*(.*)$/s);
+    if (m) localMap[m[1]] = m[2].trim();
+  }
+
+  // Use yellow/warning theme if codes exist but physical CEL is OFF
+  const bgClass = celActive ? "bg-red-50 dark:bg-red-950/30 border-red-500/50" : "bg-yellow-50 dark:bg-yellow-950/30 border-yellow-500/50";
+  const textClass = celActive ? "text-red-700 dark:text-red-300" : "text-yellow-700 dark:text-yellow-300";
+  const badgeVariant = celActive ? "destructive" : "warning";
 
   return (
-    <Card>
-      <CardContent className="pt-4 pb-3">
-        <div className="grid grid-cols-2 gap-3">
-          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.192_168_10_90_0c_enginerpm', 'RPM', 'rpm')}>
-            <p className="text-3xl font-bold tabular-nums">{fmt(rpm, 0)}</p>
-            <p className="text-[10px] text-muted-foreground">RPM</p>
-          </div>
-          <div className="cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors" onClick={() => open('sensor.192_168_10_90_42_controlmodulevolt', 'ECU Voltage', 'V')}>
-            <p className="text-3xl font-bold tabular-nums">{fmt(ecuV, 2)}</p>
-            <p className="text-[10px] text-muted-foreground">ECU V</p>
-          </div>
-          <div className={cn('cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors')} onClick={() => open('sensor.192_168_10_90_05_enginecoolanttemp', 'Coolant Temp', '°C')}>
-            <p className={cn('text-2xl font-bold tabular-nums', coolantColor)}>{fmt(coolant, 0)}°</p>
-            <p className="text-[10px] text-muted-foreground">Coolant</p>
-          </div>
-          <div className={cn('cursor-pointer hover:bg-muted/50 rounded-lg p-2 text-center transition-colors')} onClick={() => open('sensor.192_168_10_90_tran_f_temp', 'Trans Temp', '°C')}>
-            <p className={cn('text-2xl font-bold tabular-nums', transColor)}>{fmt(transTemp, 0)}°</p>
-            <p className="text-[10px] text-muted-foreground">Trans</p>
-          </div>
-        </div>
-        <div className="mt-2 flex items-center justify-center gap-3 cursor-pointer hover:bg-muted/50 rounded-lg p-2 transition-colors" onClick={() => open('sensor.road_grade', 'Road Grade', '%')}>
-          <Mountain className="h-4 w-4 text-muted-foreground" />
-          <span className="text-2xl font-bold tabular-nums">{fmt(gradePct, 1)}%</span>
-          <span className="text-xs text-muted-foreground">{aggression?.state ?? '—'}</span>
-        </div>
-      </CardContent>
-    </Card>
+    <div className={cn("rounded-lg border p-3 flex items-center gap-3 flex-wrap", bgClass)}>
+      <div className={cn("flex items-center gap-2 font-semibold text-sm", textClass)}>
+        <EngineIcon className="h-4 w-4" />
+        {codes.length} Stored {codes.length === 1 ? 'Code' : 'Codes'} {celActive ? '(CEL Active)' : '(CEL Off)'}:
+      </div>
+      <div className="flex flex-wrap gap-2 flex-1">
+        {codes.map((code) => (
+          <Badge
+            key={code}
+            variant={badgeVariant}
+            className={cn(
+              "cursor-pointer hover:opacity-80 transition-opacity font-mono text-xs py-1 px-2.5",
+              !celActive && "bg-yellow-200 text-yellow-900 dark:bg-yellow-800 dark:text-yellow-100 hover:bg-yellow-300"
+            )}
+            onClick={() => open({ code, localDescription: localMap[code] })}
+          >
+            {code}
+          </Badge>
+        ))}
+      </div>
+      <span className={cn("text-[10px] italic", textClass, "opacity-70")}>Tap a code for details</span>
+    </div>
+  );
+}
+
+// Simple engine outline icon for the banner
+function EngineIcon({ className }: { className?: string }) {
+  return (
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" className={className}>
+      <path d="M12 2v4M8 2v4M16 2v4M4 10a2 2 0 0 0-2 2v4a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-4a2 2 0 0 0-2-2zM4 14h16" />
+      <path d="M6 18v2a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2v-2" />
+    </svg>
   );
 }
 
 export default function Van() {
   return (
     <PageContainer title="Van & Vehicle">
-      <div className="grid gap-4 md:grid-cols-2">
-        <PowerHeroCard />
-        <DrivingHeroCard />
-      </div>
+      <DTCBanner placement="top" />
+      <MainHeroCard />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mt-4">
         <div className="space-y-4">
+          <DiagnosticsCard />
           <EngineCard />
           <FuelCard />
+          <FuelTripHistory />
         </div>
         <div className="space-y-4">
           <TirePressureCard />
           <RoadGradeCard />
         </div>
-        <div className="space-y-4">
-          <DiagnosticsCard />
-        </div>
       </div>
+      <DTCBanner placement="bottom" />
     </PageContainer>
   );
 }

@@ -229,6 +229,11 @@ inverter_ensure_on:
         - condition: state
           entity_id: input_boolean.inverter_toggle_pending
           state: "off"
+        # Respect a manual "off": if you turned the inverter off yourself,
+        # don't let power-saving / wake flows force it back on.
+        - condition: state
+          entity_id: input_boolean.inverter_manual_lock
+          state: "off"
       then:
         - action: script.inverter_toggle
 

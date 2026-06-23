@@ -16,9 +16,9 @@ export function RoutePreview({ onNavigateToMap, tall = false }: { onNavigateToMa
   const [distanceKm, setDistanceKm] = useState(0);
   const [error, setError] = useState<string | null>(null);
 
-  const starlink = useEntity('device_tracker.starlink_device_location');
-  const currentLat = starlink?.attributes?.latitude as number | undefined;
-  const currentLon = starlink?.attributes?.longitude as number | undefined;
+  const ubloxGps = useEntity('device_tracker.ublox_gps');
+  const currentLat = ubloxGps?.attributes?.latitude as number | undefined;
+  const currentLon = ubloxGps?.attributes?.longitude as number | undefined;
 
   useEffect(() => {
     let destroyed = false;

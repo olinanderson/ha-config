@@ -25,7 +25,7 @@
 | `auto_power_saving_when_away` | Radar presence → power saving on/off |
 | `auto_power_saving_when_driving` | Driving → power saving |
 | `bed_power_auto_off_30s` | Safety: bed motor auto-off |
-| `keep_home_zone_on_starlink` | Move HA home zone to Starlink GPS every 5 min |
+| `keep_home_zone_on_starlink` | Move HA home zone to u-blox GPS (`device_tracker.ublox_gps`) every 5 min |
 | `rolling_last_active_snapshot_1hz` | 1Hz scene snapshot |
 | Shelly EM 1s ping | Update inverter detection every second |
 | `syncthing_start_on_boot` | Start Syncthing 30s after HA boot |

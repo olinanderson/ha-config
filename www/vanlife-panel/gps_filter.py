@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-GPS Filter Daemon — pre-processes raw Starlink GPS into filtered segments.
+GPS Filter Daemon — pre-processes raw u-blox GPS into filtered segments.
 
 Runs alongside osrm_proxy.py on the HA host. Fetches raw GPS from the HA
 history API, deduplicates, runs the same movement state machine as the
@@ -42,7 +42,7 @@ HA_URL      = os.environ.get("HA_URL", "http://localhost:8123")
 PROXY_URL   = os.environ.get("PROXY_URL", "http://localhost:8765")
 FILTER_DB   = "/config/www/vanlife-panel/filtered_gps.db"
 TOKEN_FILE  = "/config/.gps_filter_token"
-ENTITY_ID   = "device_tracker.starlink_device_location"
+ENTITY_ID   = "device_tracker.ublox_gps"
 LOG_FILE    = "/config/www/vanlife-panel/gps_filter.log"
 
 # Filter constants — MUST match index.html _fetchAndFilterStarlink()
@@ -50,7 +50,7 @@ MIN_PARK_DURATION_S = 180   # 3 min — avoid splitting trips at traffic lights
 FILTER_RADIUS_M     = 15
 CONFIRM_COUNT       = 3
 MIN_SEGMENT_DISTANCE_M = 300 # ignore tiny "moved van down the street" trips
-GPS_GAP_SPLIT_S     = 180   # 3 min — split segment if time gap > this (Starlink blocked)
+GPS_GAP_SPLIT_S     = 180   # 3 min — split segment if time gap > this (GPS blocked)
 
 # Daemon timing
 POLL_INTERVAL_S     = 120   # seconds between incremental runs
@@ -213,7 +213,7 @@ def update_segment_route(seg_id, geometry, distance_m):
 # ── HA History API ────────────────────────────────────────────────────────────
 
 def fetch_gps_from_ha(token, start_dt, end_dt):
-    """Fetch raw Starlink GPS states from HA history API. Returns [{lat,lon,ts,acc}, ...]."""
+    """Fetch raw u-blox GPS states from HA history API. Returns [{lat,lon,ts,acc}, ...]."""
     start_iso = start_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     end_iso = end_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
     url = (f"{HA_URL}/api/history/period/{start_iso}"
@@ -368,7 +368,7 @@ def merge_short_stops(segments, raw_parking):
 
 
 def split_at_time_gaps(segments, parking_spots):
-    """Split segments at large time gaps (e.g. Starlink blocked under a roof).
+    """Split segments at large time gaps (e.g. GPS blocked under a roof).
     Inserts synthetic parking spots for the gap period."""
     new_segs = []
     new_parking = list(parking_spots)
@@ -402,7 +402,7 @@ def process_gps(points):
         return [], []
     raw_segs, raw_parking = filter_movement(deduped)
     merged, parking = merge_short_stops(raw_segs, raw_parking)
-    # Split segments at large GPS gaps (Starlink blocked under roof/cover)
+    # Split segments at large GPS gaps (GPS blocked under roof/cover)
     split_segs, parking = split_at_time_gaps(merged, parking)
     # Drop segments where start-to-end displacement is ≤ threshold (GPS drift / van shuffled in parking)
     # Use displacement (not cumulative distance) because GPS noise inflates point-to-point sums
@@ -526,7 +526,7 @@ def backfill(token, from_date):
     """Process historical data: fetch day-by-day, accumulate de-duplicated
     points, and periodically re-run the full pipeline.
 
-    Memory optimization: raw Starlink GPS is ~94k states/day, but consecutive
+    Memory optimization: raw u-blox GPS is ~94k states/day, but consecutive
     duplicates (parked van) compress ~13:1 via dedup before accumulation.
     400 days of 1 Hz GPS ≈ 3M unique points ≈ 1.2 GB RAM — feasible.
 

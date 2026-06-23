@@ -61,10 +61,10 @@ export function BatteryCard({ compact = false }: { compact?: boolean }) {
           <SparklineStat entityId="sensor.olins_van_bms_voltage" label="Voltage" value={fmt(voltage, 2)} unit="V" color="#6366f1" />
           <SparklineStat entityId="sensor.olins_van_bms_current" label="Current" value={fmt(current, 2)} unit="A" color="#06b6d4" />
           <SparklineStat entityId="sensor.olins_van_bms_power" label="Power" value={fmt(power != null ? Math.abs(power) : null, 0)} unit="W" color="#f59e0b" />
+          <SparklineStat entityId="sensor.olins_van_bms_stored_energy" label="Stored" value={fmt(stored, 0)} unit="Wh" color="#8b5cf6" />
+          <SparklineStat entityId="sensor.olins_van_bms_temperature" label="Temperature" value={fmt(temp, 1)} unit="°C" color="#ef4444" />
           {!compact && (
             <>
-              <SparklineStat entityId="sensor.olins_van_bms_stored_energy" label="Stored" value={fmt(stored, 0)} unit="Wh" color="#8b5cf6" />
-              <SparklineStat entityId="sensor.olins_van_bms_temperature" label="Temperature" value={fmt(temp, 1)} unit="°C" color="#ef4444" />
               <SparklineStat entityId="sensor.olins_van_bms_cycles" label="Cycles" value={fmt(cycles, 0)} unit="" color="#64748b" />
               <SparklineStat entityId="sensor.olins_van_bms_delta_voltage" label="Cell Delta" value={fmt(delta, 3)} unit="V" color="#ec4899" />
             </>

@@ -41,12 +41,12 @@ function conditionLabel(state: string) {
 
 export function WeatherCard() {
   const weather = useEntity('weather.pirateweather');
-  const starlink = useEntity('device_tracker.starlink_device_location');
+  const ubloxGps = useEntity('device_tracker.ublox_gps');
   const forecast = useWeatherForecast('weather.pirateweather', 'daily');
 
-  // Location from Starlink GPS — reverse geocoded (must be before early return)
-  const lat = starlink?.attributes?.latitude;
-  const lon = starlink?.attributes?.longitude;
+  // Location from Raw u-blox USB GPS — reverse geocoded (must be before early return)
+  const lat = ubloxGps?.attributes?.latitude;
+  const lon = ubloxGps?.attributes?.longitude;
   const locationStr = useReverseGeocode(lat, lon);
 
   if (!weather) return null;

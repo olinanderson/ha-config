@@ -87,6 +87,30 @@ export interface DataRange {
   max_date: string;
 }
 
+export interface FuelTripApi {
+  start_ts: number;
+  end_ts: number;
+  distance_km: number;
+  segment_count: number;
+  fuel_start_pct: number | null;
+  fuel_end_pct: number | null;
+  fuel_used_pct?: number;
+  fuel_used_l?: number;
+  l_per_100km?: number;
+  km_per_l?: number;
+}
+
+export interface FuelTripSummaryApi {
+  trip_count: number;
+  total_km: number;
+  avg_l_per_100km: number | null;
+}
+
+export interface FuelTripsResponse {
+  trips: FuelTripApi[];
+  summary: FuelTripSummaryApi;
+}
+
 /* ── API calls ─────────────────────────────────────────────────────── */
 
 export async function fetchFilteredGps(
@@ -113,6 +137,20 @@ export async function fetchDataRange(signal?: AbortSignal): Promise<DataRange | 
   const r = await fetch(`${API_BASE()}/vanlife/data-range`, { signal, headers: await authHeaders() });
   if (!r.ok) return null;
   return r.json();
+}
+
+export async function fetchFuelTrips(
+  limit = 20,
+  signal?: AbortSignal,
+): Promise<FuelTripsResponse | null> {
+  const r = await fetch(`${API_BASE()}/vanlife/fuel-trips?limit=${limit}`, {
+    signal,
+    headers: await authHeaders(),
+  });
+  if (!r.ok) return null;
+  const d = await r.json();
+  if (d.code === 'Error') return null;
+  return d as FuelTripsResponse;
 }
 
 export async function createNamedPlace(

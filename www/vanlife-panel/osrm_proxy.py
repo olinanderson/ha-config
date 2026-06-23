@@ -141,7 +141,7 @@ def _match_chunk(lonlat_pts):
         "shape_match": "map_snap",
         "trace_options": {
             "search_radius": 100,      # metres — max allowed by public Valhalla
-            "gps_accuracy": 50,        # expected GPS noise (m) — Starlink ~15-30m, be generous
+            "gps_accuracy": 50,        # expected GPS noise (m) — u-blox ~2-5m, be generous
             "breakage_distance": 20000, # max gap (m) before trace break — keep matching through gaps
             "turn_penalty_factor": 0,  # no penalty for turns — trace is known path
         },
@@ -439,6 +439,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self._json(500, {"error": str(e)})
             return
 
+        if self.path.startswith('/vanlife/fuel-trips'):
+            self._handle_fuel_trips()
+            return
+
         if self.path.startswith('/vanlife/fuel-stats'):
             self._handle_fuel_stats()
             return
@@ -464,6 +468,144 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self.wfile.write(str(e).encode())
 
 
+    # ── GET /vanlife/fuel-trips?limit=N ──────────────────────────────────────
+    # Returns per-trip fuel efficiency by grouping driving segments between
+    # parking stops, cross-referencing HA fuel level history.
+    # Each "trip" = continuous driving between two stops (parking or overnight).
+    # Fuel used = (fuel_start% - fuel_end%) / 100 * 94.6L (tank method).
+    def _handle_fuel_trips(self):
+        import os
+        HA_DB  = "/config/home-assistant_v2.db"
+        TANK_L = 94.6
+        MIN_DIST_KM = 1.0   # skip micro-trips < 1km
+
+        qs    = parse_qs(urlparse(self.path).query)
+        limit = int(qs.get("limit", [50])[0])
+
+        if not os.path.exists(FILTERED_DB) or not os.path.exists(HA_DB):
+            self._json(200, {"trips": [], "error": "DB not available"})
+            return
+
+        try:
+            # Load segments grouped by parking gaps
+            # A "trip" is a run of consecutive segments with < 30 min gaps
+            gps_con = sqlite3.connect(FILTERED_DB)
+            segs = gps_con.execute(
+                "SELECT start_ts, end_ts, distance_m FROM segments "
+                "WHERE distance_m > ? ORDER BY start_ts DESC LIMIT 2000",
+                (MIN_DIST_KM * 1000,)
+            ).fetchall()
+            gps_con.close()
+
+            if not segs:
+                self._json(200, {"trips": []})
+                return
+
+            # Group consecutive segments into trips (gap > 20 min = new trip)
+            GAP_MS = 20 * 60 * 1000
+            trip_groups = []
+            current = [segs[0]]
+            for seg in segs[1:]:
+                prev_end = current[-1][1]
+                if prev_end - seg[1] > GAP_MS:  # sorted DESC, so check reverse
+                    trip_groups.append(current)
+                    current = [seg]
+                else:
+                    current.append(seg)
+            trip_groups.append(current)
+
+            # For each group compute distance and get fuel levels from HA
+            ha_con = sqlite3.connect("file:" + HA_DB + "?mode=ro", uri=True)
+
+            def fuel_at(ts_ms, before_only=False):
+                """Find closest fuel reading to ts_ms using two indexed queries.
+                Replaces the old ORDER BY ABS() which caused a full table scan
+                on every call (~0.5s × N trips × 2 = very slow).
+                """
+                ts_s = ts_ms / 1000
+                # Always get the nearest reading at-or-before (uses index)
+                before = ha_con.execute(
+                    "SELECT s.state, s.last_updated_ts FROM states s "
+                    "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
+                    "WHERE sm.entity_id = ? AND s.state NOT IN ('unknown','unavailable') "
+                    "AND s.last_updated_ts <= ? "
+                    "ORDER BY s.last_updated_ts DESC LIMIT 1",
+                    ("sensor.wican_fuel_5_min_mean", ts_s)
+                ).fetchone()
+                if before_only:
+                    row = before
+                else:
+                    # Also get nearest at-or-after (uses index), pick whichever is closer
+                    after = ha_con.execute(
+                        "SELECT s.state, s.last_updated_ts FROM states s "
+                        "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
+                        "WHERE sm.entity_id = ? AND s.state NOT IN ('unknown','unavailable') "
+                        "AND s.last_updated_ts >= ? "
+                        "ORDER BY s.last_updated_ts ASC LIMIT 1",
+                        ("sensor.wican_fuel_5_min_mean", ts_s)
+                    ).fetchone()
+                    if before and after:
+                        row = before if abs(before[1] - ts_s) <= abs(after[1] - ts_s) else after
+                    else:
+                        row = before or after
+                if row:
+                    return round(float(row[0]), 1), row[1]
+                return None, None
+
+            trips = []
+            for group in trip_groups[:limit]:
+                start_ts = min(g[0] for g in group)
+                end_ts   = max(g[1] for g in group)
+                dist_m   = sum(g[2] for g in group)
+                dist_km  = round(dist_m / 1000, 1)
+                if dist_km < MIN_DIST_KM:
+                    continue
+
+                fuel_start, fs_ts = fuel_at(start_ts, before_only=False)
+                fuel_end,   fe_ts = fuel_at(end_ts,   before_only=True)
+
+                trip = {
+                    "start_ts":   start_ts,
+                    "end_ts":     end_ts,
+                    "distance_km": dist_km,
+                    "segment_count": len(group),
+                    "fuel_start_pct": fuel_start,
+                    "fuel_end_pct":   fuel_end,
+                }
+
+                if fuel_start is not None and fuel_end is not None:
+                    used_pct = round(fuel_start - fuel_end, 1)
+                    used_l   = round(used_pct / 100 * TANK_L, 1)
+                    trip["fuel_used_pct"] = used_pct
+                    trip["fuel_used_l"]   = used_l
+                    if dist_km > 0 and used_l > 0:
+                        trip["l_per_100km"] = round(used_l / dist_km * 100, 1)
+                        trip["km_per_l"]    = round(dist_km / used_l, 1)
+
+                trips.append(trip)
+
+            ha_con.close()
+
+            # Rolling average over last N km
+            valid = [t for t in trips if "l_per_100km" in t]
+            total_km  = sum(t["distance_km"] for t in valid)
+            total_l   = sum(t["fuel_used_l"] for t in valid)
+            avg_l100  = round(total_l / total_km * 100, 1) if total_km > 0 and total_l > 0 else None
+
+            self._json(200, {
+                "trips": trips,
+                "summary": {
+                    "trip_count":       len(trips),
+                    "total_km":         round(total_km, 1),
+                    "total_l_used":     round(total_l, 1),
+                    "avg_l_per_100km":  avg_l100,
+                    "tank_capacity_l":  TANK_L,
+                }
+            })
+
+        except Exception as e:
+            self._json(500, {"error": str(e)})
+
     # ── GET /vanlife/fuel-stats?from_ts=MS[&to_ts=MS] ──────────────────────
     # Returns distance driven + fuel used between two timestamps so the VE
     # correction factor can be calibrated from fill-to-fill measurements.
@@ -475,8 +617,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
     # Response fields:
     #   distance_km             GPS-summed distance from segments table
     #   segment_count           Number of driving segments in the window
-    #   fuel_start_pct          wican_fuel_5_min_mean nearest to from_ts
-    #   fuel_end_pct            wican_fuel_5_min_mean nearest to to_ts
+    #   fuel_start_pct          sensor.wican_fuel_5_min_mean nearest to from_ts
+    #   fuel_end_pct            sensor.wican_fuel_5_min_mean nearest to to_ts
     #   fuel_used_pct/l         Delta x 94.6 L tank
     #   fuel_economy_l100km     Actual L/100km (tank method)
     #   estimated_avg_l100km    Mean of sensor.estimated_fuel_consumption
@@ -690,6 +832,8 @@ class ProxyHandler(BaseHTTPRequestHandler):
 
 
 if __name__ == "__main__":
+    import socket as _socket
     server = HTTPServer(("0.0.0.0", PORT), ProxyHandler)
+    server.socket.setsockopt(_socket.SOL_SOCKET, _socket.SO_REUSEADDR, 1)
     print(f"Routing proxy listening on port {PORT}", flush=True)
     server.serve_forever()

@@ -7,7 +7,8 @@
 
 # --- Core ---
 recorder:
-  auto_purge: false
+  auto_purge: true
+  purge_keep_days: 60
 
 history:
 
@@ -62,9 +63,13 @@ template: !include_dir_merge_list template/
 # --- Integration sensors (Riemann, statistics, history) ---
 sensor: !include integrations/sensor.yaml
 
+# --- Filter sensors (moving averages for noisy OBD readings) ---
+filter: !include filter.yaml
+
 # --- MQTT (device tracker via YAML; sensors via MQTT discovery) ---
 mqtt:
   device_tracker: !include mqtt/device_tracker.yaml
+  sensor: !include mqtt/sensors.yaml
 
 # --- Vanlife API proxy (for Nabu Casa remote access) ---
 vanlife_api:

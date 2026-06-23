@@ -8,6 +8,7 @@ import { ThermostatControl } from '@/components/ThermostatControl';
 import { HeatingControls } from '@/components/HeatingControls';
 import { FanControl } from '@/components/FanControl';
 import { PresenceBar } from '@/components/PresenceBar';
+import { PresenceCard } from '@/components/PresenceCard';
 import { ToggleButton } from '@/components/ToggleButton';
 import { LightControl } from '@/components/LightControl';
 import { InverterButton } from '@/components/InverterButton';
@@ -35,6 +36,7 @@ import {
   Trash,
   LampDesk,
   AirVent,
+  Fan,
 } from 'lucide-react';
 
 // ─── Badge bar ───
@@ -195,6 +197,16 @@ function BadgeBar() {
 // ─── Quick controls ───
 
 function QuickControls() {
+  // Battery vent fan is a PWM/LED-dimmer light wired to the RED channel. A bare
+  // toggle just restores the last color, so command full red explicitly on.
+  const battFanEntity = 'light.0xa4c138fd668411cd';
+  const battFan = useEntity(battFanEntity);
+  const call = useService();
+  const toggleBattFan = () =>
+    battFan?.state === 'on'
+      ? call('light', 'turn_off', undefined, { entity_id: battFanEntity })
+      : call('light', 'turn_on', { rgb_color: [255, 0, 0], brightness_pct: 100 }, { entity_id: battFanEntity });
+
   return (
     <div className="space-y-3">
       {/* Utility controls */}
@@ -217,6 +229,13 @@ function QuickControls() {
           name="Compressor"
           icon={AirVent}
           activeColor="cyan"
+        />
+        <ToggleButton
+          entityId="light.0xa4c138fd668411cd"
+          name="Batt Fan"
+          icon={Fan}
+          activeColor="blue"
+          onToggle={toggleBattFan}
         />
       </div>
 
@@ -295,9 +314,9 @@ function ModeToggles() {
 // ─── Page ───
 
 export default function Home() {
-  const starlink = useEntity('device_tracker.starlink_device_location');
-  const lat = starlink?.attributes?.latitude as number | undefined;
-  const lon = starlink?.attributes?.longitude as number | undefined;
+  const gps = useEntity('device_tracker.ublox_gps');
+  const lat = gps?.attributes?.latitude as number | undefined;
+  const lon = gps?.attributes?.longitude as number | undefined;
 
   return (
     <PageContainer title="Home">
@@ -322,6 +341,7 @@ export default function Home() {
           <ThermostatControl />
           <HeatingControls />
           <FanControl />
+          <PresenceCard />
         </div>
 
         {/* Column 2: Power */}

@@ -72,6 +72,14 @@
   round: 2
 
 - platform: integration
+  name: "Estimated Fuel Used Total (L)"
+  unique_id: "estimated_fuel_used_total_l"
+  source: sensor.estimated_fuel_rate
+  unit_time: h
+  method: trapezoidal
+  round: 3
+
+- platform: integration
   name: "Bed Motor Energy (Wh)"
   unique_id: "bed_motor_energy_wh"
   source: sensor.bed_motor_power_24v

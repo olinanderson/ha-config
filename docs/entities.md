@@ -18,6 +18,10 @@
 | `sensor.battery_discharging` | Template: W discharging (0 when charging) |
 
 ## Solar / MPPT
+Two Victron controllers, read over BLE by the a32-pro ESP32. Panels are Custom Marine Products:
+- **MPPT1 — 250 W array, four small panels wired 2s2p:** 2× CMP24060SR-065-BLG (65 W, SunPower cells, semi-rigid black long, $359 ea) + 2× 60 W Walk-On semi-rigid (HJT cells, $199 ea)
+- **MPPT2 — 400 W array, one panel:** CMP25400H semi-flexible (108 PERC cells 6×18, 31 V / 12.9 A, 1127 × 1728 mm / 44.4" × 68", junction box mid-panel, VHB-taped, $1,279)
+
 | Entity | Description |
 |---|---|
 | `sensor.a32_pro_mppt1_pv_power` | MPPT1 PV input power (W) |
@@ -121,9 +125,8 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor, plus `sensor.mppt1_
 ## GPS / Location
 | Entity | Description |
 |---|---|
-| `device_tracker.starlink_device_location` | Raw Starlink GPS |
-| `device_tracker.filtered_starlink_location` | MQTT filtered GPS (1Hz while moving) |
-| `device_tracker.starlink` | Starlink tracker (used for home zone) |
+| `device_tracker.ublox_gps` | Raw u-blox USB GPS (drives home zone) |
+| `device_tracker.ublox_gps_filtered` | MQTT filtered GPS (1Hz while moving) |
 
 ## Propane
 | Entity | Description |
