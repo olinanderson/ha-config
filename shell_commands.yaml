@@ -28,7 +28,7 @@ restart_osrm_proxy: >
     python3 /config/www/vanlife-panel/kill_osrm.py;
     sleep 2;
     cd /config/www/vanlife-panel &&
-    nohup python3 osrm_proxy.py > /config/www/vanlife-panel/osrm_proxy.log 2>&1 &
+    nohup python3 osrm_proxy.py >> /config/www/vanlife-panel/osrm_proxy.log 2>&1 &
     echo "Routing proxy restarted"'
 
 # Start routing CORS proxy so the vanlife panel can call GraphHopper without CORS
@@ -40,7 +40,7 @@ start_osrm_proxy: >
     python3 /config/www/vanlife-panel/kill_osrm.py;
     sleep 2;
     cd /config/www/vanlife-panel &&
-    nohup python3 osrm_proxy.py > /config/www/vanlife-panel/osrm_proxy.log 2>&1 &
+    nohup python3 osrm_proxy.py >> /config/www/vanlife-panel/osrm_proxy.log 2>&1 &
     echo "Routing proxy started";
   else
     echo "Routing proxy already running";
@@ -115,7 +115,7 @@ start_dvr_proxy: >
   /bin/sh -c 'which ffmpeg >/dev/null 2>&1 || apk add --no-cache ffmpeg >/dev/null 2>&1;
     if ! nc -z 127.0.0.1 8766 2>/dev/null; then
       cd /config/www/react-dashboard &&
-      nohup python3 dvr_proxy.py > /config/www/react-dashboard/dvr_proxy.log 2>&1 &
+      nohup python3 dvr_proxy.py >> /config/www/react-dashboard/dvr_proxy.log 2>&1 &
       echo "DVR proxy started";
     else
       echo "DVR proxy already running";
@@ -127,7 +127,7 @@ restart_dvr_proxy: >
     pkill -f "python3.*dvr_proxy" 2>/dev/null;
     sleep 2;
     cd /config/www/react-dashboard &&
-    nohup python3 dvr_proxy.py > /config/www/react-dashboard/dvr_proxy.log 2>&1 &
+    nohup python3 dvr_proxy.py >> /config/www/react-dashboard/dvr_proxy.log 2>&1 &
     echo "DVR proxy restarted"'
 
 # Called after a fill-up is detected — queries fuel-stats API to compute the

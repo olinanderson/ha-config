@@ -1124,6 +1124,7 @@
 # we log a warning naming it: a crash trail for root-causing repeat offenders.
 - id: daemons_liveness_watchdog
   alias: "Daemons • Liveness watchdog"
+  initial_state: true  # always armed after a restart, regardless of restored state
   mode: single
   max_exceeded: silent
   trigger:
@@ -1138,21 +1139,40 @@
       response_variable: filter_r
     - action: shell_command.start_dvr_proxy
       response_variable: dvr_r
-    # A daemon that was alive prints "...already running"; anything else means the
-    # start command had to relaunch it (or failed to), so flag it by name.
+    # Each start_* echoes one of three things: "...already running" (was alive,
+    # no-op), "...started" (was dead → relaunched: the crash event we want a
+    # trail of), or an error with neither (start was attempted but not confirmed,
+    # e.g. gps_filter with a missing token). Split those so the warning labels are
+    # accurate instead of calling a failed start a "relaunch".
     - variables:
-        restarted: >-
+        relaunched: >-
           {% set ns = namespace(d=[]) %}
-          {% if 'already running' not in (osrm_r.stdout | default('')) %}{% set ns.d = ns.d + ['osrm_proxy (8765)'] %}{% endif %}
-          {% if 'already running' not in (ublox_r.stdout | default('')) %}{% set ns.d = ns.d + ['gps_ublox'] %}{% endif %}
-          {% if 'already running' not in (filter_r.stdout | default('')) %}{% set ns.d = ns.d + ['gps_filter'] %}{% endif %}
-          {% if 'already running' not in (dvr_r.stdout | default('')) %}{% set ns.d = ns.d + ['dvr_proxy (8766)'] %}{% endif %}
+          {% if 'started' in (osrm_r.stdout | default('')) %}{% set ns.d = ns.d + ['osrm_proxy (8765)'] %}{% endif %}
+          {% if 'started' in (ublox_r.stdout | default('')) %}{% set ns.d = ns.d + ['gps_ublox'] %}{% endif %}
+          {% if 'started' in (filter_r.stdout | default('')) %}{% set ns.d = ns.d + ['gps_filter'] %}{% endif %}
+          {% if 'started' in (dvr_r.stdout | default('')) %}{% set ns.d = ns.d + ['dvr_proxy (8766)'] %}{% endif %}
           {{ ns.d | join(', ') }}
-    - if: "{{ restarted | trim | length > 0 }}"
+        failed: >-
+          {% set ns = namespace(d=[]) %}
+          {% set o = osrm_r.stdout | default('') %}{% if 'already running' not in o and 'started' not in o %}{% set ns.d = ns.d + ['osrm_proxy (8765)'] %}{% endif %}
+          {% set u = ublox_r.stdout | default('') %}{% if 'already running' not in u and 'started' not in u %}{% set ns.d = ns.d + ['gps_ublox'] %}{% endif %}
+          {% set f = filter_r.stdout | default('') %}{% if 'already running' not in f and 'started' not in f %}{% set ns.d = ns.d + ['gps_filter'] %}{% endif %}
+          {% set v = dvr_r.stdout | default('') %}{% if 'already running' not in v and 'started' not in v %}{% set ns.d = ns.d + ['dvr_proxy (8766)'] %}{% endif %}
+          {{ ns.d | join(', ') }}
+    # Relaunched a dead daemon → warning (the crash trail for root-causing).
+    - if: "{{ relaunched | trim | length > 0 }}"
       then:
         - action: system_log.write
           data:
             level: warning
             logger: watchdog.daemons
-            message: "Relaunched dead host daemon(s): {{ restarted | trim }}"
+            message: "Relaunched dead host daemon(s): {{ relaunched | trim }}"
+    # Start attempted but daemon never confirmed up → error (won't self-heal).
+    - if: "{{ failed | trim | length > 0 }}"
+      then:
+        - action: system_log.write
+          data:
+            level: error
+            logger: watchdog.daemons
+            message: "Host daemon(s) failed to start (check their .log): {{ failed | trim }}"
 
