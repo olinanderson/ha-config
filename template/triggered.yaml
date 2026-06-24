@@ -7,15 +7,15 @@
 # Road grade from u-blox GPS (deg & % + label)
 # ───────────────────────────────────────────────
 - trigger:
+    # Fire ONCE per GPS fix. The daemon republishes latitude/longitude/elevation
+    # together in a single MQTT message, so watching all three attributes fired
+    # this template up to 3× per fix and compounded the EMA (effective weight
+    # 0.6³ instead of 0.6). Latitude changes on every moving fix (a ≥5 m step is
+    # far larger than the 7-decimal rounding), so a single latitude trigger
+    # captures each fix exactly once. from_state/to_state still carry all attrs.
     - trigger: state
       entity_id: device_tracker.ublox_gps
       attribute: latitude
-    - trigger: state
-      entity_id: device_tracker.ublox_gps
-      attribute: longitude
-    - trigger: state
-      entity_id: device_tracker.ublox_gps
-      attribute: elevation
   sensor:
     - name: "Road Grade (deg)"
       unique_id: road_grade_deg
@@ -65,13 +65,20 @@
             {% set d  = R * c %}         {# horizontal meters #}
             {% set dz = (alt2 - alt1) %} {# meters #}
 
-            {# avoid division noise on tiny steps #}
-            {% if d < 5 %}
+            {# Require a longer horizontal run before trusting a grade. The
+               accuracy gate above is HORIZONTAL only; GPS vertical error is
+               larger, so a longer run dilutes fixed altitude noise. #}
+            {% if d < 10 %}
               {{ last_numeric_or_zero(this.state) }}
             {% else %}
               {% set raw_deg = atan2(dz, d) * 180 / pi %}
-              {# light smoothing: EMA 60/40 with previous value if present #}
-              {% if this.state not in ['unknown','unavailable','none',''] %}
+              {# Reject road-implausible spikes (>20° ≈ 36% grade). Almost no
+                 drivable road exceeds this, so a spike here is vertical GPS
+                 noise (e.g. a momentary altitude glitch) — hold the last value. #}
+              {% if raw_deg | abs > 20 %}
+                {{ last_numeric_or_zero(this.state) }}
+              {% elif this.state not in ['unknown','unavailable','none',''] %}
+                {# light smoothing: EMA 60/40 with previous value if present #}
                 {{ (0.6*(this.state | float) + 0.4*raw_deg) | round(2) }}
               {% else %}
                 {{ raw_deg | round(2) }}

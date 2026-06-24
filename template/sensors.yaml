@@ -30,8 +30,8 @@
       unique_id: road_grade_percent_last
       unit_of_measurement: "%"
       state: >
-        {% if states('sensor.road_grade_percent') not in ['unknown','unavailable'] %}
-          {{ states('sensor.road_grade_percent') }}
+        {% if states('sensor.road_grade') not in ['unknown','unavailable'] %}
+          {{ states('sensor.road_grade') }}
         {% else %}
           {{ this.state if this.state not in ['unknown','unavailable'] else '0' }}
         {% endif %}

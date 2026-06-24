@@ -153,9 +153,13 @@ export default function VanlifeMap() {
 
   const vanPos = useMemo((): [number, number] | null => {
     for (const e of [vanTracker1, vanTracker2, vanTracker3]) {
-      const lat = e?.attributes?.latitude;
-      const lon = e?.attributes?.longitude;
-      if (lat != null && lon != null) return [Number(lat), Number(lon)];
+      const lat = Number(e?.attributes?.latitude);
+      const lon = Number(e?.attributes?.longitude);
+      // Reject missing/NaN and the (0,0) "null island" fix that a dropped raw
+      // tracker can briefly publish — otherwise the van jumps to the Atlantic.
+      if (Number.isFinite(lat) && Number.isFinite(lon) && (lat !== 0 || lon !== 0)) {
+        return [lat, lon];
+      }
     }
     return null;
   }, [vanTracker1, vanTracker2, vanTracker3]);

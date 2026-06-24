@@ -77,6 +77,11 @@
   condition:
     # Run only when tracker state is 'unknown' (means broker lost retain)
     - "{{ states('device_tracker.ublox_gps_filtered') in ['unknown', 'unavailable'] }}"
+    # …and only if the raw tracker actually has a real fix (never bootstrap 0,0).
+    - condition: template
+      value_template: >
+        {{ state_attr('device_tracker.ublox_gps','latitude') | float(0) != 0
+           and state_attr('device_tracker.ublox_gps','longitude') | float(0) != 0 }}
   action:
     - action: mqtt.publish
       data:
@@ -85,10 +90,10 @@
         retain: true
         payload: >
           {
-            "latitude": {{ state_attr('device_tracker.ublox_gps','latitude') | default(0) }},
-            "longitude": {{ state_attr('device_tracker.ublox_gps','longitude') | default(0) }},
-            "gps_accuracy": {{ state_attr('device_tracker.ublox_gps','gps_accuracy') | default(0) }},
-            "elevation": {{ state_attr('device_tracker.ublox_gps','altitude') | default(0) }},
+            "latitude": {{ state_attr('device_tracker.ublox_gps','latitude') | float(0) }},
+            "longitude": {{ state_attr('device_tracker.ublox_gps','longitude') | float(0) }},
+            "gps_accuracy": {{ state_attr('device_tracker.ublox_gps','gps_accuracy') | float(0) }},
+            "elevation": {{ state_attr('device_tracker.ublox_gps','altitude') | float(0) }},
             "source_type": "gps"
           }
     - action: mqtt.publish
@@ -110,6 +115,11 @@
     - condition: state
       entity_id: binary_sensor.vehicle_is_moving
       state: "on"
+    # Don't republish a (0,0) fix if the raw tracker momentarily has no fix.
+    - condition: template
+      value_template: >
+        {{ state_attr('device_tracker.ublox_gps','latitude') | float(0) != 0
+           and state_attr('device_tracker.ublox_gps','longitude') | float(0) != 0 }}
   action:
     - action: mqtt.publish
       data:
@@ -118,10 +128,10 @@
         retain: true
         payload: >
           {
-            "latitude": {{ state_attr('device_tracker.ublox_gps','latitude') | default(0) }},
-            "longitude": {{ state_attr('device_tracker.ublox_gps','longitude') | default(0) }},
-            "gps_accuracy": {{ state_attr('device_tracker.ublox_gps','gps_accuracy') | default(0) }},
-            "elevation": {{ state_attr('device_tracker.ublox_gps','altitude') | default(0) }},
+            "latitude": {{ state_attr('device_tracker.ublox_gps','latitude') | float(0) }},
+            "longitude": {{ state_attr('device_tracker.ublox_gps','longitude') | float(0) }},
+            "gps_accuracy": {{ state_attr('device_tracker.ublox_gps','gps_accuracy') | float(0) }},
+            "elevation": {{ state_attr('device_tracker.ublox_gps','altitude') | float(0) }},
             "source_type": "gps"
           }
     # Tracker’s textual state stays constant
@@ -140,6 +150,12 @@
       entity_id: binary_sensor.vehicle_is_moving
       from: "off"
       to: "on"
+  condition:
+    # Skip the snapshot if the raw tracker has no real fix (avoids a 0,0 jump).
+    - condition: template
+      value_template: >
+        {{ state_attr('device_tracker.ublox_gps','latitude') | float(0) != 0
+           and state_attr('device_tracker.ublox_gps','longitude') | float(0) != 0 }}
   action:
     - action: mqtt.publish
       data:
@@ -148,10 +164,10 @@
         retain: true
         payload: >
           {
-            "latitude": {{ state_attr('device_tracker.ublox_gps','latitude') | default(0) }},
-            "longitude": {{ state_attr('device_tracker.ublox_gps','longitude') | default(0) }},
-            "gps_accuracy": {{ state_attr('device_tracker.ublox_gps','gps_accuracy') | default(0) }},
-            "elevation": {{ state_attr('device_tracker.ublox_gps','altitude') | default(0) }},
+            "latitude": {{ state_attr('device_tracker.ublox_gps','latitude') | float(0) }},
+            "longitude": {{ state_attr('device_tracker.ublox_gps','longitude') | float(0) }},
+            "gps_accuracy": {{ state_attr('device_tracker.ublox_gps','gps_accuracy') | float(0) }},
+            "elevation": {{ state_attr('device_tracker.ublox_gps','altitude') | float(0) }},
             "source_type": "gps"
           }
     - action: mqtt.publish
@@ -169,6 +185,12 @@
       entity_id: binary_sensor.vehicle_is_moving
       from: "on"
       to: "off"
+  condition:
+    # Skip the snapshot if the raw tracker has no real fix (avoids a 0,0 jump).
+    - condition: template
+      value_template: >
+        {{ state_attr('device_tracker.ublox_gps','latitude') | float(0) != 0
+           and state_attr('device_tracker.ublox_gps','longitude') | float(0) != 0 }}
   action:
     - action: mqtt.publish
       data:
@@ -177,10 +199,10 @@
         retain: true
         payload: >
           {
-            "latitude": {{ state_attr('device_tracker.ublox_gps','latitude') | default(0) }},
-            "longitude": {{ state_attr('device_tracker.ublox_gps','longitude') | default(0) }},
-            "gps_accuracy": {{ state_attr('device_tracker.ublox_gps','gps_accuracy') | default(0) }},
-            "elevation": {{ state_attr('device_tracker.ublox_gps','altitude') | default(0) }},
+            "latitude": {{ state_attr('device_tracker.ublox_gps','latitude') | float(0) }},
+            "longitude": {{ state_attr('device_tracker.ublox_gps','longitude') | float(0) }},
+            "gps_accuracy": {{ state_attr('device_tracker.ublox_gps','gps_accuracy') | float(0) }},
+            "elevation": {{ state_attr('device_tracker.ublox_gps','altitude') | float(0) }},
             "source_type": "gps"
           }
     - action: mqtt.publish
@@ -1139,6 +1161,8 @@
       response_variable: filter_r
     - action: shell_command.start_dvr_proxy
       response_variable: dvr_r
+    - action: shell_command.start_syncthing
+      response_variable: st_r
     # Each start_* echoes one of three things: "...already running" (was alive,
     # no-op), "...started" (was dead → relaunched: the crash event we want a
     # trail of), or an error with neither (start was attempted but not confirmed,
@@ -1151,6 +1175,7 @@
           {% if 'started' in (ublox_r.stdout | default('')) %}{% set ns.d = ns.d + ['gps_ublox'] %}{% endif %}
           {% if 'started' in (filter_r.stdout | default('')) %}{% set ns.d = ns.d + ['gps_filter'] %}{% endif %}
           {% if 'started' in (dvr_r.stdout | default('')) %}{% set ns.d = ns.d + ['dvr_proxy (8766)'] %}{% endif %}
+          {% if 'started' in (st_r.stdout | default('')) %}{% set ns.d = ns.d + ['syncthing (22000)'] %}{% endif %}
           {{ ns.d | join(', ') }}
         failed: >-
           {% set ns = namespace(d=[]) %}
@@ -1158,6 +1183,7 @@
           {% set u = ublox_r.stdout | default('') %}{% if 'already running' not in u and 'started' not in u %}{% set ns.d = ns.d + ['gps_ublox'] %}{% endif %}
           {% set f = filter_r.stdout | default('') %}{% if 'already running' not in f and 'started' not in f %}{% set ns.d = ns.d + ['gps_filter'] %}{% endif %}
           {% set v = dvr_r.stdout | default('') %}{% if 'already running' not in v and 'started' not in v %}{% set ns.d = ns.d + ['dvr_proxy (8766)'] %}{% endif %}
+          {% set s = st_r.stdout | default('') %}{% if 'already running' not in s and 'started' not in s %}{% set ns.d = ns.d + ['syncthing (22000)'] %}{% endif %}
           {{ ns.d | join(', ') }}
     # Relaunched a dead daemon → warning (the crash trail for root-causing).
     - if: "{{ relaunched | trim | length > 0 }}"

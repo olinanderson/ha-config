@@ -333,7 +333,7 @@ views:
             label: |
               [[[
                 function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
-                var deg=s('sensor.road_grade_deg'), pct=s('sensor.road_grade_percent_last');
+                var deg=s('sensor.road_grade_deg'), pct=s('sensor.road_grade');
                 var hill=states['sensor.hill_aggression']?states['sensor.hill_aggression'].state:'Flat';
                 var color=isNaN(pct)?'var(--secondary-text-color)':Math.abs(pct)<3?'#22c55e':Math.abs(pct)<7?'#f59e0b':'#ef4444';
                 return `<div style="padding:4px 0;">
@@ -410,7 +410,7 @@ views:
               yaxis:
                 - decimals: 1
               series:
-                - entity: sensor.road_grade_percent_last
+                - entity: sensor.road_grade
                   name: Grade %
                   type: area
                   color: '#f59e0b'

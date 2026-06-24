@@ -195,14 +195,25 @@ def mqtt_publish(token, topic, payload, retain=True, qos=1):
 
 
 def publish_fix(token, fix, last_state_ts):
+    # gps_accuracy: a missing HDOP must NOT be reported as 0 (i.e. "perfect").
+    # 0 would sail straight through the road-grade sensor's `accuracy <= 30`
+    # quality gate. Report a large value so an unknown-accuracy fix is treated
+    # as low quality by consumers.
+    acc = fix.get("gps_accuracy")
     attrs = {
         "latitude": fix["latitude"],
         "longitude": fix["longitude"],
-        "gps_accuracy": fix.get("gps_accuracy") or 0,
-        "altitude": fix.get("altitude") if fix.get("altitude") is not None else 0,
-        "elevation": fix.get("altitude") if fix.get("altitude") is not None else 0,
+        "gps_accuracy": acc if acc is not None else 999.0,
         "source_type": "gps",
     }
+    # Only publish altitude/elevation when we actually have one. Publishing 0
+    # for an altitude-less GGA read as a ~500 m cliff to the road-grade calc and
+    # produced huge spurious grade spikes. The read loop carries the last good
+    # altitude forward, so this is None only before the very first 3D fix.
+    alt = fix.get("altitude")
+    if alt is not None:
+        attrs["altitude"] = alt
+        attrs["elevation"] = alt
     if fix.get("speed") is not None:
         attrs["speed"] = fix["speed"]
     if fix.get("course") is not None:
@@ -251,7 +262,9 @@ def run_once(token):
     last_pub = 0.0
     last_state = 0.0
     last_nofix_log = 0.0
-    cur = {}   # accumulates GGA + RMC into one fix
+    last_alt = None    # last good altitude (m), carried forward across fixes
+    cur = {}           # accumulates one epoch's GGA + RMC into a single fix
+    cur_time = None    # NMEA UTC time field of the epoch currently in `cur`
     try:
         while True:
             r, _, _ = select.select([fd], [], [], 5.0)
@@ -261,6 +274,10 @@ def run_once(token):
             if not chunk:
                 continue
             buf += chunk
+            # Guard against a newline-less stream (e.g. the receiver flipped to
+            # UBX binary mode): never let the line buffer grow without bound.
+            if len(buf) > 8192:
+                buf = buf[-512:]
             while b"\n" in buf:
                 line, _, buf = buf.partition(b"\n")
                 s = line.decode("ascii", "replace").strip("\r\x00 ")
@@ -268,6 +285,16 @@ def run_once(token):
                     continue
                 parts = s[1:].split("*")[0].split(",")
                 stype = parts[0][2:] if len(parts[0]) >= 5 else parts[0]
+                if stype not in ("GGA", "RMC"):
+                    continue
+                # Start a fresh fix when the UTC time field advances, so stale
+                # speed/course/satellites from a prior epoch never leak into the
+                # next published fix.
+                t_field = parts[1] if len(parts) > 1 else ""
+                if t_field and cur_time is not None and t_field != cur_time:
+                    cur = {}
+                if t_field:
+                    cur_time = t_field
                 if stype == "GGA":
                     g = parse_gga(parts)
                     if not g:
@@ -278,7 +305,15 @@ def run_once(token):
                             log("valid sentences but no satellite fix yet")
                             last_nofix_log = now
                         cur = {}
+                        cur_time = None
                         continue
+                    # Carry the last good altitude forward when this GGA lacks
+                    # one, so a momentary altitude dropout can't publish a 0 m
+                    # elevation (a ~500 m cliff to the grade calc).
+                    if g.get("altitude") is None:
+                        g["altitude"] = last_alt
+                    else:
+                        last_alt = g["altitude"]
                     cur.update(g)
                 elif stype == "RMC":
                     rmc = parse_rmc(parts)

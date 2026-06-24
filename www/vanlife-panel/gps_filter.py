@@ -139,13 +139,21 @@ def set_meta(key, value):
     con.close()
 
 
-def store_results(segments, parking_spots, clear_after_ts=None):
+def store_results(segments, parking_spots, clear_after_ts=None, clear_before_ts=None):
     """Atomically store filter results. If clear_after_ts is set, delete existing
-    data after that timestamp first (for incremental re-processing)."""
+    data at/after that timestamp first (for incremental re-processing). If
+    clear_before_ts is also set, the delete is bounded to [clear_after_ts,
+    clear_before_ts) — required when reprocessing a SINGLE historical day, so it
+    doesn't wipe every later day's trips too."""
     con = sqlite3.connect(FILTER_DB)
     try:
         con.execute("BEGIN")
-        if clear_after_ts is not None:
+        if clear_after_ts is not None and clear_before_ts is not None:
+            con.execute("DELETE FROM segments WHERE start_ts >= ? AND start_ts < ?",
+                        (clear_after_ts, clear_before_ts))
+            con.execute("DELETE FROM parking_spots WHERE start_ts >= ? AND start_ts < ?",
+                        (clear_after_ts, clear_before_ts))
+        elif clear_after_ts is not None:
             con.execute("DELETE FROM segments WHERE start_ts >= ?", (clear_after_ts,))
             con.execute("DELETE FROM parking_spots WHERE start_ts >= ?", (clear_after_ts,))
 
@@ -344,7 +352,8 @@ def filter_movement(deduped):
 
 
 def merge_short_stops(segments, raw_parking):
-    """Merge segments separated by short stops (<120s). Returns (merged_segs, filtered_parking).
+    """Merge segments separated by short stops (< MIN_PARK_DURATION_S, i.e. 180s).
+    Returns (merged_segs, filtered_parking).
     Mirrors the JS merge logic: park[k] for k>=1 sits between seg[k-1] and seg[k]."""
     parking_spots = [pk for pk in raw_parking if pk["duration_s"] >= MIN_PARK_DURATION_S]
     short_stop_indices = {i for i, pk in enumerate(raw_parking) if pk["duration_s"] < MIN_PARK_DURATION_S}
@@ -646,7 +655,11 @@ def backfill(token, from_date):
 # ── Incremental Processing ────────────────────────────────────────────────────
 
 def _process_day(token, day_start, day_end, label=""):
-    """Process a single UTC day's GPS data. Returns True if segments were found."""
+    """Process a single UTC day's GPS data.
+
+    Returns True if segments were found, False if the day is genuinely empty,
+    and None if the HA fetch FAILED (so the caller must not mark the day as
+    permanently checked — it should be retried)."""
     day_start_ts = day_start.timestamp() * 1000
     day_end_ts = day_end.timestamp() * 1000
 
@@ -654,13 +667,16 @@ def _process_day(token, day_start, day_end, label=""):
         points = fetch_gps_from_ha(token, day_start, day_end)
     except Exception as e:
         log(f"Incremental ({label}): HA fetch error: {e}")
-        return False
+        return None
 
     if not points:
         return False
 
     segments, parking = process_gps(points)
-    store_results(segments, parking, clear_after_ts=day_start_ts)
+    # Bound the clear to this day only — clear_after_ts alone would delete every
+    # later day's trips (including today).
+    store_results(segments, parking, clear_after_ts=day_start_ts,
+                  clear_before_ts=day_end_ts)
 
     if segments or parking:
         moving_pts = sum(len(s) for s in segments)
@@ -713,9 +729,13 @@ def incremental_run(token):
         # Process this day
         label = day_start.strftime('%Y-%m-%d')
         log(f"Backfilling {label} (no segments found)...")
-        _process_day(token, day_start, day_end, label=label)
+        result = _process_day(token, day_start, day_end, label=label)
 
-        # Mark as checked so we don't retry every 2 minutes
+        # Only mark as checked when the fetch actually succeeded. A failed fetch
+        # returns None — leave the day unmarked so the next cycle retries it
+        # instead of permanently skipping that day's trips.
+        if result is None:
+            continue
         con.execute(
             "INSERT OR REPLACE INTO filter_meta (key, value) VALUES (?, ?)",
             (meta_key, str(now.timestamp()))
