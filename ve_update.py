@@ -33,6 +33,7 @@ PROXY_URL    = "http://localhost:8765"
 TOKEN_FILE   = "/config/.gps_filter_token"
 HISTORY_MAX  = 5           # keep last 5 fill-up corrections (must fit in 255-char input_text)
 MIN_DISTANCE = 50          # km — don't update VE if the drive was very short
+MAX_ECON     = 40.0        # L/100km — reject implausibly-high actual economy
 MIN_VE       = 0.10
 MAX_VE       = 1.50
 
@@ -85,13 +86,14 @@ def main():
         print(f"ERROR: arguments must be integer epoch-ms values", file=sys.stderr)
         sys.exit(1)
 
-    # If from_ts is 0 or before 2020, default to 30 days ago
-    # (first ever fill-up or corrupted state)
+    # If from_ts is 0 or before 2020 there is no valid prior fill-up timestamp,
+    # so the fill-to-fill window is undefined and any fabricated window yields a
+    # meaningless delta. Skip calibration entirely rather than invent a window.
     epoch_2020 = 1577836800000  # 2020-01-01 in ms
     if from_ts < epoch_2020:
-        from_ts = int((time.time() - 30 * 86400) * 1000)
-        print(f"from_ts was before 2020 — defaulting to 30 days ago "
-              f"({from_ts})", flush=True)
+        print("from_ts invalid (no prior fill-up timestamp) — skipping VE "
+              "calibration.", flush=True)
+        sys.exit(0)
 
     # ── 1. Query fuel-stats ──────────────────────────────────────────────────
     url = f"{PROXY_URL}/vanlife/fuel-stats?from_ts={from_ts}&to_ts={to_ts}"
@@ -124,6 +126,14 @@ def main():
     if distance_km < MIN_DISTANCE:
         print(f"Distance too short ({distance_km:.1f} km < {MIN_DISTANCE} km). "
               f"Skipping VE update to avoid noise.", flush=True)
+        sys.exit(0)
+
+    # Reject physically-implausible actual economy. Incomplete GPS coverage
+    # inflates it (the 62.5 L/100km bug); the API already suppresses economy
+    # outside 5–40 L/100km, so this is belt-and-suspenders.
+    if actual_l100km is not None and actual_l100km > MAX_ECON:
+        print(f"Actual economy {actual_l100km} L/100km exceeds {MAX_ECON} — "
+              f"likely incomplete GPS coverage. Skipping.", flush=True)
         sys.exit(0)
 
     # Reject implausible suggestions (more than 3× off from current)
@@ -167,10 +177,15 @@ def main():
     else:
         avg_ve = sum(ve_values) / len(ve_values)
 
-    new_ve = round(max(MIN_VE, min(MAX_VE, avg_ve)), 3)
+    # Damped update: move only part-way from the CURRENT VE toward the
+    # rolling-average target, so a single noisy fill-up can't slam VE to an
+    # extreme (e.g. 0.55 → 1.109). Converges over several fill-ups instead.
+    ALPHA  = 0.25
+    damped = current_ve + ALPHA * (avg_ve - current_ve)
+    new_ve = round(max(MIN_VE, min(MAX_VE, damped)), 3)
     print(f"VE history values: {ve_values}", flush=True)
-    print(f"Averaged VE: {avg_ve:.3f} → applying {new_ve} "
-          f"(clamped to [{MIN_VE}, {MAX_VE}])", flush=True)
+    print(f"Rolling-avg target {avg_ve:.3f}; damped from current {current_ve:.3f} "
+          f"→ applying {new_ve} (α={ALPHA}, clamped [{MIN_VE}, {MAX_VE}])", flush=True)
 
     # ── 6. Write back to HA ──────────────────────────────────────────────────
     # Update input_number.fuel_ve_correction

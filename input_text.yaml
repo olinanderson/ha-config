@@ -1,14 +1,6 @@
 # ================================
 # input_text.yaml
 # ================================
-previous_fuel_level:
-  name: "Previous Fuel Level"
-  initial: "0"
-
-previous_speed:
-  name: "Previous Speed"
-  initial: "0"
-
 # ─── Fill-up tracking + VE correction history ───
 last_fillup_ts:
   name: "Last Fill-up Timestamp (ms)"

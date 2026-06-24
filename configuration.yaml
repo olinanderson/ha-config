@@ -61,10 +61,11 @@ input_select: !include input_select.yaml
 template: !include_dir_merge_list template/
 
 # --- Integration sensors (Riemann, statistics, history) ---
+# NOTE: the smoothed fuel level sensor.wican_fuel_5_min_mean (statistics, mean
+# over 5 min) lives in integrations/sensor.yaml. There is intentionally no
+# `filter:` include — `filter` is a sensor PLATFORM, not a top-level integration,
+# so a top-level `filter:` key was silently ignored by HA (dead config).
 sensor: !include integrations/sensor.yaml
-
-# --- Filter sensors (moving averages for noisy OBD readings) ---
-filter: !include filter.yaml
 
 # --- MQTT (device tracker via YAML; sensors via MQTT discovery) ---
 mqtt:

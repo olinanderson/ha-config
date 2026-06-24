@@ -276,7 +276,7 @@ views:
                 function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
                 var fuel=s('sensor.stable_fuel_level'), rawFuel=s('sensor.192_168_10_90_2f_fueltanklevel'),
                     meanFuel=s('sensor.wican_fuel_5_min_mean'),
-                    l100=s('sensor.fuel_consumption_l100km'), lh=s('sensor.fuel_consumption_lh');
+                    l100=s('sensor.estimated_fuel_consumption'), lh=s('sensor.estimated_fuel_rate');
                 var fuelColor=isNaN(fuel)||fuel<15?'#ef4444':fuel<30?'#f59e0b':'#22c55e';
                 return `<div style="padding:4px 0;">
                   <div style="display:flex; align-items:center; gap:8px; margin-bottom:16px;">

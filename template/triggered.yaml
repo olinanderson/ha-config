@@ -160,14 +160,17 @@
       availability: "true"
 
 # ─── Stable Fuel Level (grade + acceleration gated) ──────────────────────────
-# Only latches a new OBD fuel reading when:
-#   • The raw OBD value has been unchanged for 3 seconds  (no rapid sloshing)
+# Latches the SMOOTHED tank level (sensor.wican_fuel_5_min_mean, jitter ~0.15%)
+# rather than the raw OBD reading (jitter ~7%, sloshes 65→100% on one drive).
+# Only latches a new value when:
 #   • Road grade ≤ 1.5° absolute              (no gravity-driven tilt)
 #   • |acceleration| ≤ stability threshold   (no inertial slosh from braking/accel)
-# Also refreshes every 10 minutes as a keep-alive while conditions are already met.
+# Otherwise it HOLDS its last value (so it stays sensible while parked/off).
+# Falls back to the raw reading only if the 5-min mean has no value yet
+# (e.g. the first few seconds after engine start). Refreshes every 10 min.
 - trigger:
     - trigger: state
-      entity_id: sensor.192_168_10_90_2f_fueltanklevel
+      entity_id: sensor.wican_fuel_5_min_mean
       for: "00:00:03"
     - trigger: time_pattern
       minutes: "/10"
@@ -177,18 +180,21 @@
       unit_of_measurement: "%"
       state_class: measurement
       state: >
-        {% set raw = states('sensor.192_168_10_90_2f_fueltanklevel') | float(-1) %}
-        {% set wican_ok = states('sensor.192_168_10_90_2f_fueltanklevel')
-                          not in ['unknown','unavailable'] %}
+        {% set mean = states('sensor.wican_fuel_5_min_mean') | float(-1) %}
+        {% set raw  = states('sensor.192_168_10_90_2f_fueltanklevel') | float(-1) %}
+        {# Prefer the smooth 5-min mean; fall back to raw only when the mean
+           has no value yet. #}
+        {% set src = mean if mean >= 0 else raw %}
         {% set grade  = states('sensor.road_grade_deg') | float(0) | abs %}
         {% set accel  = states('sensor.vehicle_acceleration') | float(0) | abs %}
         {% set thresh = states('input_number.acceleration_stability_threshold') | float(1.0) %}
         {% set stable = grade <= 1.5 and accel <= thresh %}
-        {% set prev = this.state | float(-1) %}
-        {% set fillup = raw - prev > 10 and prev > 0 %}
-        {% if wican_ok and (stable or fillup) %}
-          {{ raw | round(2) }}
+        {% if src >= 0 and stable %}
+          {{ src | round(2) }}
         {% else %}
-          {{ this.state if this.state not in ['unknown', 'unavailable'] else 0 }}
+          {# Hold last value; if none yet (e.g. just after a reload while parked)
+             emit unknown, NOT 0 — a false 0% misleads range and is read by the
+             ESPHome heater retry-check as a real low (nan is treated as OK). #}
+          {{ this.state if this.state not in ['unknown', 'unavailable'] else none }}
         {% endif %}
       availability: "true"

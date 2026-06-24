@@ -488,127 +488,36 @@
             - action: script.power_saving_mode_off
 
 # ────────────────────────────────────────────────────────────────
-# Vehicle Fuel and Movement Tracking System
-# ────────────────────────────────────────────────────────────────
-
-# Update previous speed for acceleration calculation
-- id: update_previous_speed
-  alias: "Update Previous Speed for Acceleration Calculation"
-  description: "Store previous speed value to calculate acceleration"
-  mode: single
-  trigger:
-    - trigger: state
-      entity_id: sensor.192_168_10_90_0d_vehiclespeed
-  condition:
-    # Only if we have a valid speed reading
-    - condition: template
-      value_template: "{{ states('sensor.192_168_10_90_0d_vehiclespeed') not in ['unavailable', 'unknown'] }}"
-  action:
-    - action: input_text.set_value
-      target:
-        entity_id: input_text.previous_speed
-      data:
-        value: "{{ trigger.from_state.state | default('0') }}"
-
-# Update stable fuel level when acceleration is low
-- id: update_stable_fuel_level
-  alias: "Update Stable Fuel Level When Acceleration is Low"
-  description: "Only update fuel level reading when acceleration has been low for 5+ seconds"
-  mode: restart
-  trigger:
-    # Check when fuel changes or acceleration changes
-    - trigger: state
-      entity_id:
-        - sensor.192_168_10_90_2f_fueltanklevel
-        - sensor.vehicle_acceleration
-      # Wait 5 seconds to ensure stability
-      for: "00:00:05"
-
-  condition:
-    # Only update if acceleration is very low (stable velocity)
-    - condition: template
-      value_template: >
-        {% set acceleration = states('sensor.vehicle_acceleration') | float(0) | abs %}
-        {% set accel_threshold = states('input_number.acceleration_stability_threshold') | float(0.5) %}
-        {{ acceleration <= accel_threshold }}
-
-  action:
-    # Update the stored fuel level
-    - action: input_text.set_value
-      target:
-        entity_id: input_text.previous_fuel_level
-      data:
-        value: "{{ states('sensor.192_168_10_90_2f_fueltanklevel') }}"
-
-# Handle WICAN disconnection (engine off)
-- id: update_fuel_on_wican_disconnect
-  alias: "Update Fuel Level When WICAN Disconnects"
-  description: "Capture fuel level when WICAN goes offline (engine turned off)"
-  mode: single
-  trigger:
-    - trigger: state
-      entity_id: sensor.192_168_10_90_2f_fueltanklevel
-      to: "unavailable"
-  action:
-    # Store the last known fuel level before disconnect
-    - action: input_text.set_value
-      target:
-        entity_id: input_text.previous_fuel_level
-      data:
-        value: "{{ trigger.from_state.state | default('0') }}"
-
-# Initialize on startup or reconnect
-- id: initialize_fuel_level_on_startup
-  alias: "Initialize Fuel Level on Startup"
-  trigger:
-    - trigger: homeassistant
-      event: start
-    # Also trigger when WICAN comes back online
-    - trigger: state
-      entity_id: sensor.192_168_10_90_2f_fueltanklevel
-      from: "unavailable"
-  condition:
-    # Only if we have valid readings
-    - condition: template
-      value_template: "{{ states('sensor.192_168_10_90_2f_fueltanklevel') not in ['unavailable', 'unknown'] }}"
-  action:
-    - action: input_text.set_value
-      target:
-        entity_id: input_text.previous_fuel_level
-      data:
-        value: "{{ states('sensor.192_168_10_90_2f_fueltanklevel') }}"
-    - action: input_text.set_value
-      target:
-        entity_id: input_text.previous_speed
-      data:
-        value: "{{ states('sensor.192_168_10_90_0d_vehiclespeed') | default('0') }}"
-
-# ────────────────────────────────────────────────────────────────
 # Fill-up Detection — Auto-update VE Correction
 # ────────────────────────────────────────────────────────────────
-# Fires when sensor.stable_fuel_level rises by more than 15 percentage points
-# (can't happen from normal consumption — must be a fill-up).
+# Fires when the smoothed tank level (sensor.wican_fuel_5_min_mean) jumps up by
+# more than 15 percentage points (can't happen from normal consumption — must be
+# a fill-up). After a long engine-off + fill, the 5-min mean's first reading on
+# restart steps straight to the new high level, so a single >15 jump is reliable.
 # Calls ve_update.py which:
 #   1. Queries /vanlife/fuel-stats for the period since the last fill-up
-#   2. Computes actual L/100km from GPS distance + OBD tank delta
-#   3. Derives a new VE correction factor and appends it to history
-#   4. Updates input_number.fuel_ve_correction to the rolling average
+#   2. Computes the actual fuel used (OBD tank delta) over that window
+#   3. Derives a new VE correction factor (damped) and appends it to history
+#   4. Updates input_number.fuel_ve_correction
 - id: fill_up_detected
   alias: "Fill-up Detected — Auto-Update VE Correction"
   description: >
-    Detects a fuel fill-up (stable fuel level jumps > 15%) and
-    automatically recalibrates the speed-density VE correction factor.
+    Detects a fuel fill-up (5-min mean tank level jumps > 15% to a high level)
+    and automatically recalibrates the speed-density VE correction factor.
   mode: single
   max_exceeded: silent
   trigger:
     - trigger: state
-      entity_id: sensor.stable_fuel_level
+      entity_id: sensor.wican_fuel_5_min_mean
   condition:
     - condition: template
       value_template: >
-        {% set new_fuel = trigger.to_state.state   | float(-1) %}
+        {% set new_fuel = trigger.to_state.state  | float(-1) %}
         {% set old_fuel = trigger.from_state.state | float(-1) %}
-        {{ new_fuel > 0 and old_fuel > 0 and (new_fuel - old_fuel) > 15 }}
+        {# A real fill jumps the SMOOTHED mean by >15 pts to a plausibly-high
+           level. WiCAN-reconnect and slosh artifacts don't clear all three
+           gates (old>0 rules out cold-boot 'unknown'; new>25 rules out noise). #}
+        {{ old_fuel > 0 and new_fuel > 25 and (new_fuel - old_fuel) > 15 }}
   action:
     - variables:
         # from_ts = when was the previous fill-up (epoch ms stored in input_text)

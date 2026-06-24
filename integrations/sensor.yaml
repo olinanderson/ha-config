@@ -71,6 +71,11 @@
   method: trapezoidal
   round: 2
 
+# Unbounded LIFETIME Riemann total of the speed-density fuel rate (L). This is
+# NOT remaining/used-this-trip fuel and NOT tank-relative. The osrm_proxy
+# fuel-trips/fuel-stats endpoints read DELTAS of this sensor (litres burned over
+# a window) and divide by GPS distance to get L/100km. Resets to 0 on HA restart,
+# so consumers must guard delta < 0. Never surface it raw on a fuel-level card.
 - platform: integration
   name: "Estimated Fuel Used Total (L)"
   unique_id: "estimated_fuel_used_total_l"

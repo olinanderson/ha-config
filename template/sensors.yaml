@@ -287,6 +287,9 @@
     # Improved formula with three corrections over base speed-density:
     #   1. RPM-based VE curve — VE scales ~0.60 at idle to ~1.0 at 3000+ RPM
     #   2. Fuel trim correction — real-time ECU STFT+LTFT avg both banks
+    #      trim_avg = ((STFT1+LTFT1)+(STFT2+LTFT2))/2 = mean of the two banks'
+    #      TOTAL (STFT+LTFT) correction. The /2 averages the two bank-totals and
+    #      is INTENTIONAL — do NOT "correct" it to /4 (verified correct).
     #   3. Lambda correction — commanded AFR from ECU instead of fixed 14.7
     #
     # Falls back gracefully: if fuel trim / lambda entities don't exist
@@ -357,9 +360,14 @@
         {% set fuel_lh = states('sensor.estimated_fuel_rate') | float(0) %}
         {% set speed = states('sensor.192_168_10_90_0d_vehiclespeed') | float(0) %}
         {% if fuel_lh > 0 and speed > 5 %}
-          {{ ((fuel_lh / speed) * 100) | round(1) }}
+          {% set l100 = (fuel_lh / speed) * 100 %}
+          {# Drop obviously-nonphysical spikes (heavy creep just above 5 km/h). #}
+          {{ none if l100 >= 200 else l100 | round(1) }}
         {% else %}
-          0
+          {# Idle / stopped: emit unknown (not 0) so it never biases averages
+             or long-term statistics. Trip economy comes from the GPS-distance
+             + OBD-fuel-rate method in osrm_proxy, not this instantaneous gauge. #}
+          {{ none }}
         {% endif %}
 
     # ─── Injector Pulse Width (ms) ───

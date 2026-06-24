@@ -9,8 +9,14 @@ export interface FuelTrip {
   fuel_end_pct: number | null;
   fuel_used_pct?: number;
   fuel_used_l?: number;
-  l_per_100km?: number;
+  l_per_100km?: number; // headline economy (prefers OBD+GPS, falls back to tank)
   km_per_l?: number;
+  // Primary method: OBD speed-density litres ÷ GPS distance (accurate on short trips)
+  fuel_used_l_obd?: number;
+  l_per_100km_obd?: number;
+  // Cross-check: tank-level delta (only emitted for long fill-to-fill spans)
+  l_per_100km_tank?: number;
+  economy_method?: 'obd_gps' | 'tank_delta';
 }
 
 export interface FuelTripSummary {

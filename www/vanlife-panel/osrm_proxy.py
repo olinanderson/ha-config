@@ -35,6 +35,71 @@ REQUEST_DELAY  = 1.2    # seconds between Valhalla calls — avoids 429 rate lim
 CACHE_DB    = "/config/www/vanlife-panel/route_cache.db"
 FILTERED_DB = "/config/www/vanlife-panel/filtered_gps.db"
 
+# ── Fuel-history helpers (read-only HA recorder lookups) ────────────────────
+TANK_L                 = 94.6   # Ford Transit T-350, 25 US gal
+FUEL_MEAN_ENTITY       = "sensor.wican_fuel_5_min_mean"        # smoothed tank %
+FUEL_USED_TOTAL_ENTITY = "sensor.estimated_fuel_used_total_l"  # OBD L integral
+
+
+def _nearest_state(con, entity_id, ts_s, mode="closest", max_gap_s=None):
+    """Nearest non-unknown numeric state of entity_id to ts_s (epoch seconds).
+    Uses two index-friendly queries (never ORDER BY ABS() over the table).
+      mode 'closest' = nearest before-or-after; 'before' = nearest at-or-before.
+    Returns (value_float, last_updated_ts), or (None, None) when nothing exists
+    within max_gap_s (when given) — which prevents fabricating a value from a
+    reading days away (e.g. April trips picking up a May reading).
+    """
+    before = con.execute(
+        "SELECT s.state, s.last_updated_ts FROM states s "
+        "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
+        "WHERE sm.entity_id = ? AND s.state NOT IN ('unknown','unavailable') "
+        "AND s.last_updated_ts <= ? "
+        "ORDER BY s.last_updated_ts DESC LIMIT 1",
+        (entity_id, ts_s),
+    ).fetchone()
+    if mode == "before":
+        row = before
+    else:
+        after = con.execute(
+            "SELECT s.state, s.last_updated_ts FROM states s "
+            "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
+            "WHERE sm.entity_id = ? AND s.state NOT IN ('unknown','unavailable') "
+            "AND s.last_updated_ts >= ? "
+            "ORDER BY s.last_updated_ts ASC LIMIT 1",
+            (entity_id, ts_s),
+        ).fetchone()
+        if before and after:
+            row = before if abs(before[1] - ts_s) <= abs(after[1] - ts_s) else after
+        else:
+            row = before or after
+    if not row:
+        return None, None
+    if max_gap_s is not None and abs(row[1] - ts_s) > max_gap_s:
+        return None, None
+    try:
+        return float(row[0]), row[1]
+    except (TypeError, ValueError):
+        return None, None
+
+
+def _obd_litres_between(con, start_ts_s, end_ts_s, max_gap_s=2 * 3600):
+    """Litres of fuel burned between two epoch-seconds timestamps, from the OBD
+    speed-density integral (sensor.estimated_fuel_used_total_l). This is the
+    'OBD + GPS' numerator: OBD litres / GPS km = L/100km, accurate even on short
+    city trips where the 1%-resolution tank delta is meaningless.
+    Returns litres (>0), or None if unavailable / spans an integration reset
+    (delta <= 0, e.g. HA restart) / readings too stale.
+    """
+    v0, _ = _nearest_state(con, FUEL_USED_TOTAL_ENTITY, start_ts_s, "closest", max_gap_s)
+    v1, _ = _nearest_state(con, FUEL_USED_TOTAL_ENTITY, end_ts_s,   "closest", max_gap_s)
+    if v0 is None or v1 is None:
+        return None
+    delta = v1 - v0
+    if delta <= 0:
+        return None
+    return round(delta, 3)
+
+
 # ── SQLite cache (content-addressed by MD5 of waypoints) ────────────────────
 _db_lock = threading.Lock()
 
@@ -476,8 +541,7 @@ class ProxyHandler(BaseHTTPRequestHandler):
     def _handle_fuel_trips(self):
         import os
         HA_DB  = "/config/home-assistant_v2.db"
-        TANK_L = 94.6
-        MIN_DIST_KM = 1.0   # skip micro-trips < 1km
+        MIN_DIST_KM = 1.0   # skip micro-trips < 1km   (TANK_L is module-level)
 
         qs    = parse_qs(urlparse(self.path).query)
         limit = int(qs.get("limit", [50])[0])
@@ -518,39 +582,20 @@ class ProxyHandler(BaseHTTPRequestHandler):
             ha_con = sqlite3.connect("file:" + HA_DB + "?mode=ro", uri=True)
 
             def fuel_at(ts_ms, before_only=False):
-                """Find closest fuel reading to ts_ms using two indexed queries.
-                Replaces the old ORDER BY ABS() which caused a full table scan
-                on every call (~0.5s × N trips × 2 = very slow).
-                """
-                ts_s = ts_ms / 1000
-                # Always get the nearest reading at-or-before (uses index)
-                before = ha_con.execute(
-                    "SELECT s.state, s.last_updated_ts FROM states s "
-                    "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
-                    "WHERE sm.entity_id = ? AND s.state NOT IN ('unknown','unavailable') "
-                    "AND s.last_updated_ts <= ? "
-                    "ORDER BY s.last_updated_ts DESC LIMIT 1",
-                    ("sensor.wican_fuel_5_min_mean", ts_s)
-                ).fetchone()
-                if before_only:
-                    row = before
-                else:
-                    # Also get nearest at-or-after (uses index), pick whichever is closer
-                    after = ha_con.execute(
-                        "SELECT s.state, s.last_updated_ts FROM states s "
-                        "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
-                        "WHERE sm.entity_id = ? AND s.state NOT IN ('unknown','unavailable') "
-                        "AND s.last_updated_ts >= ? "
-                        "ORDER BY s.last_updated_ts ASC LIMIT 1",
-                        ("sensor.wican_fuel_5_min_mean", ts_s)
-                    ).fetchone()
-                    if before and after:
-                        row = before if abs(before[1] - ts_s) <= abs(after[1] - ts_s) else after
-                    else:
-                        row = before or after
-                if row:
-                    return round(float(row[0]), 1), row[1]
-                return None, None
+                """Nearest smoothed fuel % to ts_ms, within a 2 h staleness cap
+                so a pre-retention timestamp can't borrow a reading days away."""
+                mode = "before" if before_only else "closest"
+                val, ts = _nearest_state(ha_con, FUEL_MEAN_ENTITY, ts_ms / 1000,
+                                         mode, max_gap_s=2 * 3600)
+                if val is None:
+                    return None, None
+                return round(val, 1), ts
+
+            # Tank-delta economy is only trustworthy over long fill-to-fill spans
+            # (1% tank resolution ≈ 0.95 L dominates a short trip); the OBD+GPS
+            # method below has no such floor.
+            ECON_MIN_KM  = 30
+            ECON_MIN_PCT = 3
 
             trips = []
             for group in trip_groups[:limit]:
@@ -573,23 +618,46 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     "fuel_end_pct":   fuel_end,
                 }
 
+                # ── Primary economy: OBD fuel-rate integral ÷ GPS distance ──
+                # Uses the new u-blox GPS distance + OBD speed-density litres;
+                # accurate even on short trips where the tank delta is noise.
+                obd_l = _obd_litres_between(ha_con, start_ts / 1000, end_ts / 1000)
+                if obd_l is not None and dist_km > 0:
+                    trip["fuel_used_l_obd"] = obd_l
+                    trip["l_per_100km_obd"] = round(obd_l / dist_km * 100, 1)
+
+                # ── Secondary cross-check: tank-level delta (long spans only) ──
                 if fuel_start is not None and fuel_end is not None:
                     used_pct = round(fuel_start - fuel_end, 1)
                     used_l   = round(used_pct / 100 * TANK_L, 1)
                     trip["fuel_used_pct"] = used_pct
                     trip["fuel_used_l"]   = used_l
-                    if dist_km > 0 and used_l > 0:
-                        trip["l_per_100km"] = round(used_l / dist_km * 100, 1)
-                        trip["km_per_l"]    = round(dist_km / used_l, 1)
+                    if dist_km >= ECON_MIN_KM and used_pct >= ECON_MIN_PCT:
+                        trip["l_per_100km_tank"] = round(used_l / dist_km * 100, 1)
+
+                # Headline economy: prefer OBD+GPS, fall back to tank delta.
+                if "l_per_100km_obd" in trip:
+                    trip["l_per_100km"]    = trip["l_per_100km_obd"]
+                    trip["economy_method"] = "obd_gps"
+                elif "l_per_100km_tank" in trip:
+                    trip["l_per_100km"]    = trip["l_per_100km_tank"]
+                    trip["economy_method"] = "tank_delta"
+                if trip.get("l_per_100km"):
+                    trip["km_per_l"] = round(100 / trip["l_per_100km"], 1)
 
                 trips.append(trip)
 
             ha_con.close()
 
-            # Rolling average over last N km
-            valid = [t for t in trips if "l_per_100km" in t]
+            # Fleet rolling average over trips that have a headline economy,
+            # weighted by the litres each method actually measured.
+            def _trip_litres(t):
+                return (t.get("fuel_used_l_obd") if t.get("economy_method") == "obd_gps"
+                        else t.get("fuel_used_l"))
+
+            valid     = [t for t in trips if t.get("l_per_100km") is not None]
             total_km  = sum(t["distance_km"] for t in valid)
-            total_l   = sum(t["fuel_used_l"] for t in valid)
+            total_l   = sum((_trip_litres(t) or 0) for t in valid)
             avg_l100  = round(total_l / total_km * 100, 1) if total_km > 0 and total_l > 0 else None
 
             self._json(200, {
@@ -620,34 +688,41 @@ class ProxyHandler(BaseHTTPRequestHandler):
     #   fuel_start_pct          sensor.wican_fuel_5_min_mean nearest to from_ts
     #   fuel_end_pct            sensor.wican_fuel_5_min_mean nearest to to_ts
     #   fuel_used_pct/l         Delta x 94.6 L tank
-    #   fuel_economy_l100km     Actual L/100km (tank method)
-    #   estimated_avg_l100km    Mean of sensor.estimated_fuel_consumption
+    #   fuel_economy_l100km     Actual L/100km (tank method; coverage-gated)
+    #   estimated_avg_l100km    OBD integral litres ÷ GPS km (distance-weighted)
     #   current_ve_correction   input_number.fuel_ve_correction current value
-    #   suggested_ve_correction current_ve * actual / estimated
+    #   suggested_ve_correction current_ve * tank_litres / OBD_litres (mass ratio)
     def _handle_fuel_stats(self):
         import os
-        HA_DB  = "/config/home-assistant_v2.db"
-        TANK_L = 94.6   # Ford Transit T-350 25 US gal
+        HA_DB  = "/config/home-assistant_v2.db"   # TANK_L is module-level
 
         qs      = parse_qs(urlparse(self.path).query)
         now_ms  = time.time() * 1000
         from_ms = float(qs.get("from_ts", [now_ms - 7 * 86400 * 1000])[0])
         to_ms   = float(qs.get("to_ts",   [now_ms])[0])
 
-        # ── Distance from GPS segments ────────────────────────────────────────
+        # ── Distance + coverage from GPS segments ─────────────────────────────
         gps_con = sqlite3.connect(FILTERED_DB)
         seg_row = gps_con.execute(
-            "SELECT COUNT(*), COALESCE(SUM(distance_m), 0) FROM segments "
-            "WHERE start_ts >= ? AND end_ts <= ?",
+            "SELECT COUNT(*), COALESCE(SUM(distance_m), 0), MIN(start_ts), MAX(end_ts) "
+            "FROM segments WHERE start_ts >= ? AND end_ts <= ?",
             (from_ms, to_ms)
         ).fetchone()
         gps_con.close()
+
+        # Fraction of the requested window actually spanned by GPS driving. Low
+        # coverage => the fuel delta spans gaps the distance never saw, so the
+        # tank-method economy/VE would be garbage (the old 62.5 L/100km bug).
+        win_ms           = max(1.0, to_ms - from_ms)
+        seg_min, seg_max = seg_row[2], seg_row[3]
+        coverage_frac    = ((seg_max - seg_min) / win_ms) if (seg_min and seg_max) else 0.0
 
         result = {
             "from_ts":         from_ms,
             "to_ts":           to_ms,
             "distance_km":     round((seg_row[1] or 0) / 1000, 2),
             "segment_count":   seg_row[0] or 0,
+            "coverage_frac":   round(coverage_frac, 3),
             "tank_capacity_l": TANK_L,
         }
 
@@ -660,25 +735,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
             ha_con = sqlite3.connect("file:" + HA_DB + "?mode=ro", uri=True)
 
             def _fuel_near(target_ms, before_only=False):
-                target_s = target_ms / 1000
-                if before_only:
-                    row = ha_con.execute(
-                        "SELECT s.state, s.last_updated_ts FROM states s "
-                        "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
-                        "WHERE sm.entity_id = ? AND s.state != ? AND s.state != ? "
-                        "AND s.last_updated_ts <= ? "
-                        "ORDER BY s.last_updated_ts DESC LIMIT 1",
-                        ("sensor.wican_fuel_5_min_mean", "unknown", "unavailable", target_s)
-                    ).fetchone()
-                else:
-                    row = ha_con.execute(
-                        "SELECT s.state, s.last_updated_ts FROM states s "
-                        "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
-                        "WHERE sm.entity_id = ? AND s.state != ? AND s.state != ? "
-                        "ORDER BY ABS(s.last_updated_ts - ?) LIMIT 1",
-                        ("sensor.wican_fuel_5_min_mean", "unknown", "unavailable", target_s)
-                    ).fetchone()
-                return row
+                """Nearest smoothed fuel % to target_ms, within a 6 h cap (span
+                endpoints can lag the requested edge while parked). Indexed —
+                no ORDER BY ABS() full scan. Returns (val, ts) or None."""
+                mode = "before" if before_only else "closest"
+                val, ts = _nearest_state(ha_con, FUEL_MEAN_ENTITY, target_ms / 1000,
+                                         mode, max_gap_s=6 * 3600)
+                return (val, ts) if val is not None else None
 
             fuel_start_row = _fuel_near(from_ms, before_only=False)
             fuel_end_row   = _fuel_near(to_ms,   before_only=True)
@@ -691,33 +754,48 @@ class ProxyHandler(BaseHTTPRequestHandler):
             result["fuel_end_pct"]   = fuel_end
             result["fuel_end_ts"]    = fuel_end_row[1]   if fuel_end_row   else None
 
+            ECON_LO, ECON_HI = 5.0, 40.0   # plausible L/100km for a 3.5 EB Transit
+            covered = coverage_frac >= 0.5 and (result["segment_count"] or 0) >= 1
+
+            # Tank-method litres used (smoothed-level delta)
+            tank_used_l = None
             if fuel_start is not None and fuel_end is not None:
                 used_pct = round(fuel_start - fuel_end, 2)
-                used_l   = round(used_pct / 100 * TANK_L, 2)
+                tank_used_l = round(used_pct / 100 * TANK_L, 2)
                 result["fuel_used_pct"] = used_pct
-                result["fuel_used_l"]   = used_l
-                if result["distance_km"] > 0 and used_l > 0:
-                    result["fuel_economy_l100km"] = round(
-                        used_l / result["distance_km"] * 100, 1
-                    )
+                result["fuel_used_l"]   = tank_used_l
 
-            # ── Average estimated fuel consumption (template sensor) ──────────
-            from_s = from_ms / 1000
-            to_s   = to_ms   / 1000
-            est_rows = ha_con.execute(
-                "SELECT s.state FROM states s "
-                "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
-                "WHERE sm.entity_id = ? AND s.state != ? AND s.state != ? "
-                "AND s.last_updated_ts >= ? AND s.last_updated_ts <= ? "
-                "AND CAST(s.state AS REAL) > 0 AND CAST(s.state AS REAL) < 200",
-                ("sensor.estimated_fuel_consumption", "unknown", "unavailable", from_s, to_s)
-            ).fetchall()
-            if est_rows:
-                vals = [float(r[0]) for r in est_rows]
-                result["estimated_avg_l100km"]    = round(sum(vals) / len(vals), 1)
-                result["estimated_reading_count"] = len(vals)
+            # OBD speed-density litres over the SAME (tank-reading) window — the
+            # 'estimated' side, now distance-weighted (OBD litres ÷ GPS km)
+            # instead of an idle-biased mean of instantaneous L/100km ratios.
+            obd_l = None
+            if result.get("fuel_start_ts") and result.get("fuel_end_ts"):
+                obd_l = _obd_litres_between(ha_con,
+                                            result["fuel_start_ts"],
+                                            result["fuel_end_ts"])
+            if obd_l is not None:
+                result["estimated_used_l"] = obd_l
+                if result["distance_km"] > 0:
+                    result["estimated_avg_l100km"] = round(
+                        obd_l / result["distance_km"] * 100, 1)
 
-            # ── Current + suggested VE correction ────────────────────────────
+            # Actual (tank-method) economy — only when GPS coverage is trustworthy
+            # and the number is physically plausible; otherwise warn, don't lie.
+            if (tank_used_l is not None and tank_used_l > 0
+                    and result["distance_km"] > 0 and covered):
+                econ = round(tank_used_l / result["distance_km"] * 100, 1)
+                if ECON_LO <= econ <= ECON_HI:
+                    result["fuel_economy_l100km"] = econ
+                else:
+                    result["coverage_warning"] = (
+                        f"tank-method economy {econ} L/100km outside {ECON_LO}-{ECON_HI} "
+                        f"band; likely incomplete GPS coverage")
+            elif not covered:
+                result["coverage_warning"] = (
+                    f"GPS segments cover only {coverage_frac:.0%} of the window; "
+                    f"economy/VE suppressed")
+
+            # Current VE
             ve_row = ha_con.execute(
                 "SELECT s.state FROM states s "
                 "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
@@ -728,12 +806,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
             current_ve = round(float(ve_row[0]), 3) if ve_row else 0.55
             result["current_ve_correction"] = current_ve
 
-            actual    = result.get("fuel_economy_l100km")
-            estimated = result.get("estimated_avg_l100km")
-            if actual and estimated and estimated > 0:
+            # Suggested VE = current * (tank litres / OBD-integral litres). A pure
+            # fuel-MASS ratio over one window: GPS distance cancels, so it is
+            # immune to the segment-undercount that produced the 1.109 bug. Only
+            # offered when the actual economy passed the coverage+plausibility gate.
+            if (tank_used_l is not None and tank_used_l > 0
+                    and obd_l and obd_l > 0
+                    and result.get("fuel_economy_l100km") is not None):
                 result["suggested_ve_correction"] = round(
-                    current_ve * actual / estimated, 3
-                )
+                    current_ve * tank_used_l / obd_l, 3)
 
             ha_con.close()
         except Exception as e:
