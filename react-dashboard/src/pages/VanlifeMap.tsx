@@ -100,12 +100,25 @@ function tripForSegment(segStart: number, segEnd: number, trips: FuelTripApi[]):
   });
 }
 
-/** Segment stroke color based on fuel economy (L/100km) */
+/** Segment stroke color by fuel economy (L/100km) — tuned for the 3.5 EcoBoost
+ *  Transit: highway ~14–16, mixed ~18–22, city/short-cold ~24+. */
 function segmentColor(l100km: number | undefined): string {
-  if (l100km == null) return '#3b82f6'; // default blue
-  if (l100km < 12) return '#4ade80';    // green-400 (efficient)
-  if (l100km < 15) return '#fb923c';    // orange-400 (moderate)
+  if (l100km == null) return '#3b82f6'; // no fuel data → blue
+  if (l100km < 16) return '#4ade80';    // green-400 (efficient)
+  if (l100km < 22) return '#fbbf24';    // amber-400 (moderate)
   return '#f87171';                      // red-400 (thirsty)
+}
+
+/** Tailwind text class matching segmentColor thresholds. */
+function fuelClass(l100km: number): string {
+  if (l100km < 16) return 'text-green-400';
+  if (l100km < 22) return 'text-amber-400';
+  return 'text-red-400';
+}
+
+/** Midpoint coordinate of a polyline — where the trip's economy label sits. */
+function midpointOf(geom: [number, number][]): [number, number] {
+  return geom.length ? geom[Math.floor(geom.length / 2)] : [0, 0];
 }
 
 /* ── Component ─────────────────────────────────────────────────────── */
@@ -537,6 +550,24 @@ export default function VanlifeMap() {
 
         cumDist += segDist;
       }
+
+      // Fuel-economy label at each trip's midpoint, so the L/100km is readable
+      // right on the map (not just in the sidebar). Non-interactive so it never
+      // blocks a segment click.
+      newTravels.forEach(t => {
+        if (t.l_per_100km == null || t.geom.length < 2) return;
+        const col = segmentColor(t.l_per_100km);
+        L.marker(midpointOf(t.geom), {
+          interactive: false,
+          zIndexOffset: 700,
+          icon: L.divIcon({
+            className: '',
+            html: `<div style="transform:translate(-50%,-50%);background:${col};color:#0b0b0b;font-weight:700;font-size:11px;line-height:1;padding:2px 6px;border-radius:10px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.45);border:1px solid rgba(0,0,0,0.3)">⛽ ${t.l_per_100km.toFixed(1)}</div>`,
+            iconSize: [0, 0],
+            iconAnchor: [0, 0],
+          }),
+        }).addTo(rl);
+      });
 
       // Draw parking dots
       mergedParking.forEach(pk => {
@@ -1009,10 +1040,7 @@ export default function VanlifeMap() {
                       <span>📏 {distKm.toFixed(1)} km</span>
                       {travel.parkDurationS > 0 && <span>🅿️ {fmtDuration(travel.parkDurationS)}</span>}
                       {travel.l_per_100km != null && (
-                        <span className={
-                          travel.l_per_100km < 12 ? 'text-green-400' :
-                          travel.l_per_100km < 15 ? 'text-amber-400' : 'text-red-400'
-                        }>⛽ {travel.l_per_100km.toFixed(1)} L/100km</span>
+                        <span className={fuelClass(travel.l_per_100km)}>⛽ {travel.l_per_100km.toFixed(1)} L/100km</span>
                       )}
                     </div>
 
@@ -1031,6 +1059,18 @@ export default function VanlifeMap() {
                           <span className="text-muted-foreground">Avg speed</span>
                           <span>{((distKm / driveSec) * 3600).toFixed(0)} km/h</span>
                         </div>
+                      )}
+                      {travel.l_per_100km != null && (
+                        <>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Fuel economy</span>
+                            <span className={fuelClass(travel.l_per_100km)}>{travel.l_per_100km.toFixed(1)} L/100km</span>
+                          </div>
+                          <div className="flex justify-between">
+                            <span className="text-muted-foreground">Fuel used</span>
+                            <span>{((travel.l_per_100km * distKm) / 100).toFixed(1)} L</span>
+                          </div>
+                        </>
                       )}
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Departed</span>
