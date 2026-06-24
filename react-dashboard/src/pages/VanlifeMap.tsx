@@ -116,11 +116,6 @@ function fuelClass(l100km: number): string {
   return 'text-red-400';
 }
 
-/** Midpoint coordinate of a polyline — where the trip's economy label sits. */
-function midpointOf(geom: [number, number][]): [number, number] {
-  return geom.length ? geom[Math.floor(geom.length / 2)] : [0, 0];
-}
-
 /* ── Component ─────────────────────────────────────────────────────── */
 
 export default function VanlifeMap() {
@@ -550,24 +545,6 @@ export default function VanlifeMap() {
 
         cumDist += segDist;
       }
-
-      // Fuel-economy label at each trip's midpoint, so the L/100km is readable
-      // right on the map (not just in the sidebar). Non-interactive so it never
-      // blocks a segment click.
-      newTravels.forEach(t => {
-        if (t.l_per_100km == null || t.geom.length < 2) return;
-        const col = segmentColor(t.l_per_100km);
-        L.marker(midpointOf(t.geom), {
-          interactive: false,
-          zIndexOffset: 700,
-          icon: L.divIcon({
-            className: '',
-            html: `<div style="transform:translate(-50%,-50%);background:${col};color:#0b0b0b;font-weight:700;font-size:11px;line-height:1;padding:2px 6px;border-radius:10px;white-space:nowrap;box-shadow:0 1px 4px rgba(0,0,0,0.45);border:1px solid rgba(0,0,0,0.3)">⛽ ${t.l_per_100km.toFixed(1)}</div>`,
-            iconSize: [0, 0],
-            iconAnchor: [0, 0],
-          }),
-        }).addTo(rl);
-      });
 
       // Draw parking dots
       mergedParking.forEach(pk => {
