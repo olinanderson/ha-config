@@ -481,12 +481,15 @@ switch:
             # Only allow turning on if the Power Supply is ON.
             - switch.is_on: hydronic_heater_power_supply_control
           then:
+            # Manual request: the thermostat's OFF handler must respect this.
+            - lambda: 'id(heater_manual_request) = true;'
             - switch.turn_on: hydronic_heater_on_off_physical
           else:
             - logger.log:
                 level: WARN
                 format: "Cannot turn on hydronic heater: Power Supply is OFF!"
     turn_off_action:
+      - lambda: 'id(heater_manual_request) = false;'
       - switch.turn_off: hydronic_heater_on_off_physical
       # When turning off, record the current absolute time.
       - lambda: |-
@@ -737,6 +740,41 @@ binary_sensor:
   - platform: homeassistant
     id: ha_hot_water_mode
     entity_id: input_boolean.hot_water_mode
+    on_state:
+      - if:
+          condition:
+            lambda: 'return x;'   # Hot Water Mode turned ON
+          then:
+            # Fire the heater up for hot water (skip if power off or locked out).
+            - if:
+                condition:
+                  and:
+                    - switch.is_on: hydronic_heater_power_supply_control
+                    - switch.is_off: hydronic_heater_on_off_physical
+                    - lambda: 'return !id(ha_heater_fuel_lockout).state;'
+                then:
+                  - switch.turn_on: hydronic_heater_on_off_physical
+                  - logger.log:
+                      level: INFO
+                      format: "Hot Water Mode ON -> heater turned ON."
+          else:
+            # Hot Water Mode turned OFF: drop the heater unless the thermostat is
+            # heating or the user manually wants it on. The is_on guard avoids a
+            # spurious no-op turn_off (+ timestamp/log) when HA reports the
+            # retained "off" state at boot.
+            - if:
+                condition:
+                  and:
+                    - switch.is_on: hydronic_heater_on_off_physical
+                    - lambda: 'return !id(heater_manual_request);'
+                    - lambda: 'return id(coolant_blower_heating).mode == climate::CLIMATE_MODE_OFF;'
+                then:
+                  - switch.turn_off: hydronic_heater_on_off_physical
+                  - lambda: |-
+                      id(hydronic_heater_last_off_timestamp) = id(real_time_clock).now().timestamp;
+                  - logger.log:
+                      level: INFO
+                      format: "Hot Water Mode OFF -> heater turned OFF."
 
   # Import HA input_boolean for low fuel heater lockout
   - platform: homeassistant
@@ -1228,8 +1266,6 @@ text_sensor:
     lambda: |-
       int state = id(heater_retry_state);
       bool heater_on = id(hydronic_heater_on_off).state;
-      float now_sec = id(real_time_clock).now().timestamp;
-      float last_off = id(hydronic_heater_last_off_timestamp);
 
       // Priority 1: retry state machine messages
       if (state == 1 && heater_on) {
@@ -1252,18 +1288,12 @@ text_sensor:
         return {buf};
       }
 
-      // Priority 2: power supply cooldown lockout
+      // Heater on (outside the retry state machine) vs idle. The 180s
+      // power-supply cooldown still protects Switch32 in its turn_off_action;
+      // it's just no longer surfaced as a status message on the card.
       if (heater_on) {
         return {"Heater running."};
       }
-      float diff = now_sec - last_off;
-      if (last_off > 0 && diff < 180.0) {
-        float remain = 180.0 - diff;
-        char buffer[80];
-        sprintf(buffer, "Cooldown -> %.0fs before power can be removed.", remain);
-        return {buffer};
-      }
-
       return {"Idle."};
 
 gp8403:
@@ -1280,6 +1310,14 @@ globals:
     type: float
     restore_value: no
     initial_value: '0.0'
+
+  # User's manual intent to run the heater (Switch24), independent of the
+  # thermostat. Keeps the climate's OFF handler from turning a hand-started
+  # heater back off underneath the user.
+  - id: heater_manual_request
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
   - id: water_system_enabled
     type: bool
@@ -1562,14 +1600,15 @@ climate:
             # Stop the retry script if running
             - script.stop: heater_start_with_retry
             - lambda: 'id(heater_retry_state) = 0;'
-            # Turn off the hydronic heater UNLESS hot water mode is active
+            # Turn off the hydronic heater only if nothing else still wants it:
+            # hot water mode or a manual heater request keep it running.
             - if:
                 condition:
-                  lambda: 'return id(ha_hot_water_mode).state;'
+                  lambda: 'return id(ha_hot_water_mode).state || id(heater_manual_request);'
                 then:
                   - logger.log:
                       level: INFO
-                      format: "Climate OFF but Hot Water Mode is ON - keeping hydronic heater running."
+                      format: "Climate OFF but hot water / manual heater active - keeping heater running."
                 else:
                   - switch.turn_off: hydronic_heater_on_off_physical
                   - lambda: |-
