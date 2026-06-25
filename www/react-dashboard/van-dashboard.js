@@ -22797,10 +22797,10 @@ function iS() {
   }, [T, _, p]), N.useEffect(() => {
     let O = !1, k = null;
     async function A() {
-      const z = /* @__PURE__ */ new Date(), D = new Date(z.getFullYear(), z.getMonth(), z.getDate()), B = new Date(D.getTime() + 864e5);
+      const z = /* @__PURE__ */ new Date(), D = new Date(z.getFullYear(), z.getMonth(), z.getDate() + 1), B = new Date(D.getTime() - 7 * 864e5);
       try {
         const [Y, H] = await Promise.all([
-          ky(D, B),
+          ky(B, D),
           Cy(50)
         ]);
         if (O) return;
@@ -22832,7 +22832,7 @@ function iS() {
             fillOpacity: 0.8,
             weight: 1
           }).addTo(be);
-        const ze = D.getTime(), I = B.getTime(), K = q.filter((V) => V.start_ts >= ze && V.start_ts < I), $ = K.some((V) => V.l_per_100km != null), je = K.some((V) => V.battery_gain_wh != null), he = K.reduce(
+        const ze = B.getTime(), I = D.getTime(), K = q.filter((V) => V.start_ts >= ze && V.start_ts < I), $ = K.some((V) => V.l_per_100km != null), je = K.some((V) => V.battery_gain_wh != null), he = K.reduce(
           (V, ne) => V + (ne.l_per_100km != null && ne.distance_km ? ne.l_per_100km * ne.distance_km / 100 : 0),
           0
         ), R = K.reduce((V, ne) => V + (ne.battery_gain_wh ?? 0), 0), G = K.reduce((V, ne) => V + (ne.battery_gain_pct ?? 0), 0);
@@ -22866,7 +22866,7 @@ function iS() {
       children: [
         /* @__PURE__ */ u.jsxs("div", { className: "flex items-center gap-2 px-3 py-2 border-b border-border", children: [
           /* @__PURE__ */ u.jsx(ly, { className: "h-4 w-4" }),
-          /* @__PURE__ */ u.jsx("span", { className: "text-sm font-medium", children: "Today's Trips" }),
+          /* @__PURE__ */ u.jsx("span", { className: "text-sm font-medium", children: "Last 7 Days" }),
           p && /* @__PURE__ */ u.jsx(ja, { className: "h-3.5 w-3.5 animate-spin text-muted-foreground ml-1" }),
           /* @__PURE__ */ u.jsx("span", { className: "ml-auto text-xs text-muted-foreground", children: "Open map →" })
         ] }),
@@ -22906,9 +22906,9 @@ function iS() {
             ] })
           ] }) : /* @__PURE__ */ u.jsx("span", { className: "flex items-center gap-1.5 text-muted-foreground", children: p ? /* @__PURE__ */ u.jsxs(u.Fragment, { children: [
             /* @__PURE__ */ u.jsx(ja, { className: "h-3 w-3 animate-spin" }),
-            " Loading today's trips…"
+            " Loading trips…"
           ] }) : /* @__PURE__ */ u.jsxs(u.Fragment, { children: [
-            "🚐 No trips yet today",
+            "🚐 No trips in the last 7 days",
             T ? " · showing current location" : ""
           ] }) }) })
         ] })

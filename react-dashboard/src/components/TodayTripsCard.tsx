@@ -141,15 +141,16 @@ export function TodayTripsCard() {
     }
   }, [vanPos, hasTrips, loading]);
 
-  // Load today's trips + draw, refresh every 5 min.
+  // Load the last 7 days of trips + draw, refresh every 5 min.
   useEffect(() => {
     let cancelled = false;
     let fitTimer: ReturnType<typeof setTimeout> | null = null;
 
     async function load() {
       const now = new Date();
-      const start = new Date(now.getFullYear(), now.getMonth(), now.getDate());
-      const end = new Date(start.getTime() + 86400000);
+      // Rolling last 7 days: end of today back 7 days.
+      const end = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 1);
+      const start = new Date(end.getTime() - 7 * 86400000);
       try {
         const [data, fuelData] = await Promise.all([
           fetchFilteredGps(start, end),
@@ -203,16 +204,17 @@ export function TodayTripsCard() {
           }
         }
 
-        // Today's fuel + battery totals (sum the grouped trips that started today)
+        // Fuel + battery totals over the window (sum the grouped trips that
+        // started within the last 7 days)
         const s = start.getTime();
         const e = end.getTime();
-        const todayTrips = trips.filter(t => t.start_ts >= s && t.start_ts < e);
-        const anyFuel = todayTrips.some(t => t.l_per_100km != null);
-        const anyBatt = todayTrips.some(t => t.battery_gain_wh != null);
-        const fuelL = todayTrips.reduce(
+        const windowTrips = trips.filter(t => t.start_ts >= s && t.start_ts < e);
+        const anyFuel = windowTrips.some(t => t.l_per_100km != null);
+        const anyBatt = windowTrips.some(t => t.battery_gain_wh != null);
+        const fuelL = windowTrips.reduce(
           (acc, t) => acc + (t.l_per_100km != null && t.distance_km ? (t.l_per_100km * t.distance_km) / 100 : 0), 0);
-        const battWh = todayTrips.reduce((acc, t) => acc + (t.battery_gain_wh ?? 0), 0);
-        const battPct = todayTrips.reduce((acc, t) => acc + (t.battery_gain_pct ?? 0), 0);
+        const battWh = windowTrips.reduce((acc, t) => acc + (t.battery_gain_wh ?? 0), 0);
+        const battPct = windowTrips.reduce((acc, t) => acc + (t.battery_gain_pct ?? 0), 0);
 
         setHasTrips(true);
         setSummary({
@@ -254,7 +256,7 @@ export function TodayTripsCard() {
     >
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
         <MapIcon className="h-4 w-4" />
-        <span className="text-sm font-medium">Today's Trips</span>
+        <span className="text-sm font-medium">Last 7 Days</span>
         {loading && <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground ml-1" />}
         <span className="ml-auto text-xs text-muted-foreground">Open map →</span>
       </div>
@@ -285,9 +287,9 @@ export function TodayTripsCard() {
           ) : (
             <span className="flex items-center gap-1.5 text-muted-foreground">
               {loading ? (
-                <><Loader2 className="h-3 w-3 animate-spin" /> Loading today's trips…</>
+                <><Loader2 className="h-3 w-3 animate-spin" /> Loading trips…</>
               ) : (
-                <>🚐 No trips yet today{vanPos ? ' · showing current location' : ''}</>
+                <>🚐 No trips in the last 7 days{vanPos ? ' · showing current location' : ''}</>
               )}
             </span>
           )}
