@@ -432,40 +432,54 @@
       unique_id: battery_time_estimate
       icon: mdi:battery-clock-outline
       state: >
-        {% set current = states('sensor.olins_van_bms_current') | float(0) %}
-        {% set power = states('sensor.olins_van_bms_power') | float(0) %}
-        {% set stored = states('sensor.olins_van_bms_stored_energy') | float(0) %}
-        {% set voltage = states('sensor.olins_van_bms_voltage') | float(0) %}
         {% set soc = states('sensor.olins_van_bms_battery') | float(0) %}
-        {% set capacity = 8700 %}
-        {% set abs_power = power | abs %}
-        {% if abs_power < 1 and voltage > 0 %}
-          {% set abs_power = (current | abs) * voltage %}
-        {% endif %}
-        {% if (current | abs) < 0.05 or abs_power < 1 %}
+        {% set current = states('sensor.olins_van_bms_current') | float(0) %}
+        {% set voltage = states('sensor.olins_van_bms_voltage') | float(26.2) %}
+        {% set p_inst = states('sensor.olins_van_bms_power') | float(0) %}
+        {# Prefer the smoothed 5-min mean net power; fall back to instantaneous,
+           then to I*V, so this works before the statistics sensor exists. #}
+        {% set p_mean = states('sensor.olins_van_bms_power_5_min_mean') | float(p_inst) %}
+        {% set power = p_mean if (p_mean | abs) > 1 else (p_inst if (p_inst | abs) > 1 else current * voltage) %}
+        {% set p = power | abs %}
+        {# Calibrated from 60 days of history (5-min stats):
+             • 83.7 Wh per 1% SOC (so "full" target is SOC-based, reaches 0)
+             • charge rate is flat up to ~90% SOC, then the CV taper drops it to
+               ~0.78x for the last 10% (95-100% measured at ~0.74x of bulk). #}
+        {% set wh_per_pct = 84.0 %}
+        {% set knee = 90 %}
+        {% set taper = 0.78 %}
+        {% set reserve = 10 %}
+        {% if (current | abs) < 0.4 or p < 6 %}
           Idle
         {% elif current > 0 %}
-          {% set remaining = capacity - stored %}
-          {% set taper = 1 + ((soc - 80) * 0.03) if soc > 80 else 1 %}
-          {% set hours = (remaining / abs_power) * taper %}
-          {% set d = (hours / 24) | int %}
-          {% set h = (hours - d * 24) | int %}
-          {% set m = ((hours - (d * 24) - h) * 60) | round(0) | int %}
-          {% if d > 0 %}
-            ~{{ d }}d {{ h }}h to full
+          {% if soc >= 99.5 %}
+            Full
           {% else %}
-            ~{{ h }}h {{ m }}m to full
+            {% set bulk = [knee - soc, 0] | max %}
+            {% set taper_pct = [100 - ([soc, knee] | max), 0] | max %}
+            {% set hours = (bulk * wh_per_pct / p) + (taper_pct * wh_per_pct / (p * taper)) %}
+            {% set d = (hours / 24) | int %}
+            {% set h = (hours - d * 24) | int %}
+            {% set m = ((hours - (d * 24) - h) * 60) | round(0) | int %}
+            {% if d > 0 %}
+              ~{{ d }}d {{ h }}h to full
+            {% elif h > 0 %}
+              ~{{ h }}h {{ m }}m to full
+            {% else %}
+              ~{{ m }}m to full
+            {% endif %}
           {% endif %}
         {% else %}
-          {% set floor = capacity * 0.10 %}
-          {% set usable = [stored - floor, 0] | max %}
-          {% set hours = usable / abs_power %}
+          {% set usable = [soc - reserve, 0] | max %}
+          {% set hours = usable * wh_per_pct / p %}
           {% set d = (hours / 24) | int %}
           {% set h = (hours - d * 24) | int %}
           {% set m = ((hours - (d * 24) - h) * 60) | round(0) | int %}
           {% if d > 0 %}
-            ~{{ d }}d {{ h }}h until depleted
+            ~{{ d }}d {{ h }}h until empty
+          {% elif h > 0 %}
+            ~{{ h }}h {{ m }}m until empty
           {% else %}
-            ~{{ h }}h {{ m }}m until depleted
+            ~{{ m }}m until empty
           {% endif %}
         {% endif %}
