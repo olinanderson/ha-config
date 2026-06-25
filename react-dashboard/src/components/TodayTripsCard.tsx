@@ -3,11 +3,12 @@
  * driving plus a quick summary (trips, distance, drive time, fuel, battery).
  * Tapping it jumps to the full Vanlife Map page.
  */
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { Card, CardContent } from '@/components/ui/card';
 import { Map as MapIcon, Loader2 } from 'lucide-react';
+import { useEntity } from '@/hooks/useEntity';
 import {
   fetchFilteredGps,
   fetchFuelTrips,
@@ -56,9 +57,25 @@ export function TodayTripsCard() {
   const mapRef = useRef<HTMLDivElement>(null);
   const mapInstance = useRef<L.Map | null>(null);
   const layerRef = useRef<L.LayerGroup | null>(null);
+  const vanMarkerRef = useRef<L.Marker | null>(null);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [hasTrips, setHasTrips] = useState(false);
+
+  // Current van location (same tracker fallback as the full map).
+  const vanTracker1 = useEntity('device_tracker.vanlife_tracker_van_location');
+  const vanTracker2 = useEntity('device_tracker.ublox_gps');
+  const vanTracker3 = useEntity('device_tracker.ublox_gps_filtered');
+  const vanPos = useMemo((): [number, number] | null => {
+    for (const e of [vanTracker1, vanTracker2, vanTracker3]) {
+      const lat = Number(e?.attributes?.latitude);
+      const lon = Number(e?.attributes?.longitude);
+      if (Number.isFinite(lat) && Number.isFinite(lon) && (lat !== 0 || lon !== 0)) {
+        return [lat, lon];
+      }
+    }
+    return null;
+  }, [vanTracker1, vanTracker2, vanTracker3]);
 
   // Init a static, non-interactive thumbnail map.
   useEffect(() => {
@@ -82,8 +99,47 @@ export function TodayTripsCard() {
       map.remove();
       mapInstance.current = null;
       layerRef.current = null;
+      vanMarkerRef.current = null;
     };
   }, []);
+
+  // Van marker (always shown) + recenter on the van when there's no route.
+  useEffect(() => {
+    const map = mapInstance.current;
+    if (!map) return;
+    if (vanPos) {
+      if (!vanMarkerRef.current) {
+        const icon = L.divIcon({
+          html: '<div style="display:flex;align-items:center;justify-content:center;width:26px;height:26px;background:#e53935;border:2px solid #b71c1c;border-radius:50%;font-size:14px;box-shadow:0 2px 5px rgba(0,0,0,0.4)">🚐</div>',
+          className: '',
+          iconSize: [26, 26],
+          iconAnchor: [13, 13],
+        });
+        vanMarkerRef.current = L.marker(vanPos, { icon, zIndexOffset: 1000 }).addTo(map);
+      } else {
+        vanMarkerRef.current.setLatLng(vanPos);
+      }
+    } else {
+      vanMarkerRef.current?.remove();
+      vanMarkerRef.current = null;
+    }
+    // Keep the van framed when there's no route to fit: immediately during the
+    // initial load, then (deferred + ref-guarded) once we've settled on no
+    // trips. When trips exist, load()'s fitBounds owns the view — gating on
+    // `loading`/`hasTrips` keeps this from racing that fitBounds.
+    if (vanPos && loading) {
+      map.invalidateSize();
+      map.setView(vanPos, 13);
+    } else if (vanPos && !hasTrips) {
+      const t = setTimeout(() => {
+        const m = mapInstance.current;
+        if (!m) return;
+        m.invalidateSize();
+        m.setView(vanPos, 13);
+      }, 60);
+      return () => clearTimeout(t);
+    }
+  }, [vanPos, hasTrips, loading]);
 
   // Load today's trips + draw, refresh every 5 min.
   useEffect(() => {
@@ -205,32 +261,37 @@ export function TodayTripsCard() {
       <CardContent className="p-0">
         <div className="relative h-[180px] bg-muted/30">
           <div ref={mapRef} className="absolute inset-0" />
-          {!loading && !hasTrips && (
-            <div className="absolute inset-0 flex items-center justify-center text-sm text-muted-foreground bg-background/60 z-[400]">
-              No trips yet today
+        </div>
+        <div className="px-3 py-2 text-xs">
+          {hasTrips && summary ? (
+            <div className="space-y-1">
+              <div className="flex items-center gap-x-3 gap-y-0.5 flex-wrap font-medium tabular-nums">
+                <span>🚐 {summary.trips} trip{summary.trips !== 1 ? 's' : ''}</span>
+                <span>📏 {summary.km.toFixed(1)} km</span>
+                <span>🚗 {fmtDuration(summary.driveSec)}</span>
+              </div>
+              {(summary.fuelL != null || summary.battPct != null) && (
+                <div className="flex items-center gap-x-3 flex-wrap tabular-nums text-muted-foreground">
+                  {summary.fuelL != null && <span>⛽ {summary.fuelL.toFixed(1)} L</span>}
+                  {summary.battPct != null && (
+                    <span className={summary.battPct >= 0 ? 'text-green-400' : 'text-orange-400'}>
+                      🔋 {summary.battPct >= 0 ? '+' : '−'}{Math.abs(summary.battPct).toFixed(1)}%
+                      {summary.battWh != null && ` (${summary.battWh >= 0 ? '+' : '−'}${Math.abs(summary.battWh)} Wh)`}
+                    </span>
+                  )}
+                </div>
+              )}
             </div>
+          ) : (
+            <span className="flex items-center gap-1.5 text-muted-foreground">
+              {loading ? (
+                <><Loader2 className="h-3 w-3 animate-spin" /> Loading today's trips…</>
+              ) : (
+                <>🚐 No trips yet today{vanPos ? ' · showing current location' : ''}</>
+              )}
+            </span>
           )}
         </div>
-        {summary && hasTrips && (
-          <div className="px-3 py-2 text-xs space-y-1">
-            <div className="flex items-center gap-x-3 gap-y-0.5 flex-wrap font-medium tabular-nums">
-              <span>🚐 {summary.trips} trip{summary.trips !== 1 ? 's' : ''}</span>
-              <span>📏 {summary.km.toFixed(1)} km</span>
-              <span>🚗 {fmtDuration(summary.driveSec)}</span>
-            </div>
-            {(summary.fuelL != null || summary.battPct != null) && (
-              <div className="flex items-center gap-x-3 flex-wrap tabular-nums text-muted-foreground">
-                {summary.fuelL != null && <span>⛽ {summary.fuelL.toFixed(1)} L</span>}
-                {summary.battPct != null && (
-                  <span className={summary.battPct >= 0 ? 'text-green-400' : 'text-orange-400'}>
-                    🔋 {summary.battPct >= 0 ? '+' : '−'}{Math.abs(summary.battPct).toFixed(1)}%
-                    {summary.battWh != null && ` (${summary.battWh >= 0 ? '+' : '−'}${Math.abs(summary.battWh)} Wh)`}
-                  </span>
-                )}
-              </div>
-            )}
-          </div>
-        )}
       </CardContent>
     </Card>
   );
