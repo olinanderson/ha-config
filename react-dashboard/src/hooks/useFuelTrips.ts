@@ -17,6 +17,11 @@ export interface FuelTrip {
   // Cross-check: tank-level delta (only emitted for long fill-to-fill spans)
   l_per_100km_tank?: number;
   economy_method?: 'obd_gps' | 'tank_delta';
+  // House-battery telemetry over the trip (driving charges off the alternator)
+  battery_gain_pct?: number;        // energy-based: Wh gain ÷ historical full-pack Wh
+  battery_gain_wh?: number;         // stored-energy increase (Wh)
+  battery_start_c?: number | null;  // battery temperature (°C)
+  battery_end_c?: number | null;
 }
 
 export interface FuelTripSummary {

@@ -44,6 +44,7 @@ interface Travel {
   toLabel: string;
   parkDurationS: number; // destination parking duration
   l_per_100km?: number;  // fuel economy if available
+  fuelTrip?: FuelTripApi | null; // matched fuel/battery trip record (telemetry)
 }
 
 /* ── Helpers ────────────────────────────────────────────────────────── */
@@ -114,6 +115,39 @@ function fuelClass(l100km: number): string {
   if (l100km < 16) return 'text-green-400';
   if (l100km < 22) return 'text-amber-400';
   return 'text-red-400';
+}
+
+/** Tailwind text class for a battery SOC gain — charged (green) vs drained. */
+function batteryClass(gainPct: number): string {
+  if (gainPct > 0) return 'text-green-400';
+  if (gainPct < 0) return 'text-orange-400';
+  return 'text-muted-foreground';
+}
+
+/** Signed energy gain %, one decimal, e.g. +3.9% / −1.2% / 0%. */
+function fmtBatteryGain(gainPct: number): string {
+  const r = Math.round(gainPct * 10) / 10;
+  if (r > 0) return `+${r.toFixed(1)}%`;
+  if (r < 0) return `−${Math.abs(r).toFixed(1)}%`;
+  return '0%';
+}
+
+/** "before → after unit" with em-dash placeholders for missing readings. */
+function fmtBeforeAfter(
+  start: number | null | undefined,
+  end: number | null | undefined,
+  digits: number,
+  unit: string,
+): string {
+  const f = (v: number | null | undefined) => (v != null ? v.toFixed(digits) : '—');
+  return `${f(start)} → ${f(end)} ${unit}`;
+}
+
+/** Signed Wh gain, e.g. +170 Wh / −40 Wh / 0 Wh. */
+function fmtWhGain(gainWh: number): string {
+  if (gainWh > 0) return `+${gainWh} Wh`;
+  if (gainWh < 0) return `−${Math.abs(gainWh)} Wh`;
+  return '0 Wh';
 }
 
 /* ── Component ─────────────────────────────────────────────────────── */
@@ -492,6 +526,7 @@ export default function VanlifeMap() {
         const toLat = destPark?.lat ?? seg.points[seg.points.length - 1].lat;
         const toLon = destPark?.lon ?? seg.points[seg.points.length - 1].lon;
 
+        const fuelTrip = tripForSegment(seg.start_ts, seg.end_ts, trips);
         const travel: Travel = {
           idx: si,
           depTs,
@@ -501,7 +536,8 @@ export default function VanlifeMap() {
           fromLabel: coordLabel(fromLat, fromLon, currentPlaces),
           toLabel: coordLabel(toLat, toLon, currentPlaces),
           parkDurationS: destPark?.duration_s ?? 0,
-          l_per_100km: tripForSegment(seg.start_ts, seg.end_ts, trips)?.l_per_100km,
+          l_per_100km: fuelTrip?.l_per_100km,
+          fuelTrip,
         };
         newTravels.push(travel);
 
@@ -1019,6 +1055,9 @@ export default function VanlifeMap() {
                       {travel.l_per_100km != null && (
                         <span className={fuelClass(travel.l_per_100km)}>⛽ {travel.l_per_100km.toFixed(1)} L/100km</span>
                       )}
+                      {travel.fuelTrip?.battery_gain_pct != null && (
+                        <span className={batteryClass(travel.fuelTrip.battery_gain_pct)}>🔋 {fmtBatteryGain(travel.fuelTrip.battery_gain_pct)}</span>
+                      )}
                     </div>
 
                   {isSelected && (
@@ -1049,6 +1088,34 @@ export default function VanlifeMap() {
                           </div>
                         </>
                       )}
+                      {(() => {
+                        const b = travel.fuelTrip;
+                        if (!b) return null;
+                        const hasGain = b.battery_gain_pct != null;
+                        const hasC    = b.battery_start_c != null || b.battery_end_c != null;
+                        if (!hasGain && !hasC) return null;
+                        return (
+                          <>
+                            {hasGain && (
+                              <div className="flex justify-between pt-1.5 mt-1 border-t border-border/40">
+                                <span className="text-muted-foreground font-medium">🔋 Battery {b.battery_gain_pct! >= 0 ? 'gained' : 'drained'}</span>
+                                <span className={batteryClass(b.battery_gain_pct!)}>
+                                  {fmtBatteryGain(b.battery_gain_pct!)}
+                                  {b.battery_gain_wh != null && (
+                                    <span className="text-muted-foreground font-normal"> ({fmtWhGain(b.battery_gain_wh)})</span>
+                                  )}
+                                </span>
+                              </div>
+                            )}
+                            {hasC && (
+                              <div className="flex justify-between">
+                                <span className="text-muted-foreground pl-3">Temperature</span>
+                                <span>{fmtBeforeAfter(b.battery_start_c, b.battery_end_c, 1, '°C')}</span>
+                              </div>
+                            )}
+                          </>
+                        );
+                      })()}
                       <div className="flex justify-between">
                         <span className="text-muted-foreground">Departed</span>
                         <span>{fmtTime(travel.depTs)}</span>

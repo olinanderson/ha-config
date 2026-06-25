@@ -39,6 +39,11 @@ FILTERED_DB = "/config/www/vanlife-panel/filtered_gps.db"
 TANK_L                 = 94.6   # Ford Transit T-350, 25 US gal
 FUEL_MEAN_ENTITY       = "sensor.wican_fuel_5_min_mean"        # smoothed tank %
 FUEL_USED_TOTAL_ENTITY = "sensor.estimated_fuel_used_total_l"  # OBD L integral
+BATTERY_TEMP_ENTITY    = "sensor.olins_van_bms_temperature"    # battery temp (°C)
+BATTERY_WH_ENTITY      = "sensor.olins_van_bms_stored_energy"  # stored energy (Wh)
+BATTERY_FULL_WH_FALLBACK = 8710.0  # full-pack stored Wh if the stats query fails
+                                   # (historical peak hourly mean, Dec24–Jun26)
+_battery_full_wh = None            # cached historical full-pack Wh (per process)
 
 
 def _nearest_state(con, entity_id, ts_s, mode="closest", max_gap_s=None):
@@ -98,6 +103,31 @@ def _obd_litres_between(con, start_ts_s, end_ts_s, max_gap_s=2 * 3600):
     if delta <= 0:
         return None
     return round(delta, 3)
+
+
+def _battery_full_wh_cached(con):
+    """Full-pack stored energy (Wh) = historical peak hourly-mean of the BMS
+    stored_energy sensor from long-term statistics, cached per process. Used as
+    the denominator for the energy-based battery-gain %: since the same sensor
+    feeds both the per-trip Wh increase and this total, the BMS's optimistic Wh
+    scale cancels in the ratio. Falls back to BATTERY_FULL_WH_FALLBACK if the
+    statistics table can't be read."""
+    global _battery_full_wh
+    if _battery_full_wh is not None:
+        return _battery_full_wh
+    try:
+        row = con.execute(
+            "SELECT MAX(st.mean) FROM statistics st "
+            "JOIN statistics_meta sm ON st.metadata_id = sm.id "
+            "WHERE sm.statistic_id = ?",
+            (BATTERY_WH_ENTITY,),
+        ).fetchone()
+        if row and row[0] and float(row[0]) > 1000:
+            _battery_full_wh = float(row[0])
+            return _battery_full_wh
+    except Exception:
+        pass
+    return BATTERY_FULL_WH_FALLBACK
 
 
 # ── SQLite cache (content-addressed by MD5 of waypoints) ────────────────────
@@ -591,6 +621,15 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     return None, None
                 return round(val, 1), ts
 
+            def bms_at(entity, ts_ms, before_only=False, ndigits=1):
+                """Nearest BMS reading of `entity` to ts_ms, rounded to ndigits,
+                within a 2 h staleness cap (same as fuel) so older trips beyond
+                recorder retention report None instead of a stale reading."""
+                mode = "before" if before_only else "closest"
+                val, _ = _nearest_state(ha_con, entity, ts_ms / 1000,
+                                        mode, max_gap_s=2 * 3600)
+                return round(val, ndigits) if val is not None else None
+
             # Tank-delta economy is only trustworthy over long fill-to-fill spans
             # (1% tank resolution ≈ 0.95 L dominates a short trip); the OBD+GPS
             # method below has no such floor.
@@ -609,6 +648,14 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 fuel_start, fs_ts = fuel_at(start_ts, before_only=False)
                 fuel_end,   fe_ts = fuel_at(end_ts,   before_only=True)
 
+                # House-battery telemetry at the trip's endpoints — driving
+                # charges the pack off the alternator/DC-DC. We keep battery temp
+                # and the stored-energy gain (voltage/SOC dropped on request).
+                temp_start = bms_at(BATTERY_TEMP_ENTITY, start_ts, False, 1)
+                temp_end   = bms_at(BATTERY_TEMP_ENTITY, end_ts,   True,  1)
+                wh_start   = bms_at(BATTERY_WH_ENTITY,   start_ts, False, 0)
+                wh_end     = bms_at(BATTERY_WH_ENTITY,   end_ts,   True,  0)
+
                 trip = {
                     "start_ts":   start_ts,
                     "end_ts":     end_ts,
@@ -616,7 +663,19 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     "segment_count": len(group),
                     "fuel_start_pct": fuel_start,
                     "fuel_end_pct":   fuel_end,
+                    "battery_start_c": temp_start,
+                    "battery_end_c":   temp_end,
                 }
+
+                # Energy-based battery gain: stored-Wh increase ÷ historical
+                # full-pack Wh (so the % reflects real energy regained, finer
+                # than the integer SOC delta). Can be negative if loads outran
+                # the charger on a short hop.
+                if wh_start is not None and wh_end is not None:
+                    gain_wh = round(wh_end - wh_start)
+                    trip["battery_gain_wh"]  = gain_wh
+                    trip["battery_gain_pct"] = round(
+                        gain_wh / _battery_full_wh_cached(ha_con) * 100, 1)
 
                 # ── Primary economy: OBD fuel-rate integral ÷ GPS distance ──
                 # Uses the new u-blox GPS distance + OBD speed-density litres;

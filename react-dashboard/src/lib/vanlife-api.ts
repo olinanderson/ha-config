@@ -98,6 +98,11 @@ export interface FuelTripApi {
   fuel_used_l?: number;
   l_per_100km?: number;
   km_per_l?: number;
+  // House-battery telemetry over the trip (driving charges off the alternator)
+  battery_gain_pct?: number;        // energy-based: Wh gain ÷ historical full-pack Wh
+  battery_gain_wh?: number;         // stored-energy increase (Wh)
+  battery_start_c?: number | null;  // battery temperature (°C)
+  battery_end_c?: number | null;
 }
 
 export interface FuelTripSummaryApi {
