@@ -14,6 +14,7 @@ import { LightControl } from '@/components/LightControl';
 import { InverterButton } from '@/components/InverterButton';
 import { StatusDot } from '@/components/StatusDot';
 import { WeatherMapCard } from '@/components/WeatherMapCard';
+import { TodayTripsCard } from '@/components/TodayTripsCard';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useToggle, useService } from '@/hooks/useService';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
@@ -362,6 +363,7 @@ export default function Home() {
             />
           </div>
           <ModeToggles />
+          <TodayTripsCard />
           <WeatherCard />
         </div>
       </div>
