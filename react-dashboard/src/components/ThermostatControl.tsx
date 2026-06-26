@@ -4,7 +4,7 @@ import { Slider } from '@/components/ui/slider';
 import { useEntity } from '@/hooks/useEntity';
 import { useService } from '@/hooks/useService';
 import { cn } from '@/lib/utils';
-import { Thermometer, Power } from 'lucide-react';
+import { Flame, Power } from 'lucide-react';
 import { useCallback, useEffect, useRef, useState } from 'react';
 
 export function ThermostatControl() {
@@ -68,10 +68,10 @@ export function ThermostatControl() {
     <Card>
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
-          <Thermometer
+          <Flame
             className={cn('h-4 w-4', isHeating ? 'text-orange-500' : 'text-muted-foreground')}
           />
-          Thermostat
+          Heater
           <span className={cn(
             'ml-auto text-xs font-medium px-2 py-0.5 rounded-full',
             isHeating
