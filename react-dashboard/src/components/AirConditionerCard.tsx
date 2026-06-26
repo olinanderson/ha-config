@@ -33,7 +33,6 @@ type Pending = {
   mode?: string | null;
   temp?: number | null;
   fan?: number | null;
-  swing?: string | null;
   preset?: string | null;
 };
 
@@ -52,12 +51,10 @@ export function AirConditionerCard({ entityId = AC_ENTITY }: { entityId?: string
   const a = ac?.attributes ?? {};
   const backendMode = ac?.state ?? 'off';
   const backendTemp = (a.temperature as number) ?? 24;
-  const backendSwing = (a.swing_mode as string) ?? 'off';
   const roomTemp = a.current_temperature as number | undefined | null;
   const minTemp = (a.min_temp as number) ?? 16;
   const maxTemp = (a.max_temp as number) ?? 32;
   const step = (a.target_temp_step as number) ?? 1;
-  const swingModes: string[] = (a.swing_modes as string[]) ?? [];
 
   const fanAttrs = fanNum?.attributes ?? {};
   const fanMin = Number(fanAttrs.min ?? 1);
@@ -68,18 +65,16 @@ export function AirConditionerCard({ entityId = AC_ENTITY }: { entityId?: string
 
   const amps = ampsEnt ? Number(ampsEnt.state) : NaN;
 
-  const backendRef = useRef({ backendMode, backendTemp, backendFan, backendSwing });
-  backendRef.current = { backendMode, backendTemp, backendFan, backendSwing };
+  const backendRef = useRef({ backendMode, backendTemp, backendFan });
+  backendRef.current = { backendMode, backendTemp, backendFan };
 
   // ── Displayed values = optimistic override ?? backend ──
   const mode = pending.mode ?? backendMode;
   const temp = pending.temp ?? backendTemp;
   const fan = pending.fan ?? backendFan;
-  const swing = pending.swing ?? backendSwing;
   const isOn = mode === 'cool';
   const hasPending =
-    pending.mode != null || pending.temp != null || pending.fan != null ||
-    pending.swing != null || pending.preset != null;
+    pending.mode != null || pending.temp != null || pending.fan != null || pending.preset != null;
 
   // ── Flush: send ONE service call per dimension that still differs from backend ──
   const flush = useCallback(() => {
@@ -110,11 +105,6 @@ export function AirConditionerCard({ entityId = AC_ENTITY }: { entityId?: string
           keep.fan = p.fan;
         }
       }
-      // Swing is independent of presets — apply it either way.
-      if (p.swing != null && p.swing !== b.backendSwing) {
-        callService('climate', 'set_swing_mode', { swing_mode: p.swing }, { entity_id: entityId });
-        keep.swing = p.swing;
-      }
     }
 
     pendingRef.current = keep;
@@ -134,14 +124,12 @@ export function AirConditionerCard({ entityId = AC_ENTITY }: { entityId?: string
     if (merged.mode === b.backendMode) merged.mode = null;
     if (merged.temp === b.backendTemp) merged.temp = null;
     if (merged.fan === b.backendFan) merged.fan = null;
-    if (merged.swing === b.backendSwing) merged.swing = null;
 
     pendingRef.current = merged;
     setPending(merged);
 
     const stillPending =
-      merged.mode != null || merged.temp != null || merged.fan != null ||
-      merged.swing != null || merged.preset != null;
+      merged.mode != null || merged.temp != null || merged.fan != null || merged.preset != null;
     if (stillPending) {
       schedule();
     } else {
@@ -169,9 +157,8 @@ export function AirConditionerCard({ entityId = AC_ENTITY }: { entityId?: string
     if (p.mode != null && p.mode === backendMode) { next.mode = null; changed = true; }
     if (p.temp != null && p.temp === backendTemp) { next.temp = null; changed = true; }
     if (p.fan != null && p.fan === backendFan) { next.fan = null; changed = true; }
-    if (p.swing != null && p.swing === backendSwing) { next.swing = null; changed = true; }
     if (changed) { pendingRef.current = next; setPending(next); }
-  }, [backendMode, backendTemp, backendFan, backendSwing]);
+  }, [backendMode, backendTemp, backendFan]);
 
   useEffect(() => () => { if (flushTimer.current) clearTimeout(flushTimer.current); }, []);
 
@@ -192,8 +179,6 @@ export function AirConditionerCard({ entityId = AC_ENTITY }: { entityId?: string
   };
   const setFanTo = (v: number) =>
     update({ fan: Math.max(fanMin, Math.min(fanMax, Math.round(v))), preset: null });
-  const toggleSwing = () =>
-    update({ swing: swing === 'off' ? (swingModes.find((s) => s !== 'off') ?? 'vertical') : 'off' });
   const applyPreset = (p: (typeof PRESETS)[number]) =>
     update({ preset: p.key, temp: p.temp, fan: p.fan });
 
@@ -334,19 +319,6 @@ export function AirConditionerCard({ entityId = AC_ENTITY }: { entityId?: string
             ))}
           </div>
         </div>
-
-        {/* Swing (only if the entity supports it) */}
-        {swingModes.length > 1 && (
-          <div className={cn('flex items-center justify-between', disabledCls)}>
-            <span className="text-xs text-muted-foreground">Swing</span>
-            <Button
-              variant={swing !== 'off' ? 'default' : 'outline'} size="sm"
-              onClick={toggleSwing} disabled={!isOn}
-            >
-              {swing !== 'off' ? 'On' : 'Off'}
-            </Button>
-          </div>
-        )}
 
         {/* Pending / debounce indicator */}
         {hasPending && (

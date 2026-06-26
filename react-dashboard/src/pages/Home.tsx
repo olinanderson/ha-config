@@ -8,7 +8,6 @@ import { ThermostatControl } from '@/components/ThermostatControl';
 import { HeatingControls } from '@/components/HeatingControls';
 import { FanControl } from '@/components/FanControl';
 import { PresenceBar } from '@/components/PresenceBar';
-import { PresenceCard } from '@/components/PresenceCard';
 import { ToggleButton } from '@/components/ToggleButton';
 import { LightControl } from '@/components/LightControl';
 import { InverterButton } from '@/components/InverterButton';
@@ -342,7 +341,6 @@ export default function Home() {
           <ThermostatControl />
           <HeatingControls />
           <FanControl />
-          <PresenceCard />
         </div>
 
         {/* Column 2: Power */}
