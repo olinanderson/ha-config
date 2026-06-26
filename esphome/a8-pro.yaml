@@ -409,7 +409,11 @@ climate:
     visual:
       min_temperature: ${AC_MIN_TEMP}
       max_temperature: ${AC_MAX_TEMP}
-      temperature_step: 1.0
+      # Target is whole degrees (the AC only does 1° setpoints), but report the
+      # room/current temp at 0.1° so it isn't rounded (23.9 was showing as 24).
+      temperature_step:
+        target_temperature: 1.0
+        current_temperature: 0.1
     default_preset: Normal
     on_boot_restore_from: memory
     preset:
