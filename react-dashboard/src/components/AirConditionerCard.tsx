@@ -198,7 +198,8 @@ export function AirConditionerCard({ entityId = AC_ENTITY }: { entityId?: string
     update({ preset: p.key, temp: p.temp, fan: p.fan });
 
   const disabledCls = !isOn && 'opacity-50 pointer-events-none';
-  const showAmps = Number.isFinite(amps) && amps > 0.05;
+  const ampsKnown = Number.isFinite(amps);
+  const drawing = ampsKnown && amps > 0.05;
 
   return (
     <Card>
@@ -207,8 +208,15 @@ export function AirConditionerCard({ entityId = AC_ENTITY }: { entityId?: string
           <Snowflake className={cn('h-4 w-4', isOn ? 'text-cyan-500' : 'text-muted-foreground')} />
           Air Conditioner
           <span className="ml-auto flex items-center gap-1.5">
-            {showAmps && (
-              <span className="text-xs font-medium px-2 py-0.5 rounded-full bg-amber-500/10 text-amber-600 dark:text-amber-400 tabular-nums">
+            {ampsKnown && (
+              <span
+                className={cn(
+                  'text-xs font-medium px-2 py-0.5 rounded-full tabular-nums',
+                  drawing
+                    ? 'bg-amber-500/10 text-amber-600 dark:text-amber-400'
+                    : 'bg-muted text-muted-foreground',
+                )}
+              >
                 {amps.toFixed(1)} A
               </span>
             )}
