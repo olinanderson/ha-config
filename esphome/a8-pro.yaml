@@ -14,7 +14,12 @@ substitutions:
   AC_DEFAULT_FAN: "4"     # fan level the AC starts at when powered on (1L–6L)
   AC_MIN_TEMP: "16"
   AC_MAX_TEMP: "32"
-  AC_SHUTDOWN_MS: "30000" # compressor stop-down period (30s)
+  AC_SHUTDOWN_MS: "30000" # compressor stop-down period in ms (used by delay: actions)
+  AC_SHUTDOWN_S: "30"     # same period in seconds (climate min_cooling_off_time needs second precision)
+  AC_POWERON_SETTLE_MS: "3000" # IR-ready settle after the power toggle before the first sync press.
+                               # 1500 was too short: the receiver wasn't ready, so the first (arming)
+                               # press was dropped and temp landed one step short (26->20 landed 21).
+                               # 3000 verified to land exactly (26->22) on 2026-06-26.
 
 esp32:
   board: esp32dev
@@ -108,23 +113,14 @@ sensor:
   - platform: homeassistant
     id: ac_power_sensor
     entity_id: sensor.air_conditioning_power_24v
-    on_value:
-      - lambda: |-
-          // If power > 12 W the AC is confirmed running
-          bool hw_on = x > 12.0f;
-          if (hw_on && !id(ac_assumed_on)) {
-            // AC turned on externally (via physical remote?)
-            id(ac_assumed_on) = true;
-            id(ac_current_temp) = ${AC_DEFAULT_TEMP};
-            id(ac_current_fan)  = ${AC_DEFAULT_FAN};
-          }
-          if (!hw_on && id(ac_assumed_on) && !id(ac_shutdown_active)) {
-            // AC turned off externally
-            id(ac_assumed_on) = false;
-          }
+    # NOTE: this reading lags the real AC state by many seconds, so it is NO LONGER
+    # used to drive on/off state — doing so caused state races/inversions (a command
+    # issued during the lag window would read the wrong assumed state and toggle the
+    # AC the wrong way). 'ac_assumed_on' is now owned solely by the cool_mode /
+    # off_mode command actions. This sensor is kept for monitoring only.
   - platform: homeassistant
     id: ac_room_temp
-    entity_id: sensor.bme280_1_temperature
+    entity_id: sensor.a32_pro_bme280_1_temperature  # was sensor.bme280_1_temperature (missing a32_pro_ prefix → read None)
     unit_of_measurement: "°C"
     filters:
       - heartbeat: 30s
@@ -337,7 +333,7 @@ climate:
     id: ac_climate
     sensor: ac_room_temp
     min_idle_time: 5s
-    min_cooling_off_time: ${AC_SHUTDOWN_MS}ms
+    min_cooling_off_time: ${AC_SHUTDOWN_S}s
     min_cooling_run_time: 5s
     startup_delay: true        # enforce compressor delay on boot
     cool_deadband: 50.0       # effectively disable auto-trigger
@@ -644,7 +640,7 @@ script:
             - lambda: 'return;'
       - logger.log: "AC: sending ON toggle"
       - script.execute: air_conditioner_on_off
-      - delay: 1500ms
+      - delay: ${AC_POWERON_SETTLE_MS}ms
       # After power-on the AC starts at default temp/fan
       - lambda: |-
           id(ac_assumed_on)   = true;
@@ -683,6 +679,21 @@ script:
     then:
       - lambda: |-
           ESP_LOGI("ac", "Syncing temp: %d -> %d", id(ac_current_temp), id(ac_target_temp));
+      # The remote's FIRST up/down press only ARMS adjust mode (value blinks ~4 s)
+      # without changing it; later presses step by one. So prime once in the travel
+      # direction, then walk the real steps (kept <4 s apart to stay armed).
+      - if:
+          condition:
+            lambda: 'return id(ac_current_temp) != id(ac_target_temp);'
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(ac_current_temp) < id(ac_target_temp);'
+                then:
+                  - script.execute: air_conditioner_temp_up
+                else:
+                  - script.execute: air_conditioner_temp_down
+            - delay: 600ms
       - while:
           condition:
             lambda: 'return id(ac_current_temp) < id(ac_target_temp);'
@@ -704,6 +715,20 @@ script:
   - id: ac_sync_fan
     mode: restart
     then:
+      # Same arming behavior as temp: first speed press only arms (blinks ~4 s),
+      # later presses step by one. Prime once in the travel direction.
+      - if:
+          condition:
+            lambda: 'return id(ac_current_fan) != id(ac_fan_level);'
+          then:
+            - if:
+                condition:
+                  lambda: 'return id(ac_current_fan) < id(ac_fan_level);'
+                then:
+                  - script.execute: air_conditioner_speed_up
+                else:
+                  - script.execute: air_conditioner_speed_down
+            - delay: 600ms
       - while:
           condition:
             lambda: 'return id(ac_current_fan) < id(ac_fan_level);'
@@ -742,7 +767,7 @@ script:
             - lambda: 'id(ac_shutdown_active) = false;'
       # Step 2: Turn on (AC will start at defaults)
       - script.execute: air_conditioner_on_off
-      - delay: 1500ms
+      - delay: ${AC_POWERON_SETTLE_MS}ms
       - lambda: |-
           id(ac_assumed_on)   = true;
           id(ac_current_temp) = ${AC_DEFAULT_TEMP};
