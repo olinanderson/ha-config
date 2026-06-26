@@ -6,6 +6,14 @@
 esphome:
   name: ag-pro
   friendly_name: AG Pro
+  # On boot, restored globals can be stale (e.g. an OTA reboot left assumed_on=true
+  # while the AC actually reset to OFF). Once the power reading has settled, reconcile
+  # the assumed on/off against reality instead of blindly trusting the restored value.
+  on_boot:
+    - priority: -100
+      then:
+        - delay: 45s
+        - script.execute: ac_power_reconcile
 
 # Put substitutions early so they're available everywhere
 substitutions:
@@ -105,6 +113,18 @@ globals:
     type: bool
     restore_value: no
     initial_value: 'false'
+  # True while an on/off command's effect is ramping in, so the power-feedback
+  # reconciler stays hands-off during the laggy power transition (no invert race).
+  - id: ac_busy
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  # True only while the power reconciler is syncing the displayed climate mode to
+  # reality — makes cool_mode/off_mode skip the IR toggle so a sync can't move the AC.
+  - id: ac_reconciling
+    type: bool
+    restore_value: no
+    initial_value: 'false'
 
 # ─────────────────────────────────────────────────────────────────────────────
 # HA sensor imports (for AC power feedback)
@@ -147,6 +167,23 @@ binary_sensor:
     id: ac_shutdown_sensor
     icon: mdi:timer-sand
     lambda: 'return id(ac_shutdown_active);'
+
+  # Debounced "the AC is really drawing power" signal from the (laggy) power
+  # sensor. Threshold sits above standby (off ~0 W, on ~30-40 W). delayed_on/off
+  # ride out the reading lag and brief dips so it can't flap. on_state feeds the
+  # reconciler, which corrects ac_assumed_on when idle (see ac_power_reconcile).
+  - platform: template
+    name: "24V AC - Power Detected"
+    id: ac_power_on
+    device_class: power
+    lambda: |-
+      if (!id(ac_power_sensor).has_state()) return {};
+      return id(ac_power_sensor).state > 5.0f;  // above 0 W standby; low enough to catch eco/sleep low-fan draw
+    filters:
+      - delayed_on: 8s
+      - delayed_off: 45s
+    on_state:
+      - script.execute: ac_power_reconcile
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Fan entity (10-step speed fan)
@@ -327,6 +364,37 @@ switch:
 #   30 s compressor stop-down enforced via min_cooling_off_time.
 #   "Reinitialize" button re-syncs assumed ↔ actual state.
 # ─────────────────────────────────────────────────────────────────────────────
+
+# ─────────────────────────────────────────────────────────────────────────────
+# AC fan level as a 1–6 number. The climate entity only exposes low/medium/high
+# (= 2/4/6), but the hardware has 6 steps — this exposes every step so the
+# dashboard can drive a 1L–6L slider. Reports ac_current_fan; on set it updates
+# the target and walks the fan via the existing ac_sync_fan (when the AC is on).
+# ─────────────────────────────────────────────────────────────────────────────
+number:
+  - platform: template
+    name: "24V AC - Fan Level"
+    id: ac_fan_level_number
+    icon: mdi:fan
+    min_value: 1
+    max_value: 6
+    step: 1
+    mode: slider
+    unit_of_measurement: "L"
+    lambda: 'return id(ac_current_fan);'
+    update_interval: 3s
+    set_action:
+      - lambda: |-
+          int lvl = (int) x;
+          if (lvl < 1) lvl = 1;
+          if (lvl > 6) lvl = 6;
+          id(ac_fan_level) = lvl;
+      - if:
+          condition:
+            lambda: 'return id(ac_assumed_on) && !id(ac_shutdown_active);'
+          then:
+            - script.execute: ac_sync_fan
+
 climate:
   - platform: thermostat
     name: "24V Air Conditioner"
@@ -363,9 +431,19 @@ climate:
     idle_action:
       - logger.log: "AC thermostat idle (no action — AC manages its own thermostat)"
     cool_mode:
-      - script.execute: ac_turn_on
+      # Skip the IR path when the power reconciler is only syncing the displayed
+      # mode to reality (it updates the internal state itself; must NOT toggle the AC).
+      - if:
+          condition:
+            lambda: 'return !id(ac_reconciling);'
+          then:
+            - script.execute: ac_turn_on
     off_mode:
-      - script.execute: ac_turn_off
+      - if:
+          condition:
+            lambda: 'return !id(ac_reconciling);'
+          then:
+            - script.execute: ac_turn_off
 
     # ── Target temperature changed ──
     target_temperature_change_action:
@@ -374,7 +452,9 @@ climate:
           if (new_temp < ${AC_MIN_TEMP}) new_temp = ${AC_MIN_TEMP};
           if (new_temp > ${AC_MAX_TEMP}) new_temp = ${AC_MAX_TEMP};
           id(ac_target_temp) = new_temp;
-          if (id(ac_assumed_on) && !id(ac_shutdown_active)) {
+          // Skip the IR walk while a preset/reconcile is syncing state (ac_reconciling):
+          // those set the AC directly, so walking would double-send.
+          if (id(ac_assumed_on) && !id(ac_shutdown_active) && !id(ac_reconciling)) {
             id(ac_sync_temp).execute();
           }
 
@@ -565,6 +645,9 @@ script:
 ###############################################################################
   - id: air_conditioner_on_off
     then:
+      # Open a busy window so the power-feedback reconciler ignores the lag while
+      # this toggle's effect ramps in (prevents the invert-during-command race).
+      - script.execute: ac_busy_window
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0022 0000 015A 00AB 0017 0016 0017 0015 0016 0016 0016 0016 0016 0016 0017 0015 0016 0016 0016 0016 0017 003F 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0040 0016 0016 0016 0040 0016 0016 0016 0040 0016 0017 0015 0017 0015 0017 0015 0016 0016 0041 0015 0017 0014 0041 0015 0017 0015 0041 0015 0042 0014 0042 0014 0042 0014 0181"
@@ -782,6 +865,82 @@ script:
       - lambda: |-
           ESP_LOGI("ac", "Reinitialize complete: %d C, fan %d",
                    id(ac_target_temp), id(ac_fan_level));
+
+  # ── Busy window: held true while an on/off command's effect ramps in, so the
+  #    power-feedback reconciler doesn't act on the laggy reading mid-command.
+  #    restart mode: each new toggle restarts the 40 s window.
+  - id: ac_busy_window
+    mode: restart
+    then:
+      - lambda: 'id(ac_busy) = true;'
+      - delay: 40s
+      - lambda: 'id(ac_busy) = false;'
+
+  # ── Apply a remote preset (strong/eco/sleep). The preset IR frame jumps the AC
+  #    straight to temp/fan in one shot, so we just sync our belief + the user-facing
+  #    climate entity to match, WITHOUT walking (ac_reconciling suppresses the IR).
+  - id: ac_apply_preset
+    parameters:
+      temp: int
+      fan: int
+    then:
+      - lambda: |-
+          id(ac_assumed_on)   = true;
+          id(ac_current_temp) = temp;
+          id(ac_target_temp)  = temp;
+          id(ac_current_fan)  = fan;
+          id(ac_fan_level)    = fan;
+          id(ac_reconciling)  = true;
+          auto call = id(ac_climate).make_call();
+          call.set_mode(climate::CLIMATE_MODE_COOL);
+          call.set_target_temperature(temp);
+          call.perform();
+      - delay: 300ms
+      - lambda: 'id(ac_reconciling) = false;'
+
+  # ── Power-feedback reconciler (Layer 1 + 2): corrects assumed on/off from the
+  #    debounced power sensor, but ONLY when idle (no recent command) and not in
+  #    the compressor lockout. Edge-triggered from ac_power_on's on_state and once
+  #    on boot — so it fixes real drift (reboot, physical remote, manual off at the
+  #    unit) without re-introducing the invert-during-command race we removed before.
+  - id: ac_power_reconcile
+    mode: single
+    then:
+      - if:
+          condition:
+            lambda: 'return id(ac_power_on).has_state() && !id(ac_busy) && !id(ac_shutdown_active);'
+          then:
+            - if:
+                condition:
+                  # Inconsistent if the real (debounced power) on/off disagrees with
+                  # either our internal belief or the displayed climate mode.
+                  lambda: |-
+                    bool real_on = id(ac_power_on).state;
+                    bool mode_on = id(ac_climate).mode == climate::CLIMATE_MODE_COOL;
+                    return !(real_on == id(ac_assumed_on) && real_on == mode_on);
+                then:
+                  - lambda: |-
+                      bool real_on = id(ac_power_on).state;
+                      ESP_LOGW("ac", "Power-sync: %.1f W (on=%d) vs assumed_on=%d -> syncing to %s",
+                               id(ac_power_sensor).state, real_on, id(ac_assumed_on),
+                               real_on ? "COOL" : "OFF");
+                      // 1) Fix the internal belief directly.
+                      id(ac_assumed_on) = real_on;
+                      if (real_on) {
+                        // External power-on: the unit always comes up at its hardware default.
+                        id(ac_current_temp) = ${AC_DEFAULT_TEMP};
+                        id(ac_current_fan)  = ${AC_DEFAULT_FAN};
+                      }
+                      // 2) Push the user-facing climate mode to match, with IR suppressed.
+                      id(ac_reconciling) = true;
+                      auto call = id(ac_climate).make_call();
+                      call.set_mode(real_on ? climate::CLIMATE_MODE_COOL
+                                            : climate::CLIMATE_MODE_OFF);
+                      call.perform();
+                  # Hold the suppress flag briefly in case the mode trigger is
+                  # deferred a loop, then release so normal commands fire IR again.
+                  - delay: 300ms
+                  - lambda: 'id(ac_reconciling) = false;'
 
 ###############################################################################
 # IR Fan Control Scripts
@@ -1072,14 +1231,17 @@ button:
     name: "24V AC - Strong"
     on_press:
       - script.execute: air_conditioner_strong
+      - script.execute: { id: ac_apply_preset, temp: 16, fan: 6 }
   - platform: template
     name: "24V AC - ECO"
     on_press:
       - script.execute: air_conditioner_eco
+      - script.execute: { id: ac_apply_preset, temp: 26, fan: 3 }
   - platform: template
     name: "24V AC - Sleep"
     on_press:
       - script.execute: air_conditioner_sleep
+      - script.execute: { id: ac_apply_preset, temp: 28, fan: 1 }
 
   # ── AC Climate Controller buttons ──
   - platform: template
