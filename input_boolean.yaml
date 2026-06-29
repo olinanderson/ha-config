@@ -17,6 +17,13 @@ sleep_mode:
   name: "Sleep Mode"
   icon: mdi:sleep
 
+# Internal flag: ON once Sleep Mode's wind-down finishes (lights auto-off),
+# cleared otherwise. Lets the OFF automation tell a morning wake (full
+# wake-up routine) from a mid-wind-down cancel (just restore prior state).
+sleep_winddown_complete:
+  name: "Sleep Wind-down Complete"
+  icon: mdi:bed-clock
+
 shower_mode:
   name: "Shower Mode"
   icon: mdi:shower

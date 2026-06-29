@@ -5,7 +5,7 @@
 | Mode | Script ON | Script OFF | Description |
 |---|---|---|---|
 | **Power Saving** | `script.power_saving_mode_on` | `script.power_saving_mode_off` | Lights off, monitors off, water off; auto on leaving/driving |
-| **Sleep Mode** | `script.sleep_mode_on` | `script.wake_up_routine` | All lights/monitors off, Starlink sleep, state snapshotted |
+| **Sleep Mode** | `script.sleep_mode_on` | `script.wake_up_routine` | Pre-bed wind-down: monitors off, lights dim (cabinet 70% / skylight 40% / main 10%), all off after 5 min. Cancel mid-wind-down restores prior state; turning off after it completes runs the morning wake-up. Starlink: start +30 min, default 1 AM MST on off |
 | **Shower Mode** | `script.shower_mode_on` | `script.shower_mode_off` | Lights 100%, water recirc, roof fan exhaust 60% |
 | **Cook Mode** | `script.cook_mode` | `script.cook_mode_off` | LPG valve open, lights 100%, roof fan exhaust 60% |
 | **Bedtime** | `script.bedtime_routine` | — | Progressive 10-min shutdown |

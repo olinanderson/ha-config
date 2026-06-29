@@ -602,14 +602,14 @@
 # Ducking in pulseaudio
 # ────────────────────────────────────────────────────────────────
 # The following automation is used to setup the ducking module in pulse audio which lowers the volume of music from airplay/audio from PC when HA is playing audio through the VLC media player
-- alias: "Scream audio receiver"
+- alias: "VBAN audio receiver"
   mode: single
   trigger:
     - trigger: homeassistant
       event: start # fires when HA has finished booting
   action:
     - delay: "00:00:15" # let hassio_audio come online
-    - action: shell_command.start_scream_receiver
+    - action: shell_command.start_vban_receptor
 
 - alias: Shelly EM – one-second ping updater
   mode: single # don’t queue if it takes longer than a second
@@ -789,6 +789,206 @@
     - action: scene.turn_on
       target:
         entity_id: scene.pre_shower_mode_state
+
+# ────────────────────────────────────────────────────────────────
+# Sleep Mode – pre-bed wind-down (dim now, all lights off after 5 min)
+#   Triggered by input_boolean.sleep_mode so the dashboard toggle,
+#   voice "goodnight", and script.sleep_mode_on all run this routine.
+#   Cancelling within the 5 min aborts the shutdown and restores the
+#   pre-sleep state (see sleep_mode_off_restore).
+# ────────────────────────────────────────────────────────────────
+- id: sleep_mode_on_actions
+  alias: "Sleep Mode – Pre-bed wind-down on toggle ON"
+  # restart: re-pressing (off→on) starts a fresh wind-down with a new snapshot
+  mode: restart
+  trigger:
+    - trigger: state
+      entity_id: input_boolean.sleep_mode
+      from: "off"
+      to: "on"
+  action:
+    # New wind-down cycle: clear the "completed" flag (so an OFF during the
+    # next 5 min is treated as a cancel, not a morning wake).
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.sleep_winddown_complete
+
+    # Snapshot current LIGHT states so we can restore them on cancel
+    - action: scene.create
+      data:
+        scene_id: pre_sleep_mode_lights
+        # LED controllers ONLY — do not snapshot the physical switches.
+        # Restoring controller + mirrored switch together made the linked-
+        # entities blueprint cross-fire and clobber brightness on restore.
+        # The switches follow their controllers via the blueprint.
+        snapshot_entities:
+          - light.led_controller_cct_1
+          - light.led_controller_cct_2
+          - light.led_controller_sc_1
+          - light.led_controller_sc_2
+
+    # Snapshot current monitor states so we can restore them on cancel
+    - action: scene.create
+      data:
+        scene_id: pre_sleep_mode_monitors
+        snapshot_entities:
+          - switch.a32_pro_do8_switch06_top_monitor
+          - switch.a32_pro_do8_switch07_bottom_monitor
+
+    # Turn off both monitors
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_do8_switch06_top_monitor
+          - switch.a32_pro_do8_switch07_bottom_monitor
+
+    # Wind-down lighting: under-cabinet 70 %, skylight (Accent) 40 %, main 10 %
+    - action: light.turn_on
+      target:
+        entity_id: light.led_controller_cct_2   # under-cabinet
+      data:
+        brightness_pct: 70
+    - action: light.turn_on
+      target:
+        entity_id: light.led_controller_sc_2    # skylight (Accent)
+      data:
+        brightness_pct: 40
+    - action: light.turn_on
+      target:
+        entity_id: light.led_controller_cct_1   # main
+      data:
+        brightness_pct: 10
+
+    # Turn every other interior light off (shower)
+    - action: light.turn_off
+      target:
+        entity_id: light.led_controller_sc_1    # shower
+
+    # Schedule Starlink sleep start (+30 min). continue_on_error so a Starlink
+    # hiccup (e.g. time entity unavailable) can never abort the wind-down
+    # before the 5-min auto-off below.
+    - action: script.starlink_sleep_start_after_30m
+      continue_on_error: true
+
+    # Set Starlink sleep END to 08:15 MST equivalent in current local time
+    - continue_on_error: true
+      choose:
+        - conditions:
+            - condition: template
+              value_template: "{{ states('time.starlink_sleep_end') not in ['unknown', 'unavailable'] }}"
+          sequence:
+            - action: time.set_value
+              target:
+                entity_id: time.starlink_sleep_end
+              data:
+                time: >
+                  {% set mst_offset = -7 %}  {# MST fixed UTC-7 #}
+                  {% set local_offset = (now().utcoffset().total_seconds() / 3600) | int %}
+                  {% set delta = local_offset - mst_offset %}
+                  {% set hour = (8 + delta) % 24 %}
+                  {{ '%02d:%02d:%02d' % (hour, 15, 0) }}
+
+    # ~5 min for the nightly routine, then turn everything off — but only
+    # if sleep mode wasn't cancelled (which would have restored state).
+    - delay: "00:05:00"
+    - if:
+        - condition: state
+          entity_id: input_boolean.sleep_mode
+          state: "on"
+      then:
+        - action: light.turn_off
+          target:
+            entity_id:
+              - light.led_controller_cct_1
+              - light.led_controller_cct_2
+              - light.led_controller_sc_1
+              - light.led_controller_sc_2
+              - light.main_lighting_switch
+              - light.under_cabinet_lighting_switch
+        # Wind-down finished → mark as asleep so the next OFF runs the
+        # morning wake-up routine instead of a plain restore.
+        - action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.sleep_winddown_complete
+
+# ────────────────────────────────────────────────────────────────
+# Sleep Mode – cancel (restore) vs morning wake (toggle OFF)
+#   Branches on input_boolean.sleep_winddown_complete:
+#     • cancelled mid wind-down      → just restore the pre-sleep state
+#     • wind-down completed (asleep) → full morning wake-up routine
+#   Always clears the flag and resets the Starlink schedule (1 AM MST).
+# ────────────────────────────────────────────────────────────────
+- id: sleep_mode_off_restore
+  alias: "Sleep Mode – Cancel restore / morning wake on toggle OFF"
+  mode: restart
+  trigger:
+    - trigger: state
+      entity_id: input_boolean.sleep_mode
+      from: "on"
+      to: "off"
+  action:
+    - choose:
+        # ── Morning wake: the wind-down completed (lights had auto-off'd) ──
+        - conditions:
+            - condition: state
+              entity_id: input_boolean.sleep_winddown_complete
+              state: "on"
+          sequence:
+            # Ensure inverter is ON before restoring anything AC-dependent
+            - action: script.inverter_ensure_on
+
+            # Restore pre-sleep LIGHT states
+            - action: scene.turn_on
+              target:
+                entity_id: scene.pre_sleep_mode_lights
+
+            # Turn water system back ON to Main
+            - action: switch.turn_on
+              target:
+                entity_id: switch.a32_pro_water_system_master_switch
+            - action: switch.turn_on
+              target:
+                entity_id: switch.a32_pro_water_system_state_main
+
+            # Restore monitors to their pre-sleep state
+            - action: scene.turn_on
+              target:
+                entity_id: scene.pre_sleep_mode_monitors
+
+            # Gentle lights: under-cabinet to 30 % for a soft wake
+            - action: light.turn_on
+              target:
+                entity_id: light.under_cabinet_lighting_switch
+              data:
+                brightness_pct: 30
+
+            # Optionally restore last active scene if not in power-saving
+            - choose:
+                - conditions:
+                    - condition: state
+                      entity_id: input_boolean.power_saving_mode
+                      state: "off"
+                  sequence:
+                    - action: scene.turn_on
+                      target:
+                        entity_id: scene.last_active_state
+      # ── Cancel: turned off mid wind-down → just restore prior state ──
+      default:
+        - action: scene.turn_on
+          target:
+            entity_id:
+              - scene.pre_sleep_mode_lights
+              - scene.pre_sleep_mode_monitors
+
+    # Clear the wind-down flag for the next cycle
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.sleep_winddown_complete
+
+    # Revert Starlink sleep start to the default nightly window
+    # (1 AM MST), undoing the +30 min override set on sleep-on.
+    - action: script.starlink_sleep_start_default
+      continue_on_error: true
 
 # ───────────────────────────────────────────────
 #  Heater low-fuel lockout – auto-clear when fuel recovers
