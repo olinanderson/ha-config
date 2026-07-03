@@ -122,3 +122,7 @@ themes/
 *.sync-conflict-*
 ~syncthing~*
 *.bak*
+
+# --- Build cache + runtime logs (churn, not source) ---
+*.tsbuildinfo
+*.log
