@@ -32,3 +32,15 @@ vanlife_stop_id:
   icon: mdi:identifier
   max: 20
   initial: ""
+
+# --- Live Trip computer timestamps (epoch ms) ---
+# No `initial:` so they RESTORE across restarts (mid-trip restart keeps the trip).
+trip_start_ts:
+  name: "Live Trip Start (ms)"
+  icon: mdi:clock-start
+  max: 20
+
+trip_end_ts:
+  name: "Live Trip End (ms)"
+  icon: mdi:clock-end
+  max: 20

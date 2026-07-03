@@ -661,6 +661,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     "end_ts":     end_ts,
                     "distance_km": dist_km,
                     "segment_count": len(group),
+                    # Driving time = sum of each segment's own span. Excludes the
+                    # 3-20 min mid-trip stops that the GAP_MS grouping merges into
+                    # one trip (end_ts - start_ts would count those as "driving").
+                    "moving_ms":  round(sum(g[1] - g[0] for g in group)),
                     "fuel_start_pct": fuel_start,
                     "fuel_end_pct":   fuel_end,
                     "battery_start_c": temp_start,

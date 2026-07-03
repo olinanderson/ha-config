@@ -1,4 +1,5 @@
 import { PageContainer } from '@/components/layout/PageContainer';
+import { CurrentTripCard } from '@/components/CurrentTripCard';
 import { FuelTripHistory } from '@/components/FuelTripHistory';
 import { SparklineStat, ClickableValue } from '@/components/ClickableValue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -300,6 +301,7 @@ function MainHeroCard() {
   const aggression = useEntity('sensor.hill_aggression');
   const { value: rpm } = useEntityNumeric('sensor.192_168_10_90_0c_enginerpm');
   const { value: ecuV } = useEntityNumeric('sensor.192_168_10_90_42_controlmodulevolt');
+  const { value: ambient } = useEntityNumeric('sensor.192_168_10_90_46_ambientairtemp');
 
   const { open } = useHistoryDialog();
 
@@ -397,8 +399,12 @@ function MainHeroCard() {
               </div>
             </div>
 
-            {/* Less important: rpm, ecu voltage */}
-            <div className="mt-2 grid grid-cols-2 gap-2 text-center">
+            {/* Less important: ambient, rpm, ecu voltage */}
+            <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+              <div className="cursor-pointer rounded-lg p-1 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_46_ambientairtemp', 'Ambient Air', '°C')}>
+                <p className="text-lg font-semibold tabular-nums text-muted-foreground">{fmt(ambient, 0)}°</p>
+                <p className="text-[10px] text-muted-foreground">Ambient</p>
+              </div>
               <div className="cursor-pointer rounded-lg p-1 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_0c_enginerpm', 'RPM', 'rpm')}>
                 <p className="text-lg font-semibold tabular-nums text-muted-foreground">{fmt(rpm, 0)}</p>
                 <p className="text-[10px] text-muted-foreground">RPM</p>
@@ -490,6 +496,9 @@ export default function Van() {
     <PageContainer title="Van & Vehicle">
       <DTCBanner placement="top" />
       <MainHeroCard />
+      <div className="mt-4">
+        <CurrentTripCard />
+      </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mt-4">
         <div className="space-y-4">
           <DiagnosticsCard />

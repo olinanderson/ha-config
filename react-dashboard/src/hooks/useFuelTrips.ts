@@ -5,6 +5,7 @@ export interface FuelTrip {
   end_ts: number;
   distance_km: number;
   segment_count: number;
+  moving_ms?: number; // driving time (sum of segment spans; excludes 3-20min mid-trip stops)
   fuel_start_pct: number | null;
   fuel_end_pct: number | null;
   fuel_used_pct?: number;
@@ -51,7 +52,7 @@ const API_BASE = () =>
 const REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 
 /** Get auth headers for API requests through HA */
-async function getAuthHeaders(): Promise<Record<string, string>> {
+async function getAuthHeaders(): Promise<Record<string, string> | null> {
   if (IS_LOCAL) return {};
   const hass = (window as unknown as Record<string, unknown>).__HASS__ as { auth?: { data?: { access_token?: string } } } | undefined;
   let token = hass?.auth?.data?.access_token;
@@ -69,7 +70,7 @@ async function getAuthHeaders(): Promise<Record<string, string>> {
       }, 100);
     });
   }
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return token ? { Authorization: `Bearer ${token}` } : null;
 }
 
 export function useFuelTrips(limit = 20): FuelTripsResult {
@@ -84,6 +85,7 @@ export function useFuelTrips(limit = 20): FuelTripsResult {
     async function load() {
       try {
         const headers = await getAuthHeaders();
+        if (!headers) return; // remote without a token yet — skip; retry next interval (avoids 401 auth-ban)
         const r = await fetch(`${API_BASE()}/vanlife/fuel-trips?limit=${limit}`, {
           headers,
         });
@@ -114,19 +116,12 @@ export function useFuelTrips(limit = 20): FuelTripsResult {
   return { trips, validTrips, summary, loading, error };
 }
 
-/** Returns fuel economy color class for a given L/100km value */
+/** Returns fuel economy color class for a given L/100km value.
+ *  Tuned for the 3.5 EcoBoost Transit: good < 16, ok < 22, poor ≥ 22 L/100km. */
 export function fuelEconomyColor(l100km: number): string {
-  if (l100km < 12) return 'text-green-400';
-  if (l100km < 15) return 'text-amber-400';
+  if (l100km < 16) return 'text-green-400';
+  if (l100km < 22) return 'text-amber-400';
   return 'text-red-400';
-}
-
-/** Returns a stroke color for map segments */
-export function fuelEconomyStroke(l100km: number | undefined): string {
-  if (l100km == null) return '#6b7280'; // gray-500
-  if (l100km < 12) return '#4ade80';   // green-400
-  if (l100km < 15) return '#fb923c';   // orange-400
-  return '#f87171';                     // red-400
 }
 
 /** Find the fuel trip that best covers a GPS segment by timestamp */

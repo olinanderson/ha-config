@@ -198,3 +198,101 @@
           {{ this.state if this.state not in ['unknown', 'unavailable'] else none }}
         {% endif %}
       availability: "true"
+
+# ─── Vehicle Distance Odometer (triggered, km) ───────────────────────────────
+# A lifetime trip odometer built by integrating OBD vehicle speed (trapezoidal)
+# on each speed update — accurate, GPS-independent, and updates ~1 Hz while
+# driving. Live trip distance = this − input_number.trip_baseline_distance_km.
+# Mirrors "Vehicle Acceleration": dt from the trigger states' last_updated, a
+# 30 s dt cap so a WiCAN dropout can't inject a huge phantom segment, and a
+# speed sanity gate so a negative or 255-style sentinel can't spike it.
+# Trigger-based template sensors restore their last state across a Core restart
+# by default (this.state survives), so the lifetime total persists; a
+# template.reload starts it fresh from 0 (then the trip baseline re-captures 0).
+- trigger:
+    - trigger: state
+      entity_id: sensor.192_168_10_90_0d_vehiclespeed
+  sensor:
+    - name: "Vehicle Distance Odometer"
+      unique_id: vehicle_distance_odometer
+      unit_of_measurement: km
+      state_class: total_increasing
+      icon: mdi:counter
+      state: >
+        {% set base = this.state | float(0) %}
+        {% set f = trigger.from_state.state if trigger.from_state else none %}
+        {% set t = trigger.to_state.state   if trigger.to_state   else none %}
+        {% if f in [none,'unknown','unavailable'] or t in [none,'unknown','unavailable'] %}
+          {{ base }}
+        {% else %}
+          {% set prev = f | float(-1) %}
+          {% set curr = t | float(-1) %}
+          {% set dt = (trigger.to_state.last_updated - trigger.from_state.last_updated).total_seconds() %}
+          {# Skip implausible speeds (negative / 255-style sentinel) and dropout
+             gaps (>30 s) so neither inflates the one-directional lifetime total. #}
+          {% if prev >= 0 and curr >= 0 and prev <= 180 and curr <= 180 and dt > 0 and dt < 30 %}
+            {{ (base + (prev + curr) / 2 * dt / 3600) | round(4) }}
+          {% else %}
+            {{ base }}
+          {% endif %}
+        {% endif %}
+      availability: "true"
+
+# ─── Moving Fuel Total (triggered, L) ────────────────────────────────────────
+# Lifetime fuel burned ONLY while the van is moving: the same OBD fuel integral
+# as estimated_fuel_used_total_l, but each increment is added only when
+# vehicle_is_moving is on. The live trip's fuel + economy use this, so idling
+# (a red light, or a 1-2 h battery-charge idle) never skews L/100km. Idle fuel is
+# still visible via Live Trip Idle Fuel (= trip total fuel − trip moving fuel).
+- trigger:
+    - trigger: state
+      entity_id: sensor.estimated_fuel_used_total_l
+  sensor:
+    - name: "Moving Fuel Total"
+      unique_id: moving_fuel_total
+      unit_of_measurement: L
+      state_class: total_increasing
+      icon: mdi:gas-station
+      state: >
+        {% set base = this.state | float(0) %}
+        {% set f = trigger.from_state.state if trigger.from_state else none %}
+        {% set t = trigger.to_state.state   if trigger.to_state   else none %}
+        {% if f in [none,'unknown','unavailable'] or t in [none,'unknown','unavailable'] %}
+          {{ base }}
+        {% else %}
+          {% set prev = f | float(0) %}
+          {% set curr = t | float(0) %}
+          {# total is cumulative; curr<prev means it reset (HA restart) → skip.
+             Add the increment only while actually moving. #}
+          {% if curr >= prev and is_state('binary_sensor.vehicle_is_moving','on') %}
+            {{ (base + (curr - prev)) | round(4) }}
+          {% else %}
+            {{ base }}
+          {% endif %}
+        {% endif %}
+      availability: "true"
+
+# ─── Moving Seconds Total (triggered, s) ─────────────────────────────────────
+# Lifetime driving time (seconds the van is actually moving), summing dt between
+# OBD speed updates while vehicle_is_moving is on. The live trip's "driving" time
+# and avg speed come from this, so a long idle doesn't inflate them. Same 30 s
+# dt dropout cap as the odometer.
+- trigger:
+    - trigger: state
+      entity_id: sensor.192_168_10_90_0d_vehiclespeed
+  sensor:
+    - name: "Moving Seconds Total"
+      unique_id: moving_seconds_total
+      unit_of_measurement: s
+      state_class: total_increasing
+      icon: mdi:timer-outline
+      state: >
+        {% set base = this.state | float(0) %}
+        {% set dt = (trigger.to_state.last_updated - trigger.from_state.last_updated).total_seconds()
+                    if (trigger.from_state and trigger.to_state) else 0 %}
+        {% if dt > 0 and dt < 30 and is_state('binary_sensor.vehicle_is_moving','on') %}
+          {{ (base + dt) | round(1) }}
+        {% else %}
+          {{ base }}
+        {% endif %}
+      availability: "true"

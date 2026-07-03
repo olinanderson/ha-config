@@ -551,6 +551,72 @@
         notification_id: fillup_detected
 
 # ────────────────────────────────────────────────────────────────
+# Live Trip computer — baseline reset / end stamping
+# ────────────────────────────────────────────────────────────────
+# Captures the trip baselines (odometer, fuel total, start time) when a NEW drive
+# begins. A trip is anchored to actual MOVEMENT (not engine-on), so merely
+# starting the engine to idle/warm up does NOT begin a trip — only driving does.
+# "New" = the van had been NOT MOVING (idle OR engine-off, uniformly) for longer
+# than input_number.trip_split_minutes, or no trip is recorded yet. Shorter
+# stops (the usual 5-30 min fuel/coffee/errand stops) keep accumulating the same
+# trip — including any idle fuel burned during them. trigger.from_state is the
+# vehicle_is_moving 'off' state, whose last_changed marks when motion stopped, so
+# the gap spans the whole stop even across an engine-off period.
+- id: live_trip_reset_on_drive_start
+  alias: "Live Trip • reset on new drive"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: binary_sensor.vehicle_is_moving
+      from: "off"
+      to: "on"
+  condition:
+    - condition: template
+      value_template: >
+        {% set gap = (now() - trigger.from_state.last_changed).total_seconds()
+                     if trigger.from_state else 999999 %}
+        {% set split = states('input_number.trip_split_minutes') | float(35) * 60 %}
+        {{ states('input_text.trip_start_ts') | int(0) == 0 or gap > split }}
+  action:
+    - action: input_number.set_value
+      target: { entity_id: input_number.trip_baseline_distance_km }
+      data: { value: "{{ states('sensor.vehicle_distance_odometer') | float(0) }}" }
+    - action: input_number.set_value
+      target: { entity_id: input_number.trip_baseline_fuel_l }
+      data: { value: "{{ states('sensor.estimated_fuel_used_total_l') | float(0) }}" }
+    # Movement-gated baselines (fuel + time burned/elapsed only while moving).
+    - action: input_number.set_value
+      target: { entity_id: input_number.trip_baseline_moving_fuel_l }
+      data: { value: "{{ states('sensor.moving_fuel_total') | float(0) }}" }
+    - action: input_number.set_value
+      target: { entity_id: input_number.trip_baseline_moving_s }
+      data: { value: "{{ states('sensor.moving_seconds_total') | float(0) }}" }
+    - action: input_text.set_value
+      target: { entity_id: input_text.trip_start_ts }
+      data: { value: "{{ (now().timestamp() * 1000) | int }}" }
+    # Clear the previous end so the duration counts live again from now.
+    - action: input_text.set_value
+      target: { entity_id: input_text.trip_end_ts }
+      data: { value: "0" }
+
+# Stamps the trip end when the engine stops, so the card freezes the trip
+# duration at the stop instead of ticking forever while parked. (A brief stop
+# under 20 min won't reset the trip — see the automation above — so the duration
+# simply resumes counting when the engine restarts.)
+- id: live_trip_mark_end_on_stop
+  alias: "Live Trip • mark end on engine off"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: binary_sensor.engine_is_running
+      from: "on"
+      to: "off"
+  action:
+    - action: input_text.set_value
+      target: { entity_id: input_text.trip_end_ts }
+      data: { value: "{{ (now().timestamp() * 1000) | int }}" }
+
+# ────────────────────────────────────────────────────────────────
 # Auto Power Saving When Driving
 # ────────────────────────────────────────────────────────────────
 - id: auto_power_saving_when_driving
@@ -613,6 +679,7 @@
 
 - alias: Shelly EM – one-second ping updater
   mode: single # don’t queue if it takes longer than a second
+  max_exceeded: silent # a 1 Hz poll that occasionally runs long shouldn't spam "Already running"
   trigger:
     - trigger: time_pattern
       seconds: "/1" # fires every 1 s

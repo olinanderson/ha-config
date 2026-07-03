@@ -483,3 +483,106 @@
             ~{{ m }}m until empty
           {% endif %}
         {% endif %}
+
+# ─── Live Trip computer ──────────────────────────────────────────────────────
+# Live, ~1 Hz trip stats for the dashboard's Current Trip card. Distance = OBD
+# odometer delta since the trip baseline; fuel = OBD fuel-integral delta since
+# baseline; economy = fuel ÷ distance. Baselines are captured at trip start by
+# the "Live Trip • reset on new drive" automation. All three freeze naturally
+# when parked (their source entities stop changing), so the card shows the
+# completed drive until the next one starts. Emit `none` (→ unknown), never 0.
+- sensor:
+    - name: "Live Trip Distance"
+      unique_id: live_trip_distance
+      unit_of_measurement: km
+      icon: mdi:map-marker-distance
+      state: >
+        {% set odo  = states('sensor.vehicle_distance_odometer') | float(none) %}
+        {% set base = states('input_number.trip_baseline_distance_km') | float(none) %}
+        {% if odo is none or base is none %}
+          {{ none }}
+        {% else %}
+          {{ [odo - base, 0] | max | round(2) }}
+        {% endif %}
+
+    - name: "Live Trip Fuel"
+      unique_id: live_trip_fuel
+      unit_of_measurement: L
+      icon: mdi:gas-station
+      state: >
+        {# MOVING fuel only — idle is excluded so a long charge-idle never skews
+           the trip. Uses the movement-gated integral, not the raw total. #}
+        {% set mov  = states('sensor.moving_fuel_total') | float(none) %}
+        {% set base = states('input_number.trip_baseline_moving_fuel_l') | float(none) %}
+        {# A drop well below baseline means the accumulator reset (HA restart /
+           reload) — emit unknown, NOT a clamped 0, so economy shows '—' not a
+           confident fake 0.0. The 0.05 L tolerance keeps a near-zero start normal. #}
+        {% if mov is none or base is none or mov < base - 0.05 %}
+          {{ none }}
+        {% else %}
+          {{ (mov - base) | round(2) }}
+        {% endif %}
+
+    - name: "Live Trip Idle Fuel"
+      unique_id: live_trip_idle_fuel
+      unit_of_measurement: L
+      icon: mdi:fuel
+      state: >
+        {# Fuel burned while NOT moving this trip = trip total fuel − trip moving
+           fuel. Shown separately so you can see idle consumption without it
+           polluting the trip economy. #}
+        {% set tot = states('sensor.estimated_fuel_used_total_l') | float(none) %}
+        {% set bf  = states('input_number.trip_baseline_fuel_l') | float(none) %}
+        {% set mov = states('sensor.live_trip_fuel') | float(none) %}
+        {% if tot is none or bf is none or mov is none or tot < bf - 0.05 %}
+          {{ none }}
+        {% else %}
+          {{ [ (tot - bf) - mov, 0 ] | max | round(2) }}
+        {% endif %}
+
+    - name: "Live Trip Drive Seconds"
+      unique_id: live_trip_drive_seconds
+      unit_of_measurement: s
+      icon: mdi:timer-outline
+      state: >
+        {# Driving time only (idle excluded) — trip moving seconds since baseline. #}
+        {% set mov  = states('sensor.moving_seconds_total') | float(none) %}
+        {% set base = states('input_number.trip_baseline_moving_s') | float(none) %}
+        {% if mov is none or base is none or mov < base - 1 %}
+          {{ none }}
+        {% else %}
+          {{ [mov - base, 0] | max | round(0) }}
+        {% endif %}
+
+    - name: "Live Trip Economy"
+      unique_id: live_trip_economy
+      unit_of_measurement: "L/100km"
+      state_class: measurement
+      icon: mdi:gas-station
+      state: >
+        {% set km = states('sensor.live_trip_distance') | float(none) %}
+        {% set l  = states('sensor.live_trip_fuel') | float(none) %}
+        {# live_trip_fuel is MOVING fuel, so this economy excludes idle. Need
+           ≥0.1 km before it's meaningful; below that, emit unknown. #}
+        {% if km is none or l is none or km < 0.1 %}
+          {{ none }}
+        {% else %}
+          {{ (l / km * 100) | round(1) }}
+        {% endif %}
+
+    - name: "Live Trip Range Remaining"
+      unique_id: live_trip_range_remaining
+      unit_of_measurement: km
+      state_class: measurement
+      icon: mdi:map-marker-distance
+      state: >
+        {# Estimated km to empty computed from THIS trip's economy (NOT the ECU's
+           distance-to-empty): tank litres remaining ÷ live_trip_economy × 100.
+           Tank = 94.6 L; level = stable_fuel_level (the dashboard hero %). #}
+        {% set pct  = states('sensor.stable_fuel_level') | float(none) %}
+        {% set econ = states('sensor.live_trip_economy') | float(none) %}
+        {% if pct is none or econ is none or econ <= 0 %}
+          {{ none }}
+        {% else %}
+          {{ (pct / 100 * 94.6 / econ * 100) | round(0) }}
+        {% endif %}

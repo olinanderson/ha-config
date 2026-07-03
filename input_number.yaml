@@ -52,3 +52,51 @@ vanlife_stop_rating:
   max: 5
   step: 1
   initial: 0
+
+# --- Live Trip computer baselines (captured at trip start) ---
+# No `initial:` on purpose so they RESTORE across HA restarts (a mid-trip restart
+# keeps the same trip). Set by the "Live Trip • reset on new drive" automation.
+trip_baseline_distance_km:
+  name: "Trip Baseline Distance"
+  icon: mdi:map-marker-distance
+  min: 0
+  max: 100000000
+  step: 0.001
+  unit_of_measurement: km
+
+trip_baseline_fuel_l:
+  name: "Trip Baseline Fuel"
+  icon: mdi:gas-station
+  min: 0
+  max: 100000000
+  step: 0.001
+  unit_of_measurement: L
+
+# Movement-gated baselines: live trip fuel/time count only while moving, so idle
+# never skews the trip. No `initial:` → restore across restarts.
+trip_baseline_moving_fuel_l:
+  name: "Trip Baseline Moving Fuel"
+  icon: mdi:gas-station
+  min: 0
+  max: 100000000
+  step: 0.001
+  unit_of_measurement: L
+
+trip_baseline_moving_s:
+  name: "Trip Baseline Moving Seconds"
+  icon: mdi:timer-outline
+  min: 0
+  max: 1000000000
+  step: 0.1
+  unit_of_measurement: s
+
+# How long the van must be NOT MOVING (idle OR engine-off) before the next drive
+# counts as a NEW trip. Stops shorter than this stay grouped into one trip.
+trip_split_minutes:
+  name: "Trip Split Gap"
+  icon: mdi:timer-sand
+  min: 5
+  max: 120
+  step: 5
+  initial: 35
+  unit_of_measurement: "min"

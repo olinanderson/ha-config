@@ -32,11 +32,14 @@ async function getAuthToken(): Promise<string | null> {
   });
 }
 
-/** Auth headers — needed when routing through HA's API proxy */
-async function authHeaders(): Promise<Record<string, string>> {
+/** Auth headers — needed when routing through HA's API proxy.
+ *  Returns null when remote and no token is available yet, so callers SKIP the
+ *  request rather than firing it unauthenticated (which trips HA's auth-ban
+ *  warning on the requires_auth `/api/vanlife/*` proxy). Retries next interval. */
+async function authHeaders(): Promise<Record<string, string> | null> {
   if (IS_LOCAL) return {};
   const token = await getAuthToken();
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return token ? { Authorization: `Bearer ${token}` } : null;
 };
 
 /* ── Types ─────────────────────────────────────────────────────────── */
@@ -124,7 +127,9 @@ export async function fetchFilteredGps(
   signal?: AbortSignal,
 ): Promise<FilteredGpsResponse | null> {
   const url = `${API_BASE()}/vanlife/filtered-gps?start=${start.getTime()}&end=${end.getTime()}`;
-  const r = await fetch(url, { signal, headers: await authHeaders() });
+  const h = await authHeaders();
+  if (!h) return null;
+  const r = await fetch(url, { signal, headers: h });
   if (!r.ok) return null;
   const d = await r.json();
   if (!d.ready || !d.segments || d.segments.length === 0) return null;
@@ -132,14 +137,18 @@ export async function fetchFilteredGps(
 }
 
 export async function fetchNamedPlaces(signal?: AbortSignal): Promise<NamedPlace[]> {
-  const r = await fetch(`${API_BASE()}/vanlife/named-places`, { signal, headers: await authHeaders() });
+  const h = await authHeaders();
+  if (!h) return [];
+  const r = await fetch(`${API_BASE()}/vanlife/named-places`, { signal, headers: h });
   if (!r.ok) return [];
   const d = await r.json();
   return d.places ?? [];
 }
 
 export async function fetchDataRange(signal?: AbortSignal): Promise<DataRange | null> {
-  const r = await fetch(`${API_BASE()}/vanlife/data-range`, { signal, headers: await authHeaders() });
+  const h = await authHeaders();
+  if (!h) return null;
+  const r = await fetch(`${API_BASE()}/vanlife/data-range`, { signal, headers: h });
   if (!r.ok) return null;
   return r.json();
 }
@@ -148,9 +157,11 @@ export async function fetchFuelTrips(
   limit = 20,
   signal?: AbortSignal,
 ): Promise<FuelTripsResponse | null> {
+  const h = await authHeaders();
+  if (!h) return null;
   const r = await fetch(`${API_BASE()}/vanlife/fuel-trips?limit=${limit}`, {
     signal,
-    headers: await authHeaders(),
+    headers: h,
   });
   if (!r.ok) return null;
   const d = await r.json();
@@ -187,10 +198,12 @@ export async function updateNamedPlace(
 }
 
 export async function deleteNamedPlace(id: string, signal?: AbortSignal): Promise<boolean> {
+  const h = await authHeaders();
+  if (!h) return false;
   const r = await fetch(`${API_BASE()}/vanlife/named-places/${id}`, {
     method: 'DELETE',
     signal,
-    headers: await authHeaders(),
+    headers: h,
   });
   return r.ok;
 }
