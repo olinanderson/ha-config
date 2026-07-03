@@ -1783,6 +1783,8 @@ sensor:
   - platform: adc
     pin: 5
     name: "A32 Pro A3 Current"
+    device_class: current   # was inheriting the adc platform's default 'voltage', invalid for mA
+    state_class: measurement
     update_interval: 5s
     unit_of_measurement: mA
     attenuation: 12db
@@ -1791,6 +1793,8 @@ sensor:
   - platform: adc
     pin: 4
     name: "A32 Pro A4 Current"
+    device_class: current
+    state_class: measurement
     update_interval: 5s
     unit_of_measurement: mA
     attenuation: 12db

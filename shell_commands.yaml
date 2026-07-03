@@ -22,6 +22,17 @@ start_scream_receiver: >
   docker exec hassio_audio pkill -f scream || true ;
   docker exec -d hassio_audio scream -u -v -o pulse -s alsa_output.usb-Generic_USB_SPDIF_Adapter_202110200032-00.iec958-stereo -n WinPC'
 
+# Start the VBAN audio receiver (replaces scream): PC audio -> van SPDIF. Runs a
+# script on the HAOS host that sets up UDP-6980 forwarding, stages the receiver
+# binary into hassio_audio, applies the tsched=0 crackle fix, sets the SPDIF sink
+# as default, and starts vban_receptor. Binary + script live in /config/vban/.
+start_vban_receptor: >
+  ssh -i /config/ssh_keys/ha_host_id_ed25519
+  -p 22222
+  -o StrictHostKeyChecking=no
+  root@172.30.32.1
+  'sh /mnt/data/supervisor/homeassistant/vban/start-receiver.sh'
+
 # Restart routing CORS proxy
 restart_osrm_proxy: >
   /bin/sh -c '
@@ -49,13 +60,13 @@ start_osrm_proxy: >
 # Diagnostic: dump ps aux + netstat from inside HA container to a readable file
 diag_psout: sh /config/www/vanlife-panel/psout.sh
 
-# Start Syncthing for bidirectional config sync with PC over Tailscale
+# Start Syncthing for bidirectional config sync with PC over Tailscale.
+# Uses a double-fork launcher so the shell_command returns immediately — a plain
+# `nohup ... &` left an fd tied to HA's pipe and blocked until the 60 s timeout,
+# spamming "Timed out running command" every ~3 min from the liveness watchdog.
 start_syncthing: >
   /bin/sh -c 'if ! nc -z 127.0.0.1 22000 2>/dev/null; then
-    nohup /config/.ha-sync/syncthing serve
-      --home=/config/.ha-sync/st-config
-      --no-browser --no-upgrade
-      > /config/.ha-sync/syncthing.log 2>&1 &
+    python3 /config/www/vanlife-panel/start_syncthing_daemon.py;
     echo "Syncthing started";
   else
     echo "Syncthing already running";

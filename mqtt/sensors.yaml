@@ -306,25 +306,6 @@
   expire_after: 60
   device: *wican_device
 
-- name: "Intake Air Temp 2"
-  unique_id: "wican_intake_air_temp_2"
-  state_topic: "wican/INTAKE_AIR_TEMP_2"
-  value_template: "{{ value_json.values() | first }}"
-  unit_of_measurement: "°C"
-  device_class: temperature
-  state_class: measurement
-  expire_after: 60
-  device: *wican_device
-
-- name: "Octane Ratio"
-  unique_id: "wican_octane_ratio_l"
-  state_topic: "wican/OCTANE_RATIO_L"
-  value_template: "{{ value_json.values() | first }}"
-  unit_of_measurement: "%"
-  state_class: measurement
-  expire_after: 60
-  device: *wican_device
-
 - name: "Oil Life"
   unique_id: "wican_oil_life"
   state_topic: "wican/OIL_LIFE"
@@ -634,9 +615,12 @@
 - name: "Apple Watch BMI"
   unique_id: "apple_watch_bmi"
   state_topic: "healthexport/data"
+    # Emit only when the payload actually carries a BMI metric; otherwise render
+    # empty so MQTT keeps the last state instead of erroring on a non-numeric
+    # self-referential fallback (this metric is usually absent from the payload).
   value_template: >-
     {% set r = value_json.data.metrics | selectattr('name','eq','body_mass_index') | map(attribute='data') | first | default([]) %}
-    {% if r %}{{ r[-1].qty | float(0) | round(1) }}{% else %}{{ states('sensor.apple_watch_bmi') }}{% endif %}
+    {% if r %}{{ r[-1].qty | float(0) | round(1) }}{% endif %}
   unit_of_measurement: "kg/m²"
   state_class: measurement
   icon: mdi:human
