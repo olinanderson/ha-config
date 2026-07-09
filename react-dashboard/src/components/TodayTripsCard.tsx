@@ -33,6 +33,13 @@ function segmentColor(l100km?: number): string {
   return '#f87171';
 }
 
+function economyTextColor(l100km?: number | null): string {
+  if (l100km == null) return 'text-muted-foreground';
+  if (l100km < 16) return 'text-green-400';
+  if (l100km < 22) return 'text-amber-400';
+  return 'text-red-400';
+}
+
 /** Find the fuel/battery trip that best overlaps a GPS segment by timestamp. */
 function tripForSegment(segStart: number, segEnd: number, trips: FuelTripApi[]): FuelTripApi | null {
   const overlapping = trips.filter(t => t.start_ts <= segEnd && t.end_ts >= segStart);
@@ -49,6 +56,7 @@ interface Summary {
   km: number;
   driveSec: number;
   fuelL: number | null;
+  avgL100: number | null;
   battWh: number | null;
   battPct: number | null;
 }
@@ -172,7 +180,7 @@ export function TodayTripsCard() {
 
         if (!segs.length) {
           setHasTrips(false);
-          setSummary({ trips: 0, km: 0, driveSec: 0, fuelL: null, battWh: null, battPct: null });
+          setSummary({ trips: 0, km: 0, driveSec: 0, fuelL: null, avgL100: null, battWh: null, battPct: null });
           setLoading(false);
           return;
         }
@@ -211,8 +219,17 @@ export function TodayTripsCard() {
         const windowTrips = trips.filter(t => t.start_ts >= s && t.start_ts < e);
         const anyFuel = windowTrips.some(t => t.l_per_100km != null);
         const anyBatt = windowTrips.some(t => t.battery_gain_wh != null);
-        const fuelL = windowTrips.reduce(
-          (acc, t) => acc + (t.l_per_100km != null && t.distance_km ? (t.l_per_100km * t.distance_km) / 100 : 0), 0);
+        // Sum litres and km from the SAME trips (economy-valid only), so the
+        // distance-weighted average = totalL ÷ totalKm × 100 has no drift.
+        let fuelL = 0;
+        let fuelKm = 0;
+        for (const t of windowTrips) {
+          if (t.l_per_100km != null && t.distance_km) {
+            fuelL += (t.l_per_100km * t.distance_km) / 100;
+            fuelKm += t.distance_km;
+          }
+        }
+        const avgL100 = fuelKm > 0 ? (fuelL / fuelKm) * 100 : null;
         const battWh = windowTrips.reduce((acc, t) => acc + (t.battery_gain_wh ?? 0), 0);
         const battPct = windowTrips.reduce((acc, t) => acc + (t.battery_gain_pct ?? 0), 0);
 
@@ -220,6 +237,7 @@ export function TodayTripsCard() {
         setSummary({
           trips: segs.length, km, driveSec,
           fuelL: anyFuel ? fuelL : null,
+          avgL100: anyFuel ? avgL100 : null,
           battWh: anyBatt ? battWh : null,
           battPct: anyBatt ? battPct : null,
         });
@@ -252,7 +270,7 @@ export function TodayTripsCard() {
   return (
     <Card
       className="overflow-hidden cursor-pointer hover:border-primary/40 transition-colors"
-      onClick={() => { window.location.hash = 'map'; }}
+      onClick={() => { window.location.hash = 'map?range=7d'; }}
     >
       <div className="flex items-center gap-2 px-3 py-2 border-b border-border">
         <MapIcon className="h-4 w-4" />
@@ -275,6 +293,11 @@ export function TodayTripsCard() {
               {(summary.fuelL != null || summary.battPct != null) && (
                 <div className="flex items-center gap-x-3 flex-wrap tabular-nums text-muted-foreground">
                   {summary.fuelL != null && <span>⛽ {summary.fuelL.toFixed(1)} L</span>}
+                  {summary.avgL100 != null && (
+                    <span className={economyTextColor(summary.avgL100)}>
+                      📊 {summary.avgL100.toFixed(1)} L/100km avg
+                    </span>
+                  )}
                   {summary.battPct != null && (
                     <span className={summary.battPct >= 0 ? 'text-green-400' : 'text-orange-400'}>
                       🔋 {summary.battPct >= 0 ? '+' : '−'}{Math.abs(summary.battPct).toFixed(1)}%

@@ -20,9 +20,10 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Route, MapPin, Clock, Fuel, Gauge } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { fuelEconomyColor } from '@/hooks/useFuelTrips';
+import { fuelEconomyColor, useFuelTrips } from '@/hooks/useFuelTrips';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { cn } from '@/lib/utils';
+import { FuelRibbon } from './FuelRibbon';
 
 function fmtDuration(ms: number): string {
   const sec = Math.max(0, Math.floor(ms / 1000));
@@ -63,6 +64,7 @@ export function CurrentTripCard() {
   const { value: driveSec } = useEntityNumeric('sensor.live_trip_drive_seconds');
   const { value: idleFuel } = useEntityNumeric('sensor.live_trip_idle_fuel');
   const { value: range } = useEntityNumeric('sensor.live_trip_range_remaining');
+  const { summary } = useFuelTrips(30); // personal distance-weighted economy baseline
   const startEntity = useEntity('input_text.trip_start_ts');
   const movingEntity = useEntity('binary_sensor.vehicle_is_moving');
   const isMoving = movingEntity?.state === 'on';
@@ -161,6 +163,8 @@ export function CurrentTripCard() {
                 <span className="text-sm text-muted-foreground">km to empty</span>
               </div>
             )}
+            {/* Beating-your-average ribbon (vs personal distance-weighted baseline) */}
+            <FuelRibbon actual={econ} distanceKm={distance} expected={summary?.avg_l_per_100km ?? null} />
             <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2 text-[11px] tabular-nums text-muted-foreground">
               {avgSpeed != null && <span>{avgSpeed.toFixed(0)} km/h avg</span>}
               {kmPerL != null && (

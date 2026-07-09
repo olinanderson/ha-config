@@ -81,6 +81,24 @@ function strToDate(s: string): Date {
   return new Date(y, m - 1, d);
 }
 
+/** Initial date-picker state, honoring an optional `#map?range=7d` deep-link
+ *  (from the Home/Environment "Last 7 Days" card): open the last-7-days weekly
+ *  view. Anything else opens today (the normal default). */
+function readHashDateState(): { mode: 'daily' | 'weekly' | 'range'; start: string; end: string } {
+  const today = new Date();
+  const todayStr = dateToStr(today);
+  const qi = window.location.hash.indexOf('?');
+  if (qi !== -1) {
+    const params = new URLSearchParams(window.location.hash.slice(qi + 1));
+    if (params.get('range') === '7d') {
+      const start = new Date(today);
+      start.setDate(start.getDate() - 6); // today-6 .. today = 7 days, matches the card
+      return { mode: 'weekly', start: dateToStr(start), end: todayStr };
+    }
+  }
+  return { mode: 'daily', start: todayStr, end: todayStr };
+}
+
 function timeOpacity(t: number): number {
   return 0.2 + t * 0.8; // 20% → 100% linearly
 }
@@ -158,10 +176,11 @@ export default function VanlifeMap() {
   const routeLayer = useRef<L.LayerGroup | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  // State
-  const [dateMode, setDateMode] = useState<'daily' | 'weekly' | 'range'>('daily');
-  const [startDate, setStartDate] = useState(dateToStr(new Date()));
-  const [endDate, setEndDate] = useState(dateToStr(new Date()));
+  // State — seed from an optional `#map?range=7d` deep-link (last-7-days card).
+  const initialDates = useMemo(readHashDateState, []);
+  const [dateMode, setDateMode] = useState<'daily' | 'weekly' | 'range'>(initialDates.mode);
+  const [startDate, setStartDate] = useState(initialDates.start);
+  const [endDate, setEndDate] = useState(initialDates.end);
   const [minDate, setMinDate] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [status, setStatus] = useState('');
@@ -280,6 +299,16 @@ export default function VanlifeMap() {
     fetchDataRange().then(d => {
       if (d) setMinDate(d.min_date);
     });
+  }, []);
+
+  // The initial date state already consumed any `?range=7d` deep-link param, so
+  // strip it and settle the URL back to `#map`. replaceState avoids firing a
+  // hashchange (no remount/reset of the dates we just seeded).
+  useEffect(() => {
+    const qi = window.location.hash.indexOf('?');
+    if (qi !== -1) {
+      window.history.replaceState(null, '', window.location.hash.slice(0, qi));
+    }
   }, []);
 
   /* ── Fetch places ────────────────────────────────────────────────── */

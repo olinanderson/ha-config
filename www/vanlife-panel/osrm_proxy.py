@@ -534,6 +534,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 self._json(500, {"error": str(e)})
             return
 
+        if self.path.startswith('/vanlife/nws-alerts'):
+            self._handle_nws_alerts()
+            return
+
         if self.path.startswith('/vanlife/fuel-trips'):
             self._handle_fuel_trips()
             return
@@ -562,6 +566,52 @@ class ProxyHandler(BaseHTTPRequestHandler):
             self.end_headers()
             self.wfile.write(str(e).encode())
 
+
+    # ── GET /vanlife/nws-alerts?lat=&lon= ────────────────────────────────────
+    # Server-side fetch of active NWS alerts for a point. Server-side (not
+    # browser) because api.weather.gov requires a real User-Agent — the HA rest
+    # sensor can't set one, and the browser card fetches api.weather.gov directly
+    # for its own display. lat/lon are injected by the rest sensor's
+    # resource_template from the live GPS tracker, so no recorder lookup is
+    # needed (device_tracker lat/lon live in state_attributes, not states.state,
+    # so the numeric _nearest_state helper cannot read them).
+    def _handle_nws_alerts(self):
+        qs   = parse_qs(urlparse(self.path).query)
+        lat  = (qs.get('lat', [''])[0] or '').strip()
+        lon  = (qs.get('lon', [''])[0] or '').strip()
+        rank = {"Extreme": 4, "Severe": 3, "Moderate": 2, "Minor": 1, "Unknown": 0}
+        empty = {"count": 0, "highest_event": "none", "highest_severity": "none",
+                 "alert_id": "", "expires": "", "headline": ""}
+        # Unknown/blank GPS (tracker not yet reporting) → report "none" quietly
+        # rather than error, so the sensor and its automation stay calm.
+        try:
+            latf, lonf = float(lat), float(lon)
+        except (TypeError, ValueError):
+            self._json(200, empty)
+            return
+        url = (f"https://api.weather.gov/alerts/active"
+               f"?point={latf:.4f},{lonf:.4f}&status=actual&message_type=alert")
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "vanlife-panel/1.0 (olin@helmora.io)",
+            "Accept": "application/geo+json",
+        })
+        try:
+            with urllib.request.urlopen(req, timeout=TIMEOUT) as r:
+                feats = json.loads(r.read()).get("features", [])
+        except Exception as e:
+            self._json(200, dict(empty, error=str(e)))
+            return
+        active = [f.get("properties", {}) for f in feats]
+        active.sort(key=lambda p: -rank.get(p.get("severity", "Unknown"), 0))
+        top = active[0] if active else None
+        self._json(200, {
+            "count":            len(active),
+            "highest_event":    (top or {}).get("event", "none"),
+            "highest_severity": (top or {}).get("severity", "none"),
+            "alert_id":         (top or {}).get("id", ""),
+            "expires":          (top or {}).get("expires", ""),
+            "headline":         (top or {}).get("headline", ""),
+        })
 
     # ── GET /vanlife/fuel-trips?limit=N ──────────────────────────────────────
     # Returns per-trip fuel efficiency by grouping driving segments between

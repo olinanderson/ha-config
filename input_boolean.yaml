@@ -59,3 +59,10 @@ inverter_state:
 inverter_manual_lock:
   name: "Inverter Manual Lock"
   icon: mdi:lock
+
+# "I know" dismiss for the Ready-to-Drive Guard. When ON, the guard stays quiet
+# for the current drive; auto-cleared when the engine next turns off.
+rtd_guard_override:
+  name: "Ready-to-Drive Guard Override"
+  icon: mdi:steering
+  initial: off

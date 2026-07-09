@@ -60,6 +60,26 @@ input_select: !include input_select.yaml
 # --- Template sensors & binary sensors ---
 template: !include_dir_merge_list template/
 
+# --- REST sensors ---
+# NWS severe-weather alerts at the van's LIVE GPS point. resource_template
+# injects the current tracker lat/lon into the proxy URL each scan, so the alert
+# subscription follows the van instead of a fixed home zone. The proxy does the
+# api.weather.gov fetch server-side (it needs a real User-Agent). NEW `rest:` key.
+rest:
+  - resource_template: >-
+      http://127.0.0.1:8765/vanlife/nws-alerts?lat={{ state_attr('device_tracker.ublox_gps','latitude') | default('', true) }}&lon={{ state_attr('device_tracker.ublox_gps','longitude') | default('', true) }}
+    scan_interval: 300
+    sensor:
+      - name: "NWS Highest Alert"
+        unique_id: nws_highest_alert
+        value_template: "{{ value_json.highest_event }}"
+        json_attributes:
+          - count
+          - highest_severity
+          - alert_id
+          - expires
+          - headline
+
 # --- Integration sensors (Riemann, statistics, history) ---
 # NOTE: the smoothed fuel level sensor.wican_fuel_5_min_mean (statistics, mean
 # over 5 min) lives in integrations/sensor.yaml. There is intentionally no

@@ -243,39 +243,125 @@ export function RadarMapOverlay({
   );
 }
 
-// ─── Compact Widget ───
+// ─── Radar panel (bare — map + time readout + controls, no Card wrapper) ───
+// Reused by the Card-wrapped RadarWidget (NWS alert popup) and the Environment
+// Conditions selector. `mapClassName` lets the caller size the map to fill.
 
-export function RadarWidget({ lat, lon, onOpenMap }: { lat: number | undefined; lon: number | undefined; onOpenMap?: () => void }) {
+export function RadarPanel({ lat, lon, mapClassName = 'h-52' }: { lat: number; lon: number; mapClassName?: string }) {
   const { frames, loading } = useRadarFrames();
   const [frameIdx, setFrameIdx] = useState(0);
   const [playing, setPlaying] = useState(false); // start paused at current time
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
-  // Set to latest past frame when frames load
+  // Start at the current-time frame when frames load.
   useEffect(() => {
     if (frames.length === 0) return;
     setFrameIdx(latestPastIdx(frames));
   }, [frames.length]);
 
-  // Auto-play: stop at end instead of looping (prevents the reset jank)
+  // Auto-play through ALL frames (past history + nowcast), stop at the end.
   useEffect(() => {
     if (!playing || frames.length === 0) return;
     intervalRef.current = setInterval(() => {
       setFrameIdx((i) => {
-        const pastCount = frames.filter(f => f.time <= Date.now() / 1000).length;
         const next = i + 1;
-        if (next >= pastCount) { setPlaying(false); return i; } // stop at end
+        if (next >= frames.length) { setPlaying(false); return i; }
         return next;
       });
-    }, 700);
+    }, 600);
     return () => { if (intervalRef.current) clearInterval(intervalRef.current); };
-  }, [playing, frames]);
+  }, [playing, frames.length]);
 
-  if (!lat || !lon) return null;
   const now = Date.now() / 1000;
   const currentFrame = frames[frameIdx] ?? null;
-  const pastFrames = frames.filter(f => f.time <= now);
+  const isNowcast = (currentFrame?.time ?? 0) > now + 60;
+  const offsetMin = currentFrame ? Math.round((currentFrame.time - now) / 60) : 0;
+  const offsetLabel = Math.abs(offsetMin) < 3 ? 'now' : offsetMin > 0 ? `+${offsetMin}m` : `${offsetMin}m`;
+  const atEnd = frameIdx >= frames.length - 1;
 
+  const step = (d: number) => {
+    setPlaying(false);
+    setFrameIdx((i) => Math.max(0, Math.min(frames.length - 1, i + d)));
+  };
+
+  const nowIdx = frames.length ? latestPastIdx(frames) : 0;
+  const latestPast = frames[nowIdx] ?? null;
+  const nowFrac = frames.length > 1 ? nowIdx / (frames.length - 1) : 0;
+
+  if (loading) return <div className="text-xs text-muted-foreground">Loading…</div>;
+
+  return (
+    <div className="space-y-2">
+      {/* Leaflet map instead of canvas — correct tile projection */}
+      <div className={`w-full ${mapClassName} rounded-lg overflow-hidden bg-black/30`}>
+        <RadarLeafletMap frame={currentFrame} lat={lat} lon={lon} />
+      </div>
+      {currentFrame && (
+        <div className="space-y-1.5 pt-0.5">
+          {/* Date + time of the shown frame */}
+          <div className="flex items-center justify-center gap-2 text-sm">
+            <span className={isNowcast ? 'font-semibold text-blue-400' : 'font-semibold text-foreground'}>
+              {new Date(currentFrame.time * 1000).toLocaleString([], { weekday: 'short', hour: 'numeric', minute: '2-digit' })}
+            </span>
+            <span className="text-xs text-muted-foreground">
+              {isNowcast ? `forecast +${offsetMin}m` : offsetLabel}
+            </span>
+            {isNowcast && (
+              <span className="rounded bg-blue-500/20 px-1.5 py-0.5 text-[10px] font-medium text-blue-400">NOWCAST</span>
+            )}
+          </div>
+          {/* Stepped scrubber — drag through frames (snaps to each) */}
+          <input
+            type="range"
+            min={0}
+            max={frames.length - 1}
+            step={1}
+            value={frameIdx}
+            onChange={(e) => { setPlaying(false); setFrameIdx(Number(e.target.value)); }}
+            className="block h-1.5 w-full cursor-pointer accent-blue-400"
+            aria-label="Radar time scrubber"
+          />
+          {/* Tick labels: earliest · now · latest */}
+          <div className="relative h-3 text-[10px] text-muted-foreground">
+            <span className="absolute left-0 tabular-nums">{formatFrameTime(frames[0].time)}</span>
+            {nowFrac > 0.06 && nowFrac < 0.94 && (
+              <span className="absolute -translate-x-1/2 font-medium text-amber-500" style={{ left: `${nowFrac * 100}%` }}>
+                now
+              </span>
+            )}
+            <span className="absolute right-0 tabular-nums">{formatFrameTime(frames[frames.length - 1].time)}</span>
+          </div>
+          {/* Playback controls + last-observation time */}
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-1">
+              <button onClick={() => step(-1)} className="p-0.5 rounded hover:bg-white/10 text-muted-foreground" title="Previous frame">
+                <ChevronLeft className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => { if (!playing && atEnd) setFrameIdx(nowIdx); setPlaying(p => !p); }}
+                className="p-0.5 rounded hover:bg-white/10 text-muted-foreground"
+                title={playing ? 'Pause' : 'Play'}
+              >
+                {playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              </button>
+              <button onClick={() => step(1)} className="p-0.5 rounded hover:bg-white/10 text-muted-foreground" title="Next frame">
+                <ChevronRight className="h-4 w-4" />
+              </button>
+            </div>
+            {latestPast && (
+              <span className="text-[10px] text-muted-foreground">Radar updated {formatFrameTime(latestPast.time)}</span>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ─── Compact Widget (Card-wrapped RadarPanel — used by the NWS alert popup) ───
+
+export function RadarWidget({ lat, lon, onOpenMap }: { lat: number | undefined; lon: number | undefined; onOpenMap?: () => void }) {
+  if (!lat || !lon) return null;
   return (
     <Card>
       <CardHeader className="pb-1 pt-3 px-4">
@@ -284,47 +370,15 @@ export function RadarWidget({ lat, lon, onOpenMap }: { lat: number | undefined; 
             <CloudRain className="h-3.5 w-3.5 text-blue-400" />
             Radar
           </span>
-          <div className="flex items-center gap-1">
-            <button
-              onClick={(e) => {
-                e.stopPropagation();
-                if (!playing && frameIdx >= pastFrames.length - 1) setFrameIdx(0);
-                setPlaying(p => !p);
-              }}
-              className="p-0.5 rounded hover:bg-white/10 text-muted-foreground"
-            >
-              {playing ? <Pause className="h-3 w-3" /> : <Play className="h-3 w-3" />}
+          {onOpenMap && (
+            <button onClick={onOpenMap} className="p-0.5 rounded hover:bg-white/10 text-muted-foreground" title="Open on map">
+              <ChevronUp className="h-3 w-3" />
             </button>
-            {onOpenMap && (
-              <button onClick={onOpenMap} className="p-0.5 rounded hover:bg-white/10 text-muted-foreground" title="Open on map">
-                <ChevronUp className="h-3 w-3" />
-              </button>
-            )}
-          </div>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="px-4 pb-3">
-        {loading && <div className="text-xs text-muted-foreground">Loading…</div>}
-        {!loading && (
-          <div className="space-y-2">
-            {/* Leaflet map instead of canvas — correct tile projection */}
-            <div className="w-full h-52 rounded-lg overflow-hidden bg-black/30">
-              <RadarLeafletMap frame={currentFrame} lat={lat} lon={lon} />
-            </div>
-            {currentFrame && (
-              <div className="flex items-center gap-2 text-xs text-muted-foreground">
-                <span className="w-16 shrink-0">{formatFrameTime(currentFrame.time)}</span>
-                <div className="flex gap-0.5 flex-1">
-                  {pastFrames.map((_, i) => (
-                    <button key={i} onClick={() => { setPlaying(false); setFrameIdx(i); }}
-                      className={`h-1.5 flex-1 rounded-sm ${i === frameIdx ? 'bg-blue-400' : 'bg-white/20 hover:bg-white/40'}`}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        )}
+        <RadarPanel lat={lat} lon={lon} mapClassName="h-52" />
       </CardContent>
     </Card>
   );

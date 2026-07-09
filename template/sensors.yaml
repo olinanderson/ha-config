@@ -586,3 +586,48 @@
         {% else %}
           {{ (pct / 100 * 94.6 / econ * 100) | round(0) }}
         {% endif %}
+
+# ─── Ready-to-Drive Guard — camp-teardown offender list ──────────────────────
+# Counts the "hard" camp items still active that should be OFF before driving.
+# Advisory items (shore charger, inverter — you often legitimately drive with the
+# inverter on for DC-DC charging) are intentionally EXCLUDED here; the dashboard
+# banner surfaces those separately in amber. Consumed by binary_sensor
+# .rtd_needs_attention and automation rtd_guard_warn. count = state, human list =
+# the `summary` attribute (built with a namespace loop, NOT a self-reference).
+- sensor:
+    - name: "RTD Offenders"
+      unique_id: rtd_offenders
+      icon: mdi:steering
+      state: >
+        {% set checks = [
+          'switch.a32_pro_switch06_grey_water_tank_valve',
+          'switch.a32_pro_switch28_compressor',
+          'light.0xa4c138fd668411cd',
+          'switch.a32_pro_switch21_left_outdoor_lights',
+          'switch.a32_pro_switch22_right_outdoor_lights',
+          'switch.a32_pro_switch23_rear_outdoor_lights',
+          'switch.a32_pro_switch31_lightbar',
+          'input_boolean.sleep_mode',
+          'input_boolean.shower_mode' ] %}
+        {% set ns = namespace(n=0) %}
+        {% for eid in checks %}
+          {% if is_state(eid, 'on') %}{% set ns.n = ns.n + 1 %}{% endif %}
+        {% endfor %}
+        {{ ns.n }}
+      attributes:
+        summary: >
+          {% set checks = [
+            ('switch.a32_pro_switch06_grey_water_tank_valve','Grey dump valve OPEN'),
+            ('switch.a32_pro_switch28_compressor','Compressor ON'),
+            ('light.0xa4c138fd668411cd','Battery vent fan ON'),
+            ('switch.a32_pro_switch21_left_outdoor_lights','Left outdoor light ON'),
+            ('switch.a32_pro_switch22_right_outdoor_lights','Right outdoor light ON'),
+            ('switch.a32_pro_switch23_rear_outdoor_lights','Rear outdoor light ON'),
+            ('switch.a32_pro_switch31_lightbar','Lightbar ON'),
+            ('input_boolean.sleep_mode','Sleep mode ON'),
+            ('input_boolean.shower_mode','Shower mode ON') ] %}
+          {% set ns = namespace(items=[]) %}
+          {% for eid, label in checks %}
+            {% if is_state(eid, 'on') %}{% set ns.items = ns.items + [label] %}{% endif %}
+          {% endfor %}
+          {{ ns.items | join('\n• ') }}

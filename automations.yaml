@@ -1378,3 +1378,110 @@
             logger: watchdog.daemons
             message: "Host daemon(s) failed to start (check their .log): {{ failed | trim }}"
 
+# ────────────────────────────────────────────────────────────────
+# Ready-to-Drive Guard — warn on camp items still active at departure
+# ────────────────────────────────────────────────────────────────
+# When the van heads toward driving (engine start / park-brake release / motion),
+# if any "hard" camp-teardown item is still active (sensor.rtd_offenders > 0),
+# raise a persistent_notification listing the offenders. A fixed notification_id
+# means the 3 triggers update ONE card instead of stacking — so no de-nag helper
+# is needed. Suppressed while input_boolean.rtd_guard_override ("I know") is on.
+# The React "Ready to Drive" banner (Home page) is the always-live visual; this
+# automation is the notification so you're warned even without the dashboard open.
+- id: rtd_guard_warn
+  alias: "Ready-to-Drive Guard • warn on camp items"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: binary_sensor.engine_is_running
+      from: "off"
+      to: "on"
+      for: "00:00:05"          # debounce the start-up RPM flicker
+    - trigger: state
+      entity_id: sensor.192_168_10_90_park_brake
+      to: "0"                  # park brake released
+    - trigger: state
+      entity_id: binary_sensor.vehicle_is_moving
+      from: "off"
+      to: "on"                 # last-ditch net
+  condition:
+    - condition: state
+      entity_id: input_boolean.rtd_guard_override
+      state: "off"
+    - condition: state
+      entity_id: binary_sensor.rtd_needs_attention
+      state: "on"
+  action:
+    - action: persistent_notification.create
+      data:
+        notification_id: rtd_guard
+        title: "⚠ Not ready to drive — {{ states('sensor.rtd_offenders') }} item(s)"
+        message: "• {{ state_attr('sensor.rtd_offenders', 'summary') }}"
+
+# Clear the warning automatically once everything is stowed/off.
+- id: rtd_guard_clear
+  alias: "Ready-to-Drive Guard • dismiss when clear"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: binary_sensor.rtd_needs_attention
+      to: "off"
+  action:
+    - action: persistent_notification.dismiss
+      data:
+        notification_id: rtd_guard
+
+# "I know" only lasts the current drive — clear the override when the engine stops.
+- id: rtd_guard_override_autoclear
+  alias: "Ready-to-Drive Guard • clear override on engine off"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: binary_sensor.engine_is_running
+      from: "on"
+      to: "off"
+      for: "00:00:30"
+  condition:
+    - condition: state
+      entity_id: input_boolean.rtd_guard_override
+      state: "on"
+  action:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.rtd_guard_override
+
+# ────────────────────────────────────────────────────────────────
+# NWS severe-weather alert — notify on a NEW Severe/Extreme alert at the van
+# ────────────────────────────────────────────────────────────────
+# sensor.nws_highest_alert (rest, resource_template = live GPS) tracks the
+# highest active NWS alert at the van's location. Fire a persistent_notification
+# only when a Severe/Extreme alert appears whose id we haven't already notified
+# (input_text.nws_last_notified_id), so a 5-min re-poll of the same alert stays
+# silent. persistent_notification is the only delivery configured (no mobile push).
+- id: nws_severe_alert_notify
+  alias: "NWS • notify on new severe alert at van location"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: sensor.nws_highest_alert
+  condition:
+    - condition: template
+      value_template: "{{ states('sensor.nws_highest_alert') not in ['none','unknown','unavailable',''] }}"
+    - condition: template
+      value_template: "{{ state_attr('sensor.nws_highest_alert','highest_severity') in ['Extreme','Severe'] }}"
+    - condition: template
+      value_template: "{{ state_attr('sensor.nws_highest_alert','alert_id') != states('input_text.nws_last_notified_id') }}"
+  action:
+    - action: persistent_notification.create
+      data:
+        notification_id: nws_alert
+        title: "⚠️ {{ states('sensor.nws_highest_alert') }}"
+        message: >
+          {{ state_attr('sensor.nws_highest_alert','headline')
+             or 'Severe weather alert active at your location.' }}
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.nws_last_notified_id
+      data:
+        value: "{{ state_attr('sensor.nws_highest_alert','alert_id') }}"
+

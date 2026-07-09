@@ -1,0 +1,710 @@
+- generic [active] [ref=f13e1]:
+  - banner [ref=f13e2]:
+    - generic [ref=f13e6]:
+      - link "Fortin Logo" [ref=f13e8] [cursor=pointer]:
+        - /url: /en/
+        - img "Fortin Logo" [ref=f13e9]
+      - img [ref=f13e11] [cursor=pointer]
+      - img [ref=f13e13] [cursor=pointer]
+    - generic [ref=f13e14]:
+      - generic [ref=f13e15]:
+        - generic [ref=f13e18]:
+          - heading "VEHICLE FINDER" [level=2] [ref=f13e21]
+          - generic [ref=f13e24]:
+            - combobox "Make" [ref=f13e28] [cursor=pointer]:
+              - textbox "Make"
+            - combobox "Year" [ref=f13e32] [cursor=pointer]:
+              - textbox "Year"
+            - combobox "Model" [disabled] [ref=f13e36]:
+              - textbox "Model" [disabled]
+            - combobox "Trim" [disabled] [ref=f13e40]:
+              - textbox "Trim" [disabled]
+        - button [ref=f13e41] [cursor=pointer]:
+          - generic [ref=f13e42]:
+            - img [ref=f13e44]
+            - generic:
+              - img
+      - button [ref=f13e54] [cursor=pointer]:
+        - generic [ref=f13e55]:
+          - img [ref=f13e57]
+          - generic:
+            - img
+  - generic [ref=f13e67]:
+    - text: — — —
+    - generic [ref=f13e68]:
+      - generic [ref=f13e69]:
+        - generic [ref=f13e70]:
+          - generic [ref=f13e71]:
+            - heading "EVO-ALL" [level=1] [ref=f13e72]
+            - paragraph [ref=f13e73]: Universal all-in-one data bypass and interface module.
+            - generic [ref=f13e74]:
+              - generic [ref=f13e75]: $119.99 CAD
+              - button "Add to cart" [ref=f13e76] [cursor=pointer]:
+                - img [ref=f13e77]
+                - generic [ref=f13e86]: Add to cart
+            - generic [ref=f13e88]:
+              - img [ref=f13e89]
+              - link "View Vehicle Coverage" [ref=f13e90] [cursor=pointer]:
+                - /url: /en/products/vehicles/evo-series-modules/evo-all
+            - img [ref=f13e92]
+            - generic [ref=f13e93]: THIS PRODUCT MUST BE SOLD, INSTALLED AND SUPPORTED BY A PROFESSIONAL.
+            - paragraph [ref=f13e94]:
+              - text: The EVO-ALL is the ultimate ALL-IN-ONE data immobilizer bypass, keyless entry, convenience, low power remote start and security interface combo module in the industry. It raises the standard of hassle-free installation convenience to a whole new level.
+              - text: It uses a multiple bus architecture with 10 separate communication ports that provide more complete functionality on every supported vehicle.
+          - generic [ref=f13e95]:
+            - link "T-Harness Cables Available" [ref=f13e96] [cursor=pointer]:
+              - /url: https://fortin.ca/en/produits/harnais-en-t-pour-vehicules-specifiques/
+              - img [ref=f13e97]
+              - paragraph [ref=f13e98]: T-Harness Cables Available
+            - generic [ref=f13e99]:
+              - img [ref=f13e100]
+              - paragraph [ref=f13e101]: Compatible with multiple Remote Controllers
+            - generic [ref=f13e102]:
+              - img [ref=f13e103]
+              - paragraph [ref=f13e104]: Remote Start & Stop From the OEM Remote Ready
+            - generic [ref=f13e105]:
+              - img [ref=f13e106]
+              - paragraph [ref=f13e107]: Engine Remote Start & Stop
+            - generic [ref=f13e108]:
+              - img [ref=f13e109]
+              - paragraph [ref=f13e110]: Alarm & Security
+            - generic [ref=f13e111]:
+              - img [ref=f13e112]
+              - paragraph [ref=f13e113]: Immobilizer Bypass
+            - generic [ref=f13e114]:
+              - img [ref=f13e115]
+              - paragraph [ref=f13e116]: Works with Automatic Transmission Vehicles
+            - img [ref=f13e118]
+        - generic [ref=f13e119]:
+          - generic [ref=f13e120]:
+            - link "What's in the box" [ref=f13e121] [cursor=pointer]:
+              - /url: "#"
+              - heading "What's in the box" [level=2] [ref=f13e122]
+              - img [ref=f13e123]
+              - img
+            - text: • • • •
+          - generic [ref=f13e125]:
+            - link "Product specifications" [ref=f13e126] [cursor=pointer]:
+              - /url: "#"
+              - heading "Product specifications" [level=2] [ref=f13e127]
+              - img [ref=f13e128]
+              - img
+            - text: • • • • • • • • • •
+          - link "Product Support & Guides" [ref=f13e131] [cursor=pointer]:
+            - /url: "#"
+            - heading "Product Support & Guides" [level=2] [ref=f13e132]
+            - img [ref=f13e133]
+            - img
+        - generic [ref=f13e135]:
+          - paragraph [ref=f13e136]: "[1]A firmware update is required"
+          - paragraph [ref=f13e137]: "[2]Using the 2-way datalink port with an equipped telematic unit greatly increases range and user integration."
+          - paragraph [ref=f13e138]: "[3]Updated firmware and installation guides are posted on a regular basis. We recommend that you update this module to the latest firmware and download the latest installation guide(s) prior to the installation of this product."
+          - paragraph [ref=f13e139]: "[4]Secure Clip Harness."
+          - paragraph [ref=f13e140]: "[5]Using the 2-way datalink port with an equipped remote-starter, security-system or RF-KIT greatly simplifies installation."
+          - paragraph [ref=f13e141]: "[6]TB-series modules sold separately."
+        - generic [ref=f13e142]:
+          - heading "EVO-ALL PRODUCT FEATURES" [level=3] [ref=f13e143]
+          - paragraph [ref=f13e144]: The EVO-ALL is the all-in-one solution for low-current ignition vehicles industry’s leader. Compatible with all Fortin and many third-party remote control mobile and RF solutions as well as with most vehicle OEM remotes, the EVO-ALL allows a whole world of remote control possibilities.
+          - generic [ref=f13e145]:
+            - generic [ref=f13e146]:
+              - generic [ref=f13e147]:
+                - generic [ref=f13e148]:
+                  - img
+                - generic [ref=f13e149]:
+                  - heading "Engine Remote Start and Stop" [level=5] [ref=f13e150]
+                  - paragraph
+              - generic [ref=f13e151]:
+                - generic [ref=f13e152]:
+                  - img
+                - generic [ref=f13e153]:
+                  - heading "Works with Fortin and EVO mobile and RF remote control devices and much more" [level=5] [ref=f13e154]
+                  - paragraph
+              - generic [ref=f13e155]:
+                - generic [ref=f13e156]:
+                  - img
+                - generic [ref=f13e157]:
+                  - heading "Remote Start from the vehicle’s OEM remote ready" [level=5] [ref=f13e158]
+                  - paragraph
+              - generic [ref=f13e159]:
+                - generic [ref=f13e160]:
+                  - img
+                - generic [ref=f13e161]:
+                  - heading "Door Lock and Unlock Control" [level=5] [ref=f13e162]
+                  - paragraph
+              - generic [ref=f13e163]:
+                - generic [ref=f13e164]:
+                  - img
+                - generic [ref=f13e165]:
+                  - heading "Convenience Features Remote Control" [level=5] [ref=f13e166]
+                  - paragraph
+            - generic:
+              - img "content image"
+            - generic [ref=f13e167]:
+              - generic [ref=f13e168]:
+                - generic [ref=f13e169]:
+                  - heading "Built-In CAN Alarm and Security System" [level=5] [ref=f13e170]
+                  - paragraph
+                - generic [ref=f13e171]:
+                  - img
+              - generic [ref=f13e172]:
+                - generic [ref=f13e173]:
+                  - heading "Works with most automatic transmission vehicles" [level=5] [ref=f13e174]
+                  - paragraph
+                - generic [ref=f13e175]:
+                  - img
+              - generic [ref=f13e176]:
+                - generic [ref=f13e177]:
+                  - heading "Customize your installations with Fortin FlashLink programmers" [level=5] [ref=f13e178]
+                  - paragraph
+                - generic [ref=f13e179]:
+                  - img
+              - generic [ref=f13e180]:
+                - generic [ref=f13e181]:
+                  - heading "Quick-Connect T-Harness Cabling Systems Available" [level=5] [ref=f13e182]
+                  - paragraph
+                - generic [ref=f13e183]:
+                  - img
+      - generic [ref=f13e185]:
+        - generic:
+          - generic:
+            - img
+          - generic:
+            - heading "EVO-ALL — The Premium All-in-One Solution for Low-Current Vehicles" [level=3]
+            - paragraph: Compatible with low-current ignition vehicles, EVO-ALL includes a full immobilizer bypass and interface, a remote starter and a CAN alarm system within the same device. With its 3 SAE certified CAN networks and its 5 on-board relays, the EVO-ALL redefines vehicle compatibility, performance and reliability.
+      - generic [ref=f13e187]:
+        - generic:
+          - generic:
+            - img
+            - link "View Available T-Harnesses":
+              - /url: /en/products/vehicle-specific-t-harness/
+          - generic:
+            - heading "Vehicle-Specific T-harness cabling systems available" [level=3]
+            - paragraph: The EVO-ALL is compatible will a wide range of the Fortin’s T-Harness vehicle specific collection. Built to beat the clock, these space-efficient OEM plug-in style cabling systems facilitate, speed-up, and secure the installation.
+      - generic [ref=f13e188]:
+        - heading "The EVO-ALL Module" [level=2] [ref=f13e189]
+        - generic [ref=f13e191]:
+          - generic:
+            - generic:
+              - generic:
+                - img
+            - generic:
+              - generic:
+                - img
+            - generic:
+              - generic:
+                - img
+      - generic [ref=f13e197]:
+        - generic:
+          - generic:
+            - img
+          - generic:
+            - heading "Easy to handle. Easy to fit. Easy as pie." [level=3]
+            - paragraph: Thanks to its industry’s smallest casing design, EVO-ALL offers the most versatile product design making it easy to fit tight and clean in small spaces.
+      - generic [ref=f13e199]:
+        - generic:
+          - generic:
+            - img
+            - link "LEARN MORE":
+              - /url: /en/resources/dcryptor-virtual-oem-key-generator/
+          - generic:
+            - heading "Experience Virtual OEM Key Technology" [level=3]
+            - paragraph: Use the power of the DCryptor Technology servers on highly-encrypted vehicles to create a virtual OEM Key.
+      - generic [ref=f13e200]:
+        - generic [ref=f13e201]:
+          - heading "Compatible Remote Controllers" [level=2] [ref=f13e202]
+          - paragraph [ref=f13e203]: Discover a whole selection of Fortin and EVO state-of-the-art compatible remote controllers.
+          - generic [ref=f13e208]:
+            - generic [ref=f13e211]:
+              - generic [ref=f13e212]:
+                - generic [ref=f13e213]:
+                  - img
+                - generic [ref=f13e214]:
+                  - generic [ref=f13e215]:
+                    - link [ref=f13e216] [cursor=pointer]:
+                      - /url: ""
+                    - heading "EVO-START LTE" [level=3] [ref=f13e217]
+                    - paragraph [ref=f13e218]: Mobile Remote Control and Telematic System.
+                  - link "View product" [ref=f13e220] [cursor=pointer]:
+                    - /url: /en/products/remote-control-and-fleet-management-applications/evo-start+lte/
+              - generic [ref=f13e222]:
+                - generic [ref=f13e223]:
+                  - img [ref=f13e388]
+                  - paragraph [ref=f13e224]: EVO-START LTE Mobile Remote Control System Included
+                - generic [ref=f13e225]:
+                  - img [ref=f13e389]
+                  - paragraph [ref=f13e226]: Mobile Network Coverage in North America
+                - generic [ref=f13e227]:
+                  - img [ref=f13e228]
+                  - paragraph [ref=f13e229]: Engine Remote Start & Stop
+                - generic [ref=f13e230]:
+                  - img [ref=f13e390]
+                  - paragraph [ref=f13e231]: GPS Tracking
+                - generic [ref=f13e232]:
+                  - img [ref=f13e391]
+                  - paragraph [ref=f13e233]: Alarm & Security
+                - generic [ref=f13e234]:
+                  - img [ref=f13e392]
+                  - paragraph [ref=f13e235]: Bluetooth and Mobile Network Connectivity
+                - generic [ref=f13e236]:
+                  - img [ref=f13e393]
+                  - paragraph [ref=f13e237]: Works with EVO-ONE, EVO-X-ONE and EVO-ALL modules
+            - generic [ref=f13e396]:
+              - generic [ref=f13e397]:
+                - generic [ref=f13e398]:
+                  - img
+                - generic [ref=f13e399]:
+                  - generic [ref=f13e400]:
+                    - link [ref=f13e401] [cursor=pointer]:
+                      - /url: ""
+                    - heading "RFK942" [level=3] [ref=f13e402]
+                    - paragraph [ref=f13e403]: 2-way RF kit with 2 4-button remotes.
+                  - link "View product" [ref=f13e405] [cursor=pointer]:
+                    - /url: /en/products/remote-control-and-fleet-management-applications/rfk942/
+              - generic [ref=f13e407]:
+                - generic [ref=f13e408]:
+                  - img [ref=f13e409]
+                  - paragraph [ref=f13e410]: RFK942 LoRa® SST Long-Range RF Kit Included
+                - generic [ref=f13e411]:
+                  - img [ref=f13e412]
+                  - paragraph [ref=f13e413]: 2-Way remotes with a range of 6,000 feet (2,000 meters)
+                - generic [ref=f13e414]:
+                  - img [ref=f13e415]
+                  - paragraph [ref=f13e416]: Anti-Code Grabbing Technology
+                - generic [ref=f13e417]:
+                  - img [ref=f13e418]
+                  - paragraph [ref=f13e419]: Eco-Connect Battery-Life Extender
+                - generic [ref=f13e420]:
+                  - img [ref=f13e421]
+                  - paragraph [ref=f13e422]: Works with EVO-ONE, EVO-X-ONE and EVO-ALL modules
+            - generic [ref=f13e425]:
+              - generic [ref=f13e426]:
+                - generic [ref=f13e427]:
+                  - img
+                - generic [ref=f13e428]:
+                  - generic [ref=f13e429]:
+                    - link [ref=f13e430] [cursor=pointer]:
+                      - /url: ""
+                    - heading "RFK912" [level=3] [ref=f13e431]
+                    - paragraph [ref=f13e432]: 2-way RF kit with 2 1-button remotes.
+                  - link "View product" [ref=f13e434] [cursor=pointer]:
+                    - /url: /en/products/remote-control-and-fleet-management-applications/rfk912/
+              - generic [ref=f13e436]:
+                - generic [ref=f13e437]:
+                  - img
+                  - paragraph [ref=f13e438]: RFK912 LoRa® SST Long-Range RF Kit Included
+                - generic [ref=f13e439]:
+                  - img [ref=f13e440]
+                  - paragraph [ref=f13e441]: 2-Way remotes with a range of 6,000 feet (2,000 meters)
+                - generic [ref=f13e442]:
+                  - img [ref=f13e443]
+                  - paragraph [ref=f13e444]: Anti-Code Grabbing Technology
+                - generic [ref=f13e445]:
+                  - img [ref=f13e446]
+                  - paragraph [ref=f13e447]: Eco-Connect Battery-Life Extender
+                - generic [ref=f13e448]:
+                  - img [ref=f13e449]
+                  - paragraph [ref=f13e450]: Works with EVO-ONE, EVO-X-ONE and EVO-ALL modules
+            - generic [ref=f13e453]:
+              - generic [ref=f13e454]:
+                - generic [ref=f13e455]:
+                  - img
+                - generic [ref=f13e456]:
+                  - generic [ref=f13e457]:
+                    - link [ref=f13e458] [cursor=pointer]:
+                      - /url: ""
+                    - heading "RFK442" [level=3] [ref=f13e459]
+                    - paragraph [ref=f13e460]: 2-way RF kit with 2 4-button remotes.
+                  - link "View product" [ref=f13e462] [cursor=pointer]:
+                    - /url: /en/products/remote-control-and-fleet-management-applications/rfk442/
+              - generic [ref=f13e464]:
+                - generic [ref=f13e465]:
+                  - img [ref=f13e466]
+                  - paragraph [ref=f13e467]: RFK442 Long-Range RF Kit Included
+                - generic [ref=f13e468]:
+                  - img
+                  - paragraph [ref=f13e469]: 1-Way FM 433 MHz Communication - 2,800 feet (850 meters) Long-Range Devices
+                - generic [ref=f13e470]:
+                  - img [ref=f13e471]
+                  - paragraph [ref=f13e472]: Works with EVO-ONE, EVO-X-ONE and EVO-ALL modules
+            - generic [ref=f13e475]:
+              - generic [ref=f13e476]:
+                - generic [ref=f13e477]:
+                  - img
+                - generic [ref=f13e478]:
+                  - generic [ref=f13e479]:
+                    - link [ref=f13e480] [cursor=pointer]:
+                      - /url: ""
+                    - heading "RFK441" [level=3] [ref=f13e481]
+                    - paragraph [ref=f13e482]: 1-way RF kit with 2 4-button remotes.
+                  - link "View product" [ref=f13e484] [cursor=pointer]:
+                    - /url: /en/products/remote-control-and-fleet-management-applications/rfk441/
+              - generic [ref=f13e486]:
+                - generic [ref=f13e487]:
+                  - img
+                  - paragraph [ref=f13e488]: RFK441 Long-Range RF Kit Included
+                - generic [ref=f13e489]:
+                  - img [ref=f13e490]
+                  - paragraph [ref=f13e491]: 2-Way remotes with a range of 3,000 feet (915 meters)
+                - generic [ref=f13e492]:
+                  - img [ref=f13e493]
+                  - paragraph [ref=f13e494]: Works with EVO-ONE, EVO-X-ONE and EVO-ALL modules
+            - generic [ref=f13e497]:
+              - generic [ref=f13e498]:
+                - generic [ref=f13e499]:
+                  - img
+                - generic [ref=f13e500]:
+                  - generic [ref=f13e501]:
+                    - link [ref=f13e502] [cursor=pointer]:
+                      - /url: ""
+                    - heading "RFK411" [level=3] [ref=f13e503]
+                    - paragraph [ref=f13e504]: 1-way RF kit with 2 1-button remotes.
+                  - link "View product" [ref=f13e506] [cursor=pointer]:
+                    - /url: /en/products/remote-control-and-fleet-management-applications/rfk411/
+              - generic [ref=f13e508]:
+                - generic [ref=f13e509]:
+                  - img
+                  - paragraph [ref=f13e510]: RFK411 Long-Range RF Kit Included
+                - generic [ref=f13e511]:
+                  - img
+                  - paragraph [ref=f13e512]: 1-Way FM 433 MHz Communication - 2,000 feet (600 meters) Long-Range Devices
+                - generic [ref=f13e513]:
+                  - img [ref=f13e514]
+                  - paragraph [ref=f13e515]: Works with EVO-ONE, EVO-X-ONE and EVO-ALL modules
+          - link "VIEW MORE COMPATIBLE CONTROLLERS" [ref=f13e240] [cursor=pointer]:
+            - /url: /en/technologies/compatible-remote-controllers/
+        - generic [ref=f13e241]:
+          - heading "All-in-One Kits and Bundles" [level=2] [ref=f13e242]
+          - paragraph [ref=f13e243]: Discover our all-in-one kits and bundles that include the EVO-ALL control module and an EVO remote control kit.
+          - generic [ref=f13e248]:
+            - generic [ref=f13e251]:
+              - generic [ref=f13e252]:
+                - generic [ref=f13e253]:
+                  - img
+                - generic [ref=f13e254]:
+                  - generic [ref=f13e255]:
+                    - link [ref=f13e256] [cursor=pointer]:
+                      - /url: ""
+                    - heading "EVO-ALL-LTE" [level=3] [ref=f13e257]
+                    - paragraph [ref=f13e258]: All-in-one remote start, alarm and GPS Tracking kit that includes a EVO-START LTE Mobile Remote Control System and a EVO-ALL remote control module.
+                  - generic [ref=f13e260] [cursor=pointer]:
+                    - img [ref=f13e261]
+                    - paragraph [ref=f13e262]: $469.95 CAD
+                  - link "View product" [ref=f13e263] [cursor=pointer]:
+                    - /url: /en/products/all-in-one-bundles/evo-all-lte/
+              - generic [ref=f13e265]:
+                - generic [ref=f13e266]:
+                  - img [ref=f13e517]
+                  - paragraph [ref=f13e267]: EVO-START LTE Mobile Remote Control System Included
+                - generic [ref=f13e268]:
+                  - img [ref=f13e518]
+                  - paragraph [ref=f13e269]: EVO-ALL Control Module Included
+                - generic [ref=f13e270]:
+                  - img [ref=f13e519]
+                  - paragraph [ref=f13e271]: Mobile Network Coverage in North America
+                - generic [ref=f13e272]:
+                  - img [ref=f13e273]
+                  - paragraph [ref=f13e274]: Engine Remote Start & Stop
+                - generic [ref=f13e275]:
+                  - img [ref=f13e276]
+                  - paragraph [ref=f13e277]: Alarm & Security
+                - generic [ref=f13e278]:
+                  - img [ref=f13e279]
+                  - paragraph [ref=f13e280]: Immobilizer Bypass
+                - generic [ref=f13e281]:
+                  - img [ref=f13e520]
+                  - paragraph [ref=f13e282]: GPS Tracking
+            - generic [ref=f13e523]:
+              - generic [ref=f13e524]:
+                - generic [ref=f13e525]:
+                  - img
+                - generic [ref=f13e526]:
+                  - generic [ref=f13e527]:
+                    - link [ref=f13e528] [cursor=pointer]:
+                      - /url: ""
+                    - heading "EVO-ALL-442" [level=3] [ref=f13e529]
+                    - paragraph [ref=f13e530]: 2-way long-range RF kit Included all-in-one remote starter kit with 2 4-button remotes.
+                  - generic [ref=f13e532] [cursor=pointer]:
+                    - img [ref=f13e533]
+                    - paragraph [ref=f13e534]: $299.99 CAD
+                  - link "View product" [ref=f13e535] [cursor=pointer]:
+                    - /url: /en/products/all-in-one-bundles/evo-all-442/
+              - generic [ref=f13e537]:
+                - generic [ref=f13e538]:
+                  - img [ref=f13e539]
+                  - paragraph [ref=f13e540]: RFK442 Long-Range RF Kit Included
+                - generic [ref=f13e541]:
+                  - img [ref=f13e542]
+                  - paragraph [ref=f13e543]: EVO-ALL Control Module Included
+                - generic [ref=f13e544]:
+                  - img [ref=f13e545]
+                  - paragraph [ref=f13e546]: 2-Way remotes with a range of 3,000 feet (915 meters)
+                - generic [ref=f13e547]:
+                  - img [ref=f13e548]
+                  - paragraph [ref=f13e549]: Engine Remote Start & Stop
+                - generic [ref=f13e550]:
+                  - img [ref=f13e551]
+                  - paragraph [ref=f13e552]: Alarm & Security
+                - generic [ref=f13e553]:
+                  - img [ref=f13e554]
+                  - paragraph [ref=f13e555]: Immobilizer Bypass
+            - generic [ref=f13e558]:
+              - generic [ref=f13e559]:
+                - generic [ref=f13e560]:
+                  - img
+                - generic [ref=f13e561]:
+                  - generic [ref=f13e562]:
+                    - link [ref=f13e563] [cursor=pointer]:
+                      - /url: ""
+                    - heading "EVO-ALL-441" [level=3] [ref=f13e564]
+                    - paragraph [ref=f13e565]: 1-way long-range RF kit included all-in-one remote starter kit with 2 4-button remotes.
+                  - generic [ref=f13e567] [cursor=pointer]:
+                    - img [ref=f13e568]
+                    - paragraph [ref=f13e569]: $229.99 CAD
+                  - link "View product" [ref=f13e570] [cursor=pointer]:
+                    - /url: /en/products/all-in-one-bundles/evo-all-441/
+              - generic [ref=f13e572]:
+                - generic [ref=f13e573]:
+                  - img
+                  - paragraph [ref=f13e574]: RFK441 Long-Range RF Kit Included
+                - generic [ref=f13e575]:
+                  - img [ref=f13e576]
+                  - paragraph [ref=f13e577]: EVO-ALL Control Module Included
+                - generic [ref=f13e578]:
+                  - img
+                  - paragraph [ref=f13e579]: 1-Way FM 433 MHz Communication - 2,800 feet (850 meters) Long-Range Devices
+                - generic [ref=f13e580]:
+                  - img [ref=f13e581]
+                  - paragraph [ref=f13e582]: Engine Remote Start & Stop
+                - generic [ref=f13e583]:
+                  - img [ref=f13e584]
+                  - paragraph [ref=f13e585]: Alarm & Security
+                - generic [ref=f13e586]:
+                  - img [ref=f13e587]
+                  - paragraph [ref=f13e588]: Immobilizer Bypass
+            - generic [ref=f13e591]:
+              - generic [ref=f13e592]:
+                - generic [ref=f13e593]:
+                  - img
+                - generic [ref=f13e594]:
+                  - generic [ref=f13e595]:
+                    - link [ref=f13e596] [cursor=pointer]:
+                      - /url: ""
+                    - heading "EVO-ALL-411" [level=3] [ref=f13e597]
+                    - paragraph [ref=f13e598]: 1-way long-range RF kit included all-in-one remote starter kit with 2 1-button remotes.
+                  - generic [ref=f13e600] [cursor=pointer]:
+                    - img [ref=f13e601]
+                    - paragraph [ref=f13e602]: $219.99 CAD
+                  - link "View product" [ref=f13e603] [cursor=pointer]:
+                    - /url: /en/products/all-in-one-bundles/evo-all-411/
+              - generic [ref=f13e605]:
+                - generic [ref=f13e606]:
+                  - img
+                  - paragraph [ref=f13e607]: RFK411 Long-Range RF Kit Included
+                - generic [ref=f13e608]:
+                  - img [ref=f13e609]
+                  - paragraph [ref=f13e610]: EVO-ALL Control Module Included
+                - generic [ref=f13e611]:
+                  - img
+                  - paragraph [ref=f13e612]: 1-Way FM 433 MHz Communication - 2,000 feet (600 meters) Long-Range Devices
+                - generic [ref=f13e613]:
+                  - img [ref=f13e614]
+                  - paragraph [ref=f13e615]: Engine Remote Start & Stop
+                - generic [ref=f13e616]:
+                  - img [ref=f13e617]
+                  - paragraph [ref=f13e618]: Alarm & Security
+                - generic [ref=f13e619]:
+                  - img [ref=f13e620]
+                  - paragraph [ref=f13e621]: Immobilizer Bypass
+          - link "VIEW MORE ALL-IN-ONE KITS" [ref=f13e285] [cursor=pointer]:
+            - /url: /en/products/all-in-one-bundles/
+        - generic [ref=f13e286]:
+          - heading "Everything your need with a single brand" [level=2] [ref=f13e287]
+          - paragraph [ref=f13e288]: Add vehicle compatible parts & accessories to enhanced your vehicle setup or use programming tools to customize your installation.
+          - generic [ref=f13e293]:
+            - generic [ref=f13e296]:
+              - generic [ref=f13e297]:
+                - generic [ref=f13e298]:
+                  - img
+                - generic [ref=f13e299]:
+                  - generic [ref=f13e300]:
+                    - link [ref=f13e301] [cursor=pointer]:
+                      - /url: ""
+                    - heading "FLASHLINK UPDATER" [level=3] [ref=f13e302]
+                    - paragraph [ref=f13e303]: Flashlink Updater
+                  - link "View product" [ref=f13e305] [cursor=pointer]:
+                    - /url: /en/products/installation-programming-tools/flashlink+updater/
+              - generic [ref=f13e307]:
+                - generic [ref=f13e308]:
+                  - img [ref=f13e623]
+                  - paragraph [ref=f13e309]: Works with FlashLink Manager Programming App
+                - generic [ref=f13e310]:
+                  - img [ref=f13e624]
+                  - paragraph [ref=f13e311]: Required to customize your product options
+                - generic [ref=f13e312]:
+                  - img [ref=f13e625]
+                  - paragraph [ref=f13e313]: Firmware Updater Tool
+                - generic [ref=f13e314]:
+                  - img [ref=f13e626]
+                  - paragraph [ref=f13e315]: Works with Windows Devices
+            - generic [ref=f13e629]:
+              - generic [ref=f13e630]:
+                - generic [ref=f13e631]:
+                  - img
+                - generic [ref=f13e632]:
+                  - generic [ref=f13e633]:
+                    - link [ref=f13e634] [cursor=pointer]:
+                      - /url: ""
+                    - heading "FLASHLINK MOBILE" [level=3] [ref=f13e635]
+                    - paragraph [ref=f13e636]: The Fortin module configuration and vehicle firmware update Bluetooth® device for iOS and Android platforms.
+                  - generic [ref=f13e638] [cursor=pointer]:
+                    - img [ref=f13e639]
+                    - paragraph [ref=f13e640]: $249.99 CAD
+                  - link "View product" [ref=f13e641] [cursor=pointer]:
+                    - /url: /en/products/installation-programming-tools/flashlink+mobile/
+              - generic [ref=f13e643]:
+                - generic [ref=f13e644]:
+                  - img [ref=f13e645]
+                  - paragraph [ref=f13e646]: Works with FlashLink Mobile Programming App
+                - generic [ref=f13e647]:
+                  - img [ref=f13e648]
+                  - paragraph [ref=f13e649]: Required to customize your product options
+                - generic [ref=f13e650]:
+                  - img [ref=f13e651]
+                  - paragraph [ref=f13e652]: Firmware Updater Tool
+                - generic [ref=f13e653]:
+                  - img [ref=f13e654]
+                  - paragraph [ref=f13e655]: Works with iOS and Android Devices
+                - generic [ref=f13e656]:
+                  - img [ref=f13e657]
+                  - paragraph [ref=f13e658]: Smart Installation Choice
+            - generic [ref=f13e661]:
+              - generic [ref=f13e662]:
+                - generic [ref=f13e663]:
+                  - img
+                - generic [ref=f13e664]:
+                  - generic [ref=f13e665]:
+                    - link [ref=f13e666] [cursor=pointer]:
+                      - /url: ""
+                    - heading "FSS" [level=3] [ref=f13e667]
+                    - paragraph [ref=f13e668]: Dual-Stage Shock Sensor for Fortin and EVO Alarm Systems.
+                  - link "View product" [ref=f13e670] [cursor=pointer]:
+                    - /url: /en/products/installation-accessories/fss/
+              - generic [ref=f13e672]:
+                - generic [ref=f13e673]:
+                  - img
+                  - paragraph [ref=f13e674]: Upgrade your Vehicle Security
+                - generic [ref=f13e675]:
+                  - img [ref=f13e676]
+                  - paragraph [ref=f13e677]: Alarm & Security
+                - generic [ref=f13e678]:
+                  - img [ref=f13e679]
+                  - paragraph [ref=f13e680]: Works with EVO-ONE, EVO-X-ONE and EVO-ALL modules
+            - generic [ref=f13e683]:
+              - generic [ref=f13e684]:
+                - generic [ref=f13e685]:
+                  - img
+                - generic [ref=f13e686]:
+                  - generic [ref=f13e687]:
+                    - link [ref=f13e688] [cursor=pointer]:
+                      - /url: ""
+                    - heading "SIREN" [level=3] [ref=f13e689]
+                    - paragraph [ref=f13e690]: Siren for Fortin and EVO Alarm Systems.
+                  - link "View product" [ref=f13e692] [cursor=pointer]:
+                    - /url: /en/products/installation-accessories/siren/
+              - generic [ref=f13e694]:
+                - generic [ref=f13e695]:
+                  - img
+                  - paragraph [ref=f13e696]: Upgrade your Vehicle Security
+                - generic [ref=f13e697]:
+                  - img [ref=f13e698]
+                  - paragraph [ref=f13e699]: Alarm & Security
+                - generic [ref=f13e700]:
+                  - img [ref=f13e701]
+                  - paragraph [ref=f13e702]: Works with EVO-ONE, EVO-X-ONE and EVO-ALL modules
+            - generic [ref=f13e705]:
+              - generic [ref=f13e706]:
+                - generic [ref=f13e707]:
+                  - img
+                - generic [ref=f13e708]:
+                  - generic [ref=f13e709]:
+                    - link [ref=f13e710] [cursor=pointer]:
+                      - /url: ""
+                    - heading "MR20" [level=3] [ref=f13e711]
+                    - paragraph [ref=f13e712]: Prewired 20-amp Micro Relay.
+                  - link "View product" [ref=f13e714] [cursor=pointer]:
+                    - /url: /en/products/installation-accessories/mr20/
+              - generic [ref=f13e716]:
+                - generic [ref=f13e717]:
+                  - img
+                  - paragraph [ref=f13e718]: Smallest relay on the market
+                - generic [ref=f13e719]:
+                  - img
+                  - paragraph [ref=f13e720]: Prewired 20-amp Micro Relay
+                - generic [ref=f13e721]:
+                  - img [ref=f13e722]
+                  - paragraph [ref=f13e723]: Smart Installation Choice
+          - link "VIEW MORE ACCESSORIES" [ref=f13e318] [cursor=pointer]:
+            - /url: /en/products/installation-accessories/
+    - generic [ref=f13e319]:
+      - heading "TECHNICAL SUPPORT" [level=3] [ref=f13e321]
+      - generic [ref=f13e323]:
+        - link "Questions & Answers" [ref=f13e326] [cursor=pointer]:
+          - /url: "#"
+          - generic [ref=f13e327]: Questions & Answers
+          - generic:
+            - img [ref=f13e328]
+            - img
+        - link "Step-By-Step Troubleshooting Guides" [ref=f13e332] [cursor=pointer]:
+          - /url: "#"
+          - generic [ref=f13e333]: Step-By-Step Troubleshooting Guides
+          - generic:
+            - img [ref=f13e334]
+            - img
+        - link "Wirecolor.com" [ref=f13e338] [cursor=pointer]:
+          - /url: "#"
+          - generic [ref=f13e339]: Wirecolor.com
+          - generic:
+            - img [ref=f13e340]
+            - img
+        - link "Ask Us A Question" [ref=f13e344] [cursor=pointer]:
+          - /url: "#"
+          - generic [ref=f13e345]: Ask Us A Question
+          - generic:
+            - img [ref=f13e346]
+            - img
+        - link "Why Choose Fortin" [ref=f13e350] [cursor=pointer]:
+          - /url: "#"
+          - generic [ref=f13e351]: Why Choose Fortin
+          - generic:
+            - img [ref=f13e352]
+            - img
+  - contentinfo [ref=f13e355]:
+    - generic [ref=f13e358]:
+      - heading "REGISTER TO OUR NEWSLETTERS" [level=3] [ref=f13e359]:
+        - text: REGISTER TO
+        - text: OUR NEWSLETTERS
+      - paragraph [ref=f13e360]: I would like to receive information by email about new technologies and products.
+      - generic [ref=f13e361]:
+        - generic [ref=f13e362]:
+          - generic [ref=f13e363]:
+            - textbox "First Name" [ref=f13e365]
+            - textbox "Last Name" [ref=f13e367]
+          - textbox "Email" [ref=f13e370]
+        - button "Subscribe" [ref=f13e372] [cursor=pointer]
+    - generic [ref=f13e375]:
+      - generic [ref=f13e376]: © 2026 Fortin Electronic Systems
+      - list [ref=f13e378]:
+        - listitem [ref=f13e379]:
+          - link "Legal Notice" [ref=f13e380] [cursor=pointer]:
+            - /url: /en/user-agreement/
+        - listitem [ref=f13e381]:
+          - link "Privacy Policy" [ref=f13e382] [cursor=pointer]:
+            - /url: /en/privacypolicy/
+        - listitem:
+          - link:
+            - /url: /en/store/terms-and-conditions/
+  - paragraph [ref=f13e385]:
+    - text: This website uses cookies to ensure you get the best user experience. By continuing to browse our site, you are agreeing to our use of cookies.
+    - link "Learn More" [ref=f13e386] [cursor=pointer]:
+      - /url: /en/privacypolicy
+    - text: Continue

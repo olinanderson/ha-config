@@ -15,11 +15,13 @@ import {
   Map,
   CalendarClock,
   HeartPulse,
+  CloudSun,
   type LucideIcon,
 } from 'lucide-react';
 import Home from '@/pages/Home';
 import Power from '@/pages/Power';
 import Climate from '@/pages/Climate';
+import Environment from '@/pages/Environment';
 import Water from '@/pages/Water';
 import Van from '@/pages/Van';
 import Health from '@/pages/Health';
@@ -32,6 +34,7 @@ const pages: Record<string, ComponentType> = {
   home: Home,
   power: Power,
   climate: Climate,
+  environment: Environment,
   water: Water,
   van: Van,
   health: Health,
@@ -51,6 +54,7 @@ const NAV_ITEMS: NavItem[] = [
   { id: 'home', label: 'Home', icon: HomeIcon },
   { id: 'power', label: 'Power', icon: Zap },
   { id: 'climate', label: 'Climate', icon: Thermometer },
+  { id: 'environment', label: 'Environment', icon: CloudSun },
   { id: 'water', label: 'Water', icon: Droplets },
   { id: 'van', label: 'Van', icon: Truck },
   { id: 'health', label: 'Health', icon: HeartPulse },
@@ -61,7 +65,9 @@ const NAV_ITEMS: NavItem[] = [
 ];
 
 function getPageFromHash(): string {
-  const hash = window.location.hash.slice(1);
+  // Tolerate a query suffix (e.g. `#map?range=7d` deep-links) — the page id is
+  // the part before the '?'.
+  const hash = window.location.hash.slice(1).split('?')[0];
   return hash && hash in pages ? hash : 'home';
 }
 

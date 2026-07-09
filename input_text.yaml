@@ -44,3 +44,10 @@ trip_end_ts:
   name: "Live Trip End (ms)"
   icon: mdi:clock-end
   max: 20
+
+# --- NWS alert anti-spam: id of the last alert we notified for ---
+nws_last_notified_id:
+  name: "NWS Last Notified Alert ID"
+  icon: mdi:weather-lightning
+  max: 255
+  initial: ""

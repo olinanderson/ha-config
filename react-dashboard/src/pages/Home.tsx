@@ -3,7 +3,6 @@ import { BatteryCard } from '@/components/BatteryCard';
 import { SolarCard } from '@/components/SolarCard';
 import { TemperatureCard } from '@/components/TemperatureCard';
 import { TankLevel } from '@/components/TankLevel';
-import { WeatherCard } from '@/components/WeatherCard';
 import { ThermostatControl } from '@/components/ThermostatControl';
 import { HeatingControls } from '@/components/HeatingControls';
 import { FanControl } from '@/components/FanControl';
@@ -12,8 +11,9 @@ import { ToggleButton } from '@/components/ToggleButton';
 import { LightControl } from '@/components/LightControl';
 import { InverterButton } from '@/components/InverterButton';
 import { StatusDot } from '@/components/StatusDot';
-import { WeatherMapCard } from '@/components/WeatherMapCard';
 import { TodayTripsCard } from '@/components/TodayTripsCard';
+import { ReadyToDriveBanner } from '@/components/ReadyToDriveBanner';
+import { WeatherSummaryCard } from '@/components/WeatherSummaryCard';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useToggle, useService } from '@/hooks/useService';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
@@ -314,12 +314,9 @@ function ModeToggles() {
 // ─── Page ───
 
 export default function Home() {
-  const gps = useEntity('device_tracker.ublox_gps');
-  const lat = gps?.attributes?.latitude as number | undefined;
-  const lon = gps?.attributes?.longitude as number | undefined;
-
   return (
     <PageContainer title="Home">
+      <ReadyToDriveBanner />
       <BadgeBar />
       <PresenceBar />
 
@@ -361,12 +358,10 @@ export default function Home() {
             />
           </div>
           <ModeToggles />
+          <WeatherSummaryCard />
           <TodayTripsCard />
-          <WeatherCard />
         </div>
       </div>
-
-      {/* Full-width Weather/Map card — moved to Climate tab */}
     </PageContainer>
   );
 }

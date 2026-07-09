@@ -116,3 +116,13 @@
         {{ states('sensor.192_168_10_90_01_monitorstatus') | int(0) >= 128 }}
       attributes:
         dtc_count: "{{ states('sensor.dtc_count') }}"
+
+# ─── Ready-to-Drive Guard — hard offenders still active ───
+# on = at least one "hard" camp item is still on (see sensor.rtd_offenders).
+# Drives the rtd_guard warn/clear automations. Advisory items are NOT here.
+- binary_sensor:
+    - name: "RTD Needs Attention"
+      unique_id: rtd_needs_attention
+      device_class: problem
+      icon: mdi:steering
+      state: "{{ states('sensor.rtd_offenders') | int(0) > 0 }}"
