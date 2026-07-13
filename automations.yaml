@@ -591,6 +591,13 @@
     - action: input_number.set_value
       target: { entity_id: input_number.trip_baseline_moving_s }
       data: { value: "{{ states('sensor.moving_seconds_total') | float(0) }}" }
+    # City/highway split baselines (only the highway side; city = total − highway).
+    - action: input_number.set_value
+      target: { entity_id: input_number.trip_baseline_highway_distance_km }
+      data: { value: "{{ states('sensor.highway_distance_total') | float(0) }}" }
+    - action: input_number.set_value
+      target: { entity_id: input_number.trip_baseline_highway_fuel_l }
+      data: { value: "{{ states('sensor.highway_fuel_total') | float(0) }}" }
     - action: input_text.set_value
       target: { entity_id: input_text.trip_start_ts }
       data: { value: "{{ (now().timestamp() * 1000) | int }}" }

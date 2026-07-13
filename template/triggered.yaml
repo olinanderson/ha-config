@@ -296,3 +296,136 @@
           {{ base }}
         {% endif %}
       availability: "true"
+
+# ─── Drive Speed EMA (triggered, km/h) — smoothed speed for city/hwy split ────
+# An exponential moving average of OBD speed, FROZEN while stopped, used to
+# classify city vs highway without chattering. Freezing while not moving is the
+# key trick: it accumulates across the brief stops of stop-and-go city driving
+# (so the average stays low → city) yet HOLDS through a highway rest-stop (so it
+# stays high → resumes highway on departure). The smoothing itself supplies the
+# dwell, so one fast pass in town or a slow patch on the freeway can't mislabel a
+# whole trip. dt-aware alpha (tau≈45 s) so a variable OBD update rate / dropout
+# can't bias it; 30 s dt cap + speed sanity gate mirror the odometer.
+- trigger:
+    - trigger: state
+      entity_id: sensor.192_168_10_90_0d_vehiclespeed
+  sensor:
+    - name: "Drive Speed EMA"
+      unique_id: drive_speed_ema
+      unit_of_measurement: km/h
+      state_class: measurement
+      icon: mdi:speedometer
+      state: >
+        {% set prev = this.state | float(none) %}
+        {% if not is_state('binary_sensor.vehicle_is_moving','on') %}
+          {# frozen while stopped — hold the last moving average #}
+          {{ prev if prev is not none else states('sensor.192_168_10_90_0d_vehiclespeed') | float(0) }}
+        {% else %}
+          {% set spd = trigger.to_state.state | float(none) %}
+          {% if spd is none or spd < 0 or spd > 160 %}
+            {{ prev if prev is not none else 0 }}
+          {% elif prev is none %}
+            {{ spd | round(2) }}
+          {% else %}
+            {% set dt = (trigger.to_state.last_updated - trigger.from_state.last_updated).total_seconds()
+                        if trigger.from_state else 1 %}
+            {% set dt = [[dt, 0.1] | max, 30] | min %}
+            {% set alpha = 1 - 2.718281828459045 ** (-dt / 45) %}
+            {{ (prev + alpha * (spd - prev)) | round(2) }}
+          {% endif %}
+        {% endif %}
+      availability: "true"
+
+# ─── Drive Class (triggered, city|highway) — 2-band hysteresis on the EMA ─────
+# HIGHWAY once the smoothed speed exceeds the floor (default 85 km/h), CITY once
+# it drops below the ceiling (default 70), and HOLDS the last class inside the
+# 70–85 dead-band so boundary noise can't chatter. EPA-anchored (~78 km/h is the
+# highway drive-cycle average). Held across stops because the EMA is frozen while
+# parked. Triggering off the EMA (not raw speed) guarantees the EMA is fresh when
+# this reads it. Consumed by the highway_* accumulators + the dashboard badge.
+- trigger:
+    - trigger: state
+      entity_id: sensor.drive_speed_ema
+  sensor:
+    - name: "Drive Class"
+      unique_id: drive_class
+      icon: >
+        {% if is_state('sensor.drive_class','highway') %}mdi:highway{% else %}mdi:city-variant-outline{% endif %}
+      state: >
+        {% set ema = states('sensor.drive_speed_ema') | float(none) %}
+        {% set hi = states('input_number.highway_speed_floor') | float(85) %}
+        {% set lo = states('input_number.city_speed_ceiling') | float(70) %}
+        {% set prev = this.state if this.state in ['city','highway'] else none %}
+        {% if ema is none %}
+          {{ prev if prev is not none else 'city' }}
+        {% elif ema >= hi %}
+          highway
+        {% elif ema <= lo %}
+          city
+        {% else %}
+          {{ prev if prev is not none else ('highway' if ema >= (hi + lo) / 2 else 'city') }}
+        {% endif %}
+      availability: "true"
+
+# ─── Highway Distance / Fuel Totals (triggered) — city/highway split ──────────
+# Lifetime highway-only copies of the odometer + moving-fuel integral: identical
+# math, but each increment is added ONLY when sensor.drive_class is 'highway'.
+# The dashboard derives the CITY figures by subtraction (trip total − highway),
+# so city + highway always reconciles to the trip total and only these two
+# highway accumulators are needed. Same sanity gates + baseline pattern as their
+# parent accumulators. (drive_class lags a speed sample by ~1 update here, since
+# both key off the speed sensor — negligible for aggregate distance/fuel.)
+- trigger:
+    - trigger: state
+      entity_id: sensor.192_168_10_90_0d_vehiclespeed
+  sensor:
+    - name: "Highway Distance Total"
+      unique_id: highway_distance_total
+      unit_of_measurement: km
+      state_class: total_increasing
+      icon: mdi:highway
+      state: >
+        {% set base = this.state | float(0) %}
+        {% set f = trigger.from_state.state if trigger.from_state else none %}
+        {% set t = trigger.to_state.state   if trigger.to_state   else none %}
+        {% if f in [none,'unknown','unavailable'] or t in [none,'unknown','unavailable'] %}
+          {{ base }}
+        {% else %}
+          {% set prev = f | float(-1) %}
+          {% set curr = t | float(-1) %}
+          {% set dt = (trigger.to_state.last_updated - trigger.from_state.last_updated).total_seconds() %}
+          {% if prev >= 0 and curr >= 0 and prev <= 180 and curr <= 180 and dt > 0 and dt < 30
+                and is_state('sensor.drive_class','highway') %}
+            {{ (base + (prev + curr) / 2 * dt / 3600) | round(4) }}
+          {% else %}
+            {{ base }}
+          {% endif %}
+        {% endif %}
+      availability: "true"
+
+- trigger:
+    - trigger: state
+      entity_id: sensor.estimated_fuel_used_total_l
+  sensor:
+    - name: "Highway Fuel Total"
+      unique_id: highway_fuel_total
+      unit_of_measurement: L
+      state_class: total_increasing
+      icon: mdi:highway
+      state: >
+        {% set base = this.state | float(0) %}
+        {% set f = trigger.from_state.state if trigger.from_state else none %}
+        {% set t = trigger.to_state.state   if trigger.to_state   else none %}
+        {% if f in [none,'unknown','unavailable'] or t in [none,'unknown','unavailable'] %}
+          {{ base }}
+        {% else %}
+          {% set prev = f | float(0) %}
+          {% set curr = t | float(0) %}
+          {% if curr >= prev and is_state('binary_sensor.vehicle_is_moving','on')
+                and is_state('sensor.drive_class','highway') %}
+            {{ (base + (curr - prev)) | round(4) }}
+          {% else %}
+            {{ base }}
+          {% endif %}
+        {% endif %}
+      availability: "true"

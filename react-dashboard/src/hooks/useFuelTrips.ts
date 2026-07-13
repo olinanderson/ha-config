@@ -18,6 +18,15 @@ export interface FuelTrip {
   // Cross-check: tank-level delta (only emitted for long fill-to-fill spans)
   l_per_100km_tank?: number;
   economy_method?: 'obd_gps' | 'tank_delta';
+  // City vs highway split (only on recent trips still within recorder retention):
+  // distances rescaled onto the GPS trip distance by the OBD city/highway fraction
+  highway_pct?: number;          // share of trip distance driven on the highway
+  city_km?: number;
+  highway_km?: number;
+  city_fuel_l?: number;
+  highway_fuel_l?: number;
+  city_l_per_100km?: number;     // moving-basis economy for the city portion
+  highway_l_per_100km?: number;  // moving-basis economy for the highway portion
   // House-battery telemetry over the trip (driving charges off the alternator)
   battery_gain_pct?: number;        // energy-based: Wh gain ÷ historical full-pack Wh
   battery_gain_wh?: number;         // stored-energy increase (Wh)
@@ -31,6 +40,12 @@ export interface FuelTripSummary {
   total_l_used: number;
   avg_l_per_100km: number | null;
   tank_capacity_l: number;
+  // Distance-weighted city/highway baselines (the "which am I comparing to"
+  // reference). Null until enough split-carrying trips accumulate.
+  avg_city_l_per_100km?: number | null;
+  avg_highway_l_per_100km?: number | null;
+  total_city_km?: number;
+  total_highway_km?: number;
 }
 
 export interface FuelTripsResult {

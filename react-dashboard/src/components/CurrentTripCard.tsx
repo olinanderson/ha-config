@@ -17,7 +17,7 @@
  * stops stay grouped, but a long charge-idle is its own boundary.
  */
 import { useEffect, useState, type ReactNode } from 'react';
-import { Route, MapPin, Clock, Fuel, Gauge } from 'lucide-react';
+import { Route, MapPin, Clock, Fuel, Gauge, Building2, Milestone, Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { fuelEconomyColor, useFuelTrips } from '@/hooks/useFuelTrips';
@@ -57,6 +57,103 @@ function Stat({ icon, value, label }: { icon: ReactNode; value: string; label: s
   );
 }
 
+// One side of the city/highway split. BOTH bands are always shown, but the one
+// you're currently driving (per live drive_class) is `active` — ringed + tinted +
+// larger, with a "now" dot. The active band leads with THIS trip's economy
+// (compared to its own rolling average); the inactive band leads with its rolling
+// AVERAGE, so you always see the other road type's typical mileage even when you
+// aren't driving it right now.
+function BandCell({
+  icon,
+  label,
+  active,
+  tripEcon,
+  tripKm,
+  avg,
+  accent,
+}: {
+  icon: ReactNode;
+  label: string;
+  active: boolean;
+  tripEcon: number | null;
+  tripKm: number | null;
+  avg: number | null;
+  accent: 'amber' | 'sky';
+}) {
+  const hasTrip = tripEcon != null && tripKm != null && tripKm >= 0.1;
+  const hero = hasTrip ? tripEcon : avg; // active→this trip; inactive/no-data→average
+  return (
+    <div
+      className={cn(
+        'rounded-lg p-2 transition-colors',
+        active
+          ? accent === 'sky'
+            ? 'bg-sky-500/10 ring-2 ring-sky-500/50'
+            : 'bg-amber-500/10 ring-2 ring-amber-500/50'
+          : 'bg-muted/40 opacity-80',
+      )}
+    >
+      <p className="flex items-center justify-center gap-1 text-[11px] font-medium text-muted-foreground">
+        {icon}
+        {label}
+        {active && (
+          <span
+            className={cn(
+              'ml-0.5 inline-flex items-center gap-1 text-[9px] font-semibold uppercase tracking-wide',
+              accent === 'sky' ? 'text-sky-400' : 'text-amber-400',
+            )}
+          >
+            <span className={cn('h-1.5 w-1.5 rounded-full', accent === 'sky' ? 'bg-sky-400' : 'bg-amber-400')} />
+            now
+          </span>
+        )}
+      </p>
+      <p
+        className={cn(
+          'font-bold tabular-nums leading-tight',
+          active ? 'text-2xl' : 'text-lg',
+          hero != null ? fuelEconomyColor(hero) : 'text-muted-foreground',
+        )}
+      >
+        {hero != null ? hero.toFixed(1) : '—'}
+        <span className="ml-0.5 text-[10px] font-normal text-muted-foreground">L/100</span>
+      </p>
+      <p className="text-[10px] tabular-nums text-muted-foreground">
+        {hasTrip ? (
+          <>
+            {tripKm!.toFixed(0)} km{avg != null && <span className="opacity-70"> · avg {avg.toFixed(1)}</span>}
+          </>
+        ) : avg != null ? (
+          'your average'
+        ) : (
+          'no data yet'
+        )}
+      </p>
+    </div>
+  );
+}
+
+// Collapsible "how this works" note for the city/highway split + averages. Uses a
+// native <details> (not a popover) so it behaves reliably inside Home Assistant's
+// shadow-DOM panel. Shared with the Trip Economy history card.
+export function SplitInfo({ className }: { className?: string }) {
+  return (
+    <details className={cn('text-[10px] text-muted-foreground [&_summary]:list-none', className)}>
+      <summary className="flex cursor-pointer items-center justify-center gap-1 text-muted-foreground/60 transition-colors hover:text-muted-foreground">
+        <Info className="h-3 w-3" />
+        How the city/highway split works
+      </summary>
+      <p className="mt-1 leading-relaxed text-muted-foreground/80">
+        Your speed picks the mode — <span className="text-sky-400">highway</span> above ~85 km/h,{' '}
+        <span className="text-amber-400">city</span> below ~70, held in between so it can't flip-flop;
+        idling is excluded. The ringed <b>now</b> band is what you're driving this moment. <b>avg</b> is
+        the distance-weighted average across your recent trips (total litres ÷ total km for that road
+        type) — your real driving, not an EPA rating.
+      </p>
+    </details>
+  );
+}
+
 export function CurrentTripCard() {
   const { value: distance } = useEntityNumeric('sensor.live_trip_distance');
   const { value: liters } = useEntityNumeric('sensor.live_trip_fuel'); // moving fuel only
@@ -64,6 +161,13 @@ export function CurrentTripCard() {
   const { value: driveSec } = useEntityNumeric('sensor.live_trip_drive_seconds');
   const { value: idleFuel } = useEntityNumeric('sensor.live_trip_idle_fuel');
   const { value: range } = useEntityNumeric('sensor.live_trip_range_remaining');
+  // City/highway split for THIS trip + the current drive-mode classification.
+  const { value: cityEcon } = useEntityNumeric('sensor.live_trip_city_economy');
+  const { value: hwyEcon } = useEntityNumeric('sensor.live_trip_highway_economy');
+  const { value: cityKm } = useEntityNumeric('sensor.live_trip_city_distance');
+  const { value: hwyKm } = useEntityNumeric('sensor.live_trip_highway_distance');
+  const { value: hwyPct } = useEntityNumeric('sensor.live_trip_highway_percent');
+  const driveClass = useEntity('sensor.drive_class')?.state; // 'city' | 'highway'
   const { summary } = useFuelTrips(30); // personal distance-weighted economy baseline
   const startEntity = useEntity('input_text.trip_start_ts');
   const movingEntity = useEntity('binary_sensor.vehicle_is_moving');
@@ -88,6 +192,24 @@ export function CurrentTripCard() {
   const avgSpeed = distance != null && driveSec != null && driveSec > 5 ? distance / (driveSec / 3600) : null;
   const kmPerL = econ != null && econ > 0 ? 100 / econ : null;
 
+  // Which band is "happening now": live drive_class when classified, else the
+  // trip's dominant band by distance so the emphasis still reads sensibly at rest.
+  const activeBand: 'city' | 'highway' | null =
+    driveClass === 'city' || driveClass === 'highway'
+      ? driveClass
+      : hwyPct != null
+        ? hwyPct >= 50
+          ? 'highway'
+          : 'city'
+        : null;
+  // Show the split whenever there's this-trip data OR a rolling average to compare
+  // against — so both road types' averages stay visible even before a band is driven.
+  const showSplit =
+    cityKm != null ||
+    hwyKm != null ||
+    summary?.avg_city_l_per_100km != null ||
+    summary?.avg_highway_l_per_100km != null;
+
   // "Current" while moving, or recently moving — a stop shorter than the
   // trip-split gap (idle OR engine-off) is still the same trip. Pure pre-drive
   // idle (engine on, but motion stopped long ago) reads as the last trip.
@@ -105,6 +227,20 @@ export function CurrentTripCard() {
           <Route className="h-4 w-4" />
           {title}
           <div className="ml-auto flex items-center gap-2">
+            {isMoving && (driveClass === 'highway' || driveClass === 'city') && (
+              <Badge
+                variant="outline"
+                className={cn(
+                  'gap-1 text-[10px]',
+                  driveClass === 'highway'
+                    ? 'border-sky-500/40 text-sky-400'
+                    : 'border-amber-500/40 text-amber-400',
+                )}
+              >
+                {driveClass === 'highway' ? <Milestone className="h-3 w-3" /> : <Building2 className="h-3 w-3" />}
+                {driveClass === 'highway' ? 'Highway' : 'City'}
+              </Badge>
+            )}
             {isMoving ? (
               <Badge variant="default" className="text-[10px] bg-blue-500">
                 Driving
@@ -161,6 +297,42 @@ export function CurrentTripCard() {
                   {Math.round(range / 5) * 5}
                 </span>
                 <span className="text-sm text-muted-foreground">km to empty</span>
+              </div>
+            )}
+            {/* City vs highway split — both bands always shown, the one you're
+                driving now emphasized, so the headline economy always has context. */}
+            {showSplit && (
+              <div className="mt-2">
+                <div className="grid grid-cols-2 gap-2 text-center">
+                  <BandCell
+                    icon={<Building2 className="h-3 w-3" />}
+                    label="City"
+                    accent="amber"
+                    active={activeBand === 'city'}
+                    tripEcon={cityEcon}
+                    tripKm={cityKm}
+                    avg={summary?.avg_city_l_per_100km ?? null}
+                  />
+                  <BandCell
+                    icon={<Milestone className="h-3 w-3" />}
+                    label="Highway"
+                    accent="sky"
+                    active={activeBand === 'highway'}
+                    tripEcon={hwyEcon}
+                    tripKm={hwyKm}
+                    avg={summary?.avg_highway_l_per_100km ?? null}
+                  />
+                </div>
+                {hwyPct != null && (
+                  <div className="mt-1.5 flex items-center gap-1.5">
+                    <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
+                      <div className="bg-amber-400/70" style={{ width: `${100 - hwyPct}%` }} />
+                      <div className="bg-sky-400/70" style={{ width: `${hwyPct}%` }} />
+                    </div>
+                    <span className="text-[10px] tabular-nums text-muted-foreground">{hwyPct.toFixed(0)}% hwy</span>
+                  </div>
+                )}
+                <SplitInfo className="mt-2 text-center" />
               </div>
             )}
             {/* Beating-your-average ribbon (vs personal distance-weighted baseline) */}

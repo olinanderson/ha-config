@@ -2,6 +2,7 @@ import { Fuel } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
 import { useFuelTrips, fuelEconomyColor } from '@/hooks/useFuelTrips';
+import { SplitInfo } from './CurrentTripCard';
 
 function formatDate(ts: number): string {
   const d = new Date(ts);
@@ -38,25 +39,57 @@ export function FuelTripHistory() {
             No fill-up-span trips yet — data accumulates between fill-ups
           </p>
         )}
-        {displayTrips.map((trip, i) => (
-          <div
-            key={i}
-            className="flex items-center gap-2 py-1 text-xs border-b border-border/30 last:border-0"
-          >
-            <span className="text-muted-foreground w-12 shrink-0">{formatDate(trip.start_ts)}</span>
-            <span className="text-muted-foreground tabular-nums w-14 shrink-0">
-              {trip.distance_km.toFixed(0)} km
-            </span>
-            <span className={cn('tabular-nums font-medium ml-auto', fuelEconomyColor(trip.l_per_100km!))}>
-              {trip.l_per_100km!.toFixed(1)} L/100
-            </span>
-          </div>
-        ))}
+        {displayTrips.map((trip, i) => {
+          const hasSplit = trip.city_l_per_100km != null || trip.highway_l_per_100km != null;
+          return (
+            <div key={i} className="py-1 text-xs border-b border-border/30 last:border-0">
+              <div className="flex items-center gap-2">
+                <span className="text-muted-foreground w-12 shrink-0">{formatDate(trip.start_ts)}</span>
+                <span className="text-muted-foreground tabular-nums w-14 shrink-0">
+                  {trip.distance_km.toFixed(0)} km
+                </span>
+                <span className={cn('tabular-nums font-medium ml-auto', fuelEconomyColor(trip.l_per_100km!))}>
+                  {trip.l_per_100km!.toFixed(1)} L/100
+                </span>
+              </div>
+              {hasSplit && (
+                <div className="mt-0.5 flex items-center gap-2 pl-14 text-[10px] tabular-nums text-muted-foreground">
+                  {trip.city_l_per_100km != null && (
+                    <span className="text-amber-400/80">city {trip.city_l_per_100km.toFixed(1)}</span>
+                  )}
+                  {trip.highway_l_per_100km != null && (
+                    <span className="text-sky-400/80">hwy {trip.highway_l_per_100km.toFixed(1)}</span>
+                  )}
+                  {trip.highway_pct != null && <span className="ml-auto">{trip.highway_pct}% hwy</span>}
+                </div>
+              )}
+            </div>
+          );
+        })}
         {!loading && !error && displayTrips.length > 0 && summary && (
           <div className="flex items-center gap-2 pt-1.5 text-xs text-muted-foreground">
             <span>{displayTrips.length} trips</span>
             <span className="ml-auto">{summary.total_km.toFixed(0)} km total</span>
           </div>
+        )}
+        {!loading && !error && displayTrips.length > 0 && summary &&
+          (summary.avg_city_l_per_100km != null || summary.avg_highway_l_per_100km != null) && (
+            <div className="flex items-center gap-3 pt-0.5 text-[10px] tabular-nums text-muted-foreground">
+              <span className="text-muted-foreground/70">avg by road type</span>
+              {summary.avg_city_l_per_100km != null && (
+                <span className="ml-auto">
+                  <span className="text-amber-400/80">city</span> {summary.avg_city_l_per_100km.toFixed(1)}
+                </span>
+              )}
+              {summary.avg_highway_l_per_100km != null && (
+                <span>
+                  <span className="text-sky-400/80">hwy</span> {summary.avg_highway_l_per_100km.toFixed(1)}
+                </span>
+              )}
+            </div>
+          )}
+        {!loading && !error && displayTrips.length > 0 && (
+          <SplitInfo className="pt-1.5" />
         )}
       </CardContent>
     </Card>

@@ -90,6 +90,25 @@ trip_baseline_moving_s:
   step: 0.1
   unit_of_measurement: s
 
+# City/Highway split baselines: the highway distance + highway fuel accumulators
+# at trip start. City = trip total − highway (by subtraction), so only the
+# highway side needs a baseline. No `initial:` → restore across restarts.
+trip_baseline_highway_distance_km:
+  name: "Trip Baseline Highway Distance"
+  icon: mdi:highway
+  min: 0
+  max: 100000000
+  step: 0.001
+  unit_of_measurement: km
+
+trip_baseline_highway_fuel_l:
+  name: "Trip Baseline Highway Fuel"
+  icon: mdi:highway
+  min: 0
+  max: 100000000
+  step: 0.001
+  unit_of_measurement: L
+
 # How long the van must be NOT MOVING (idle OR engine-off) before the next drive
 # counts as a NEW trip. Stops shorter than this stay grouped into one trip.
 trip_split_minutes:
@@ -100,3 +119,29 @@ trip_split_minutes:
   step: 5
   initial: 35
   unit_of_measurement: "min"
+
+# City/Highway classification edges (hysteresis dead-band on OBD speed). The van
+# is HIGHWAY once sustained speed exceeds the floor, CITY once it drops below the
+# ceiling, and HOLDS the last class in the 70–85 km/h dead-band. EPA-anchored:
+# the highway drive-cycle averages ~78 km/h, so the floor sits just above it and
+# the ceiling just below, cleanly separating stop-go arterial from steady cruise.
+# The Transit's efficient cruise (88–105 km/h) clears the floor; a boxy van's
+# aero drag argues for keeping the boundary low, not raising it. See the two
+# "Drive Class •" automations (each needs a 45 s dwell before flipping).
+city_speed_ceiling:
+  name: "City Speed Ceiling"
+  icon: mdi:city
+  min: 40
+  max: 90
+  step: 1
+  initial: 70
+  unit_of_measurement: "km/h"
+
+highway_speed_floor:
+  name: "Highway Speed Floor"
+  icon: mdi:highway
+  min: 60
+  max: 120
+  step: 1
+  initial: 85
+  unit_of_measurement: "km/h"

@@ -15,8 +15,10 @@ Provider: OSRM map matching (router.project-osrm.org/match)
   - Uses Hidden Markov Model GPS trace matching — no U-turns, no turn-restriction over-routing
   - Returns road-snapped geometry that follows the actual path of the trace
 """
+import bisect
 import hashlib
 import json
+import math
 import re
 import sqlite3
 import threading
@@ -39,6 +41,14 @@ FILTERED_DB = "/config/www/vanlife-panel/filtered_gps.db"
 TANK_L                 = 94.6   # Ford Transit T-350, 25 US gal
 FUEL_MEAN_ENTITY       = "sensor.wican_fuel_5_min_mean"        # smoothed tank %
 FUEL_USED_TOTAL_ENTITY = "sensor.estimated_fuel_used_total_l"  # OBD L integral
+SPEED_ENTITY           = "sensor.192_168_10_90_0d_vehiclespeed" # OBD speed km/h
+# City/Highway classifier constants — MUST mirror the live HA sensors
+# (input_number.city_speed_ceiling / highway_speed_floor + the drive_speed_ema
+# tau) so a trip reads the same city/highway split live and in this history.
+CITY_CEILING_KMH   = 70.0   # EMA at/below → city
+HIGHWAY_FLOOR_KMH  = 85.0   # EMA at/above → highway
+EMA_TAU_S          = 45.0   # speed-EMA time constant (stopped-frozen)
+MOVE_FLOOR_KMH     = 2.0    # below this = stopped (idle excluded from both bands)
 BATTERY_TEMP_ENTITY    = "sensor.olins_van_bms_temperature"    # battery temp (°C)
 BATTERY_WH_ENTITY      = "sensor.olins_van_bms_stored_energy"  # stored energy (Wh)
 BATTERY_FULL_WH_FALLBACK = 8710.0  # full-pack stored Wh if the stats query fails
@@ -103,6 +113,100 @@ def _obd_litres_between(con, start_ts_s, end_ts_s, max_gap_s=2 * 3600):
     if delta <= 0:
         return None
     return round(delta, 3)
+
+
+def _series_between(con, entity_id, start_ts_s, end_ts_s):
+    """All numeric (ts_s, value) samples of entity_id in [start,end], ascending.
+    Uses the (metadata_id, last_updated_ts) index — a bounded range scan."""
+    rows = con.execute(
+        "SELECT s.last_updated_ts, s.state FROM states s "
+        "JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
+        "WHERE sm.entity_id = ? AND s.last_updated_ts >= ? AND s.last_updated_ts <= ? "
+        "AND s.state NOT IN ('unknown','unavailable') "
+        "ORDER BY s.last_updated_ts ASC",
+        (entity_id, start_ts_s, end_ts_s),
+    ).fetchall()
+    out = []
+    for ts, st in rows:
+        try:
+            out.append((ts, float(st)))
+        except (TypeError, ValueError):
+            pass
+    return out
+
+
+def _drive_class_split_between(con, start_ts_s, end_ts_s):
+    """Reconstruct CITY vs HIGHWAY distance (km) and MOVING fuel (L) over a window
+    by replaying the recorder's OBD speed + fuel-integral through the SAME
+    classifier the live dashboard uses: a stopped-frozen speed EMA (tau≈45 s) with
+    a 70/85 km/h hysteresis dead-band. Distance is the trapezoidal OBD-speed
+    integral (30 s dt cap); fuel is the estimated_fuel_used_total_l delta per step;
+    both are counted only while moving (idle excluded, matching the live basis) and
+    attributed to whichever class is in force. Returns a dict of raw OBD-basis
+    {city_km, highway_km, city_l, highway_l} or None when there isn't enough speed
+    history (older than recorder retention, or a micro-trip)."""
+    speed = _series_between(con, SPEED_ENTITY, start_ts_s, end_ts_s)
+    if len(speed) < 10:
+        return None
+    fuel = _series_between(con, FUEL_USED_TOTAL_ENTITY, start_ts_s, end_ts_s)
+    fuel_ts = [f[0] for f in fuel]
+
+    def fuel_at(ts):
+        """Nearest fuel-integral value at or before ts (step function)."""
+        if not fuel:
+            return None
+        i = bisect.bisect_right(fuel_ts, ts) - 1
+        return fuel[max(i, 0)][1]
+
+    city_km = hwy_km = city_l = hwy_l = 0.0
+    # Seed the EMA + class from the live sensors as they stood at trip start, so a
+    # trip resuming after a highway leg starts 'highway' — the live drive_class
+    # holds its value and drive_speed_ema is frozen across the pre-trip stop, so
+    # cold-starting to city here would misclassify the first ~minute vs the live
+    # card. Falls back to a city cold-start for trips predating these sensors.
+    ema, _ = _nearest_state(con, "sensor.drive_speed_ema", start_ts_s, "before", max_gap_s=24 * 3600)
+    cls_row = con.execute(
+        "SELECT s.state FROM states s JOIN states_meta sm ON s.metadata_id = sm.metadata_id "
+        "WHERE sm.entity_id = ? AND s.state IN ('city','highway') AND s.last_updated_ts <= ? "
+        "ORDER BY s.last_updated_ts DESC LIMIT 1",
+        ("sensor.drive_class", start_ts_s),
+    ).fetchone()
+    cls = cls_row[0] if cls_row else "city"
+    prev_ts, prev_spd = speed[0]
+    for ts, spd in speed[1:]:
+        dt = ts - prev_ts
+        # Update the EMA only while moving (frozen when stopped), exactly like
+        # sensor.drive_speed_ema, then apply the 70/85 hysteresis hold-band. On a
+        # >=30 s OBD gap, CLAMP dt to 30 (one big decay step) rather than skipping
+        # the update — this mirrors the live sensor's [[dt,0.1]|max,30]|min.
+        if spd > MOVE_FLOOR_KMH and 0 <= spd <= 160:
+            if ema is None:
+                ema = spd
+            elif dt > 0:
+                alpha = 1 - math.e ** (-min(max(dt, 0.1), 30) / EMA_TAU_S)
+                ema += alpha * (spd - ema)
+            if ema >= HIGHWAY_FLOOR_KMH:
+                cls = "highway"
+            elif ema <= CITY_CEILING_KMH:
+                cls = "city"
+            # else: hold the previous class (dead-band)
+        # Attribute this step's distance + fuel only while genuinely moving and
+        # over a sane dt (mirrors the live moving-gated, dt-capped accumulators).
+        if 0 < dt < 30 and prev_spd > MOVE_FLOOR_KMH and 0 <= prev_spd <= 180 and 0 <= spd <= 180:
+            seg_km = (prev_spd + spd) / 2.0 * dt / 3600.0
+            f0, f1 = fuel_at(prev_ts), fuel_at(ts)
+            seg_l = (f1 - f0) if (f0 is not None and f1 is not None and f1 >= f0) else 0.0
+            if cls == "highway":
+                hwy_km += seg_km
+                hwy_l  += seg_l
+            else:
+                city_km += seg_km
+                city_l  += seg_l
+        prev_ts, prev_spd = ts, spd
+
+    if city_km + hwy_km < 0.5:
+        return None
+    return {"city_km": city_km, "highway_km": hwy_km, "city_l": city_l, "highway_l": hwy_l}
 
 
 def _battery_full_wh_cached(con):
@@ -739,6 +843,40 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     trip["fuel_used_l_obd"] = obd_l
                     trip["l_per_100km_obd"] = round(obd_l / dist_km * 100, 1)
 
+                # ── City vs Highway split (recent trips within recorder retention) ──
+                # Replay OBD speed + fuel through the live classifier. Per-band
+                # distance is rescaled onto the GPS trip distance (same basis as the
+                # headline) by the OBD city/highway fraction; per-band litres are
+                # rescaled so city+highway == the headline obd_l (folding idle +
+                # leading-edge fuel in proportionally) — otherwise both bands, being
+                # moving-only, sit below the idle-inclusive headline and look like
+                # "both parts beat the whole". Only trusted when the replay covered
+                # most of the GPS trip: a class-correlated OBD dropout (or a trip
+                # straddling recorder retention) would bias the fraction, so below
+                # 70% coverage the split is left unset (dashboard shows —).
+                split = _drive_class_split_between(ha_con, start_ts / 1000, end_ts / 1000)
+                if split:
+                    tot_obd = split["city_km"] + split["highway_km"]
+                    if tot_obd > 0.5 and tot_obd >= 0.7 * dist_km:
+                        hwy_frac = split["highway_km"] / tot_obd
+                        gk_hwy   = dist_km * hwy_frac
+                        gk_city  = dist_km * (1 - hwy_frac)
+                        # Reconcile band litres to the headline OBD litres; fall back
+                        # to the raw moving-only litres when there's no obd_l headline.
+                        moving_l = split["city_l"] + split["highway_l"]
+                        fscale   = (obd_l / moving_l) if (obd_l and moving_l > 0) else 1.0
+                        city_l   = split["city_l"] * fscale
+                        hwy_l    = split["highway_l"] * fscale
+                        trip["highway_pct"]    = round(hwy_frac * 100)
+                        trip["city_km"]        = round(gk_city, 1)
+                        trip["highway_km"]     = round(gk_hwy, 1)
+                        trip["city_fuel_l"]    = round(city_l, 2)
+                        trip["highway_fuel_l"] = round(hwy_l, 2)
+                        if gk_city > 0.3 and city_l > 0:
+                            trip["city_l_per_100km"]    = round(city_l / gk_city * 100, 1)
+                        if gk_hwy > 0.3 and hwy_l > 0:
+                            trip["highway_l_per_100km"] = round(hwy_l / gk_hwy * 100, 1)
+
                 # ── Secondary cross-check: tank-level delta (long spans only) ──
                 if fuel_start is not None and fuel_end is not None:
                     used_pct = round(fuel_start - fuel_end, 1)
@@ -773,6 +911,13 @@ class ProxyHandler(BaseHTTPRequestHandler):
             total_l   = sum((_trip_litres(t) or 0) for t in valid)
             avg_l100  = round(total_l / total_km * 100, 1) if total_km > 0 and total_l > 0 else None
 
+            # Distance-weighted city/highway baselines across the trips that carry a
+            # split — the "which am I comparing to" reference for the dashboard.
+            def _band_avg(km_key, l_key, econ_key):
+                km = sum(t[km_key] for t in trips if t.get(econ_key) is not None)
+                lt = sum(t[l_key]  for t in trips if t.get(econ_key) is not None)
+                return round(lt / km * 100, 1) if km > 1 and lt > 0 else None
+
             self._json(200, {
                 "trips": trips,
                 "summary": {
@@ -781,6 +926,10 @@ class ProxyHandler(BaseHTTPRequestHandler):
                     "total_l_used":     round(total_l, 1),
                     "avg_l_per_100km":  avg_l100,
                     "tank_capacity_l":  TANK_L,
+                    "avg_city_l_per_100km":    _band_avg("city_km", "city_fuel_l", "city_l_per_100km"),
+                    "avg_highway_l_per_100km": _band_avg("highway_km", "highway_fuel_l", "highway_l_per_100km"),
+                    "total_city_km":    round(sum(t.get("city_km", 0) for t in trips if t.get("city_l_per_100km") is not None), 1),
+                    "total_highway_km": round(sum(t.get("highway_km", 0) for t in trips if t.get("highway_l_per_100km") is not None), 1),
                 }
             })
 
