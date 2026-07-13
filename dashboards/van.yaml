@@ -106,7 +106,7 @@ views:
                 function fmt(n,d){ return isNaN(n)?'—':n.toFixed(d); }
                 var rpm=s('sensor.192_168_10_90_0c_enginerpm'), speed=s('sensor.192_168_10_90_0d_vehiclespeed'),
                     coolant=s('sensor.coolant_temp_last'), throttle=s('sensor.192_168_10_90_11_throttleposition'),
-                    load=s('sensor.192_168_10_90_04_calcengineload'), ecuV=s('sensor.192_168_10_90_42_controlmodulevolt');
+                    load=s('sensor.192_168_10_90_04_calcengineload'), chargerV=s('sensor.a32_pro_orion_input_voltage');
                 var gear=states['sensor.wican_gear_display']?states['sensor.wican_gear_display'].state:'—';
                 var running=states['binary_sensor.engine_is_running'].state==='on';
                 var runDot=running?'#22c55e':'#6b7280';
@@ -139,8 +139,8 @@ views:
                       <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${fmt(load,0)}%</div>
                     </div>
                     <div>
-                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">ECU Voltage</div>
-                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${fmt(ecuV,1)}V</div>
+                      <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Charger Input</div>
+                      <div style="font-variant-numeric:tabular-nums; font-size:16px; font-weight:600; margin-top:2px;">${fmt(chargerV,1)}V</div>
                     </div>
                     <div>
                       <div style="font-size:11px; font-weight:500; color:var(--secondary-text-color);">Status</div>

@@ -32,7 +32,7 @@ function EngineCard() {
   const { value: throttle } = useEntityNumeric('sensor.192_168_10_90_11_throttleposition');
   const { value: load } = useEntityNumeric('sensor.192_168_10_90_04_calcengineload');
   const { value: coolant } = useEntityNumeric('sensor.192_168_10_90_05_enginecoolanttemp');
-  const { value: ecuV } = useEntityNumeric('sensor.192_168_10_90_42_controlmodulevolt');
+  const { value: chargerV } = useEntityNumeric('sensor.a32_pro_orion_input_voltage');
   const moving = useEntity('binary_sensor.vehicle_is_moving');
   const engine = useEntity('binary_sensor.engine_is_running');
   const ecuStatus = useEntity('binary_sensor.meatpi_pro_ecu_status');
@@ -93,7 +93,7 @@ function EngineCard() {
           <SparklineStat entityId="sensor.192_168_10_90_11_throttleposition" label="Throttle" value={fmt(throttle, 0)} unit="%" color="#f59e0b" />
           <SparklineStat entityId="sensor.192_168_10_90_04_calcengineload" label="Engine Load" value={fmt(load, 0)} unit="%" color="#ef4444" />
           <SparklineStat entityId="sensor.192_168_10_90_05_enginecoolanttemp" label="Coolant Temp" value={fmt(coolant, 0)} unit="°C" color="#ef4444" />
-          <SparklineStat entityId="sensor.192_168_10_90_42_controlmodulevolt" label="ECU Voltage" value={fmt(ecuV, 2)} unit="V" color="#6366f1" />
+          <SparklineStat entityId="sensor.a32_pro_orion_input_voltage" label="Charger Input" value={fmt(chargerV, 2)} unit="V" color="#6366f1" />
         </div>
       </CardContent>
     </Card>
@@ -300,7 +300,7 @@ function MainHeroCard() {
   const { value: gradePct } = useEntityNumeric('sensor.road_grade');
   const aggression = useEntity('sensor.hill_aggression');
   const { value: rpm } = useEntityNumeric('sensor.192_168_10_90_0c_enginerpm');
-  const { value: ecuV } = useEntityNumeric('sensor.192_168_10_90_42_controlmodulevolt');
+  const { value: chargerV } = useEntityNumeric('sensor.a32_pro_orion_input_voltage');
   const { value: ambient } = useEntityNumeric('sensor.192_168_10_90_46_ambientairtemp');
 
   const { open } = useHistoryDialog();
@@ -399,7 +399,7 @@ function MainHeroCard() {
               </div>
             </div>
 
-            {/* Less important: ambient, rpm, ecu voltage */}
+            {/* Less important: ambient, rpm, charger input voltage (Orion 12V side) */}
             <div className="mt-2 grid grid-cols-3 gap-2 text-center">
               <div className="cursor-pointer rounded-lg p-1 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_46_ambientairtemp', 'Ambient Air', '°C')}>
                 <p className="text-lg font-semibold tabular-nums text-muted-foreground">{fmt(ambient, 0)}°</p>
@@ -409,9 +409,9 @@ function MainHeroCard() {
                 <p className="text-lg font-semibold tabular-nums text-muted-foreground">{fmt(rpm, 0)}</p>
                 <p className="text-[10px] text-muted-foreground">RPM</p>
               </div>
-              <div className="cursor-pointer rounded-lg p-1 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_42_controlmodulevolt', 'ECU Voltage', 'V')}>
-                <p className="text-lg font-semibold tabular-nums text-muted-foreground">{fmt(ecuV, 2)}</p>
-                <p className="text-[10px] text-muted-foreground">ECU V</p>
+              <div className="cursor-pointer rounded-lg p-1 transition-colors hover:bg-muted/50" onClick={() => open('sensor.a32_pro_orion_input_voltage', 'Charger Input', 'V')}>
+                <p className="text-lg font-semibold tabular-nums text-muted-foreground">{fmt(chargerV, 2)}</p>
+                <p className="text-[10px] text-muted-foreground">Chrg V</p>
               </div>
             </div>
           </div>

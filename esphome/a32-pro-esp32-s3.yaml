@@ -78,6 +78,11 @@ victron_ble:
     mac_address: "e4a576a4b459"
     bindkey: "8741db6dda477fa0ea0e82ea5d85f6ee"
 
+  # Orion-Tr Smart 12/24-15 DC-DC charger (alternator -> 24V house bank, alongside 2x Sterling B2Bs)
+  - id: Orion_DCDC_Charger
+    mac_address: "cefc6f3bf6e5"
+    bindkey: "d9cfee225265053b82c201b9c7dbe5d9"
+
 time:
   - platform: sntp
     id: real_time_clock
@@ -1239,6 +1244,16 @@ binary_sensor:
     name: "MPPT2 has Error"
     type: CHARGER_ERROR
 
+  # Orion DC-DC charger binary sensors
+  - platform: victron_ble
+    victron_ble_id: Orion_DCDC_Charger
+    name: "Orion is in Fault state"
+    type: DEVICE_STATE_FAULT
+  - platform: victron_ble
+    victron_ble_id: Orion_DCDC_Charger
+    name: "Orion has Error"
+    type: CHARGER_ERROR
+
 text_sensor:
   - platform: victron_ble
     victron_ble_id: MPPT_Controller_1
@@ -1256,6 +1271,15 @@ text_sensor:
   - platform: victron_ble
     victron_ble_id: MPPT_Controller_2
     name: "MPPT2 Error reason"
+    type: CHARGER_ERROR
+
+  - platform: victron_ble
+    victron_ble_id: Orion_DCDC_Charger
+    name: "Orion state"
+    type: DEVICE_STATE
+  - platform: victron_ble
+    victron_ble_id: Orion_DCDC_Charger
+    name: "Orion Error reason"
     type: CHARGER_ERROR
 
 # Heater status text sensor (replaces old lockout-only sensor)
@@ -2321,10 +2345,20 @@ sensor:
     name: "Smart Battery Sense (12V) Voltage"
     type: BATTERY_VOLTAGE
 
-  - platform: victron_ble 
+  - platform: victron_ble
     victron_ble_id: Smart_Battery_Sense_12V
     name: "Smart Battery Sense (12V) Temperature"
     type: TEMPERATURE
+
+# Orion-Tr Smart 12/24-15 DC-DC charger (see victron_ble: block)
+  - platform: victron_ble
+    victron_ble_id: Orion_DCDC_Charger
+    name: "Orion Input Voltage"
+    type: INPUT_VOLTAGE
+  - platform: victron_ble
+    victron_ble_id: Orion_DCDC_Charger
+    name: "Orion Output Voltage"
+    type: OUTPUT_VOLTAGE
 
   # PID sensors
   - platform: pid

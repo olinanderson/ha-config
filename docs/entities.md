@@ -42,6 +42,18 @@ Two Victron controllers, read over BLE by the a32-pro ESP32. Panels are Custom M
 |---|---|
 | `sensor.a32_pro_smart_battery_sense_12v_voltage` | 12V rail (24V→12V converter output) |
 
+## Victron Orion-Tr Smart 12/24-15 (DC-DC alternator charger, BLE via a32-pro)
+> Added + flashed + verified live 2026-07-11. Input voltage broadcasts 24/7 (Orion is powered from the starter battery) — doubles as a parked starter-battery monitor. Shown as "Charger Input" on the Van page (React + van.yaml), replacing the ECU-voltage display (ECU sensor still recorded via MQTT).
+
+| Entity | Description |
+|---|---|
+| `sensor.a32_pro_orion_input_voltage` | Orion input voltage (12V/alternator side — what its engine-detect sees) |
+| `sensor.a32_pro_orion_output_voltage` | Orion output voltage (24V side) |
+| `sensor.a32_pro_orion_state` | Charge phase: Off / Bulk / Absorption / Float |
+| `sensor.a32_pro_orion_error_reason` | Charger error text |
+| `binary_sensor.a32_pro_orion_is_in_fault_state` | Fault state |
+| `binary_sensor.a32_pro_orion_has_error` | Has error |
+
 ## Temperature / Humidity (BME280 × 4)
 | Entity | Location |
 |---|---|
