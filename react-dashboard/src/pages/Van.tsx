@@ -442,7 +442,7 @@ function MainHeroCard() {
                 <p className={cn('text-3xl font-bold tabular-nums', socColor)}>{fmt(soc, 0)}%</p>
                 <p className="text-[10px] text-muted-foreground">Battery</p>
                 <p className="text-[9px] tabular-nums text-muted-foreground/70">
-                  {storedWh != null ? `${(storedWh / 1000).toFixed(1)} kWh` : '—'}
+                  {storedWh != null ? `${Math.round(storedWh)} Wh` : '—'}
                 </p>
               </div>
               <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.olins_van_bms_current', 'Battery Current', 'A')}>

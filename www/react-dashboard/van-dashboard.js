@@ -25676,7 +25676,7 @@ function KN() {
             "%"
           ] }),
           /* @__PURE__ */ l.jsx("p", { className: "text-[10px] text-muted-foreground", children: "Battery" }),
-          /* @__PURE__ */ l.jsx("p", { className: "text-[9px] tabular-nums text-muted-foreground/70", children: o != null ? `${(o / 1e3).toFixed(1)} kWh` : "—" })
+          /* @__PURE__ */ l.jsx("p", { className: "text-[9px] tabular-nums text-muted-foreground/70", children: o != null ? `${Math.round(o)} Wh` : "—" })
         ] }),
         /* @__PURE__ */ l.jsxs("div", { className: "cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50", onClick: () => A("sensor.olins_van_bms_current", "Battery Current", "A"), children: [
           /* @__PURE__ */ l.jsx("p", { className: je("text-3xl font-bold tabular-nums", O), children: we(s, 1) }),
