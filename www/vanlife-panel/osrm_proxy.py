@@ -45,8 +45,8 @@ SPEED_ENTITY           = "sensor.192_168_10_90_0d_vehiclespeed" # OBD speed km/h
 # City/Highway classifier constants — MUST mirror the live HA sensors
 # (input_number.city_speed_ceiling / highway_speed_floor + the drive_speed_ema
 # tau) so a trip reads the same city/highway split live and in this history.
-CITY_CEILING_KMH   = 70.0   # EMA at/below → city
-HIGHWAY_FLOOR_KMH  = 85.0   # EMA at/above → highway
+CITY_CEILING_KMH   = 63.0   # EMA at/below → city
+HIGHWAY_FLOOR_KMH  = 78.0   # EMA at/above → highway (EPA HWFET avg = 77.7 km/h)
 EMA_TAU_S          = 45.0   # speed-EMA time constant (stopped-frozen)
 MOVE_FLOOR_KMH     = 2.0    # below this = stopped (idle excluded from both bands)
 BATTERY_TEMP_ENTITY    = "sensor.olins_van_bms_temperature"    # battery temp (°C)
@@ -139,7 +139,7 @@ def _drive_class_split_between(con, start_ts_s, end_ts_s):
     """Reconstruct CITY vs HIGHWAY distance (km) and MOVING fuel (L) over a window
     by replaying the recorder's OBD speed + fuel-integral through the SAME
     classifier the live dashboard uses: a stopped-frozen speed EMA (tau≈45 s) with
-    a 70/85 km/h hysteresis dead-band. Distance is the trapezoidal OBD-speed
+    a 63/78 km/h hysteresis dead-band. Distance is the trapezoidal OBD-speed
     integral (30 s dt cap); fuel is the estimated_fuel_used_total_l delta per step;
     both are counted only while moving (idle excluded, matching the live basis) and
     attributed to whichever class is in force. Returns a dict of raw OBD-basis
@@ -176,7 +176,7 @@ def _drive_class_split_between(con, start_ts_s, end_ts_s):
     for ts, spd in speed[1:]:
         dt = ts - prev_ts
         # Update the EMA only while moving (frozen when stopped), exactly like
-        # sensor.drive_speed_ema, then apply the 70/85 hysteresis hold-band. On a
+        # sensor.drive_speed_ema, then apply the 63/78 hysteresis hold-band. On a
         # >=30 s OBD gap, CLAMP dt to 30 (one big decay step) rather than skipping
         # the update — this mirrors the live sensor's [[dt,0.1]|max,30]|min.
         if spd > MOVE_FLOOR_KMH and 0 <= spd <= 160:

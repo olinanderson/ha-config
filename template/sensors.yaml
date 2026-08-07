@@ -389,11 +389,21 @@
 
     # ─── Fuel Trim Sensors (derived) ───
 
+    # Unavailable unless ALL FOUR trim PIDs are numeric. Without this the
+    # `| float(0)` fallbacks turned a dead WiCAN into a confident "0.0 %", which
+    # is a real trim value — so parked hours (every PID unavailable) were
+    # recorded as genuine zeros and dragged the long-term statistics to ~0
+    # instead of the true ~-3 %. An engine-off reading must be absent, not zero.
     - name: "Average Fuel Trim"
       unique_id: average_fuel_trim
       icon: mdi:tune-vertical
       unit_of_measurement: "%"
       state_class: measurement
+      availability: >
+        {{ states('sensor.192_168_10_90_stft_b1') | is_number
+           and states('sensor.192_168_10_90_ltft_b1') | is_number
+           and states('sensor.192_168_10_90_stft_b2') | is_number
+           and states('sensor.192_168_10_90_ltft_b2') | is_number }}
       state: >
         {% set stft1 = states('sensor.192_168_10_90_stft_b1') | float(0) %}
         {% set ltft1 = states('sensor.192_168_10_90_ltft_b1') | float(0) %}

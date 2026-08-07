@@ -54,14 +54,18 @@ def _ha_get(token, entity_id):
         return json.loads(r.read())
 
 
-def _ha_post(token, entity_id, state, attributes=None):
-    payload = json.dumps({
-        "state": str(state),
-        "attributes": attributes or {}
-    }).encode()
+def _ha_service(token, domain, service, data):
+    """Call an HA service.
+
+    Helpers MUST be written this way, not via POST /api/states/<entity>. That
+    endpoint only overwrites the in-memory state object; it never reaches the
+    input_number/input_text integration, so the value is not persisted and is
+    discarded on the next write or restart. set_value is the only path that
+    actually sticks.
+    """
     req = urllib.request.Request(
-        f"{HA_URL}/api/states/{entity_id}",
-        data=payload,
+        f"{HA_URL}/api/services/{domain}/{service}",
+        data=json.dumps(data).encode(),
         headers={
             "Authorization": f"Bearer {token}",
             "Content-Type": "application/json",
@@ -189,7 +193,8 @@ def main():
 
     # ── 6. Write back to HA ──────────────────────────────────────────────────
     # Update input_number.fuel_ve_correction
-    _ha_post(token, "input_number.fuel_ve_correction", new_ve)
+    _ha_service(token, "input_number", "set_value",
+                {"entity_id": "input_number.fuel_ve_correction", "value": new_ve})
     print(f"Set input_number.fuel_ve_correction = {new_ve}", flush=True)
 
     # Update input_text.ve_correction_history (must stay ≤ 255 chars — HA hard limit)
@@ -197,8 +202,15 @@ def main():
     while len(hist_json) > 255 and history:
         history.pop(0)
         hist_json = json.dumps(history, separators=(",", ":"))
-    _ha_post(token, "input_text.ve_correction_history", hist_json)
+    _ha_service(token, "input_text", "set_value",
+                {"entity_id": "input_text.ve_correction_history", "value": hist_json})
     print(f"Updated VE history ({len(history)} entries): {hist_json}", flush=True)
+
+    # Read back so the log proves the write persisted rather than assuming it.
+    readback = _ha_get(token, "input_number.fuel_ve_correction").get("state")
+    print(f"Read-back input_number.fuel_ve_correction = {readback}", flush=True)
+    if abs(float(readback) - new_ve) > 0.0005:
+        print(f"WARNING: read-back {readback} != written {new_ve}", file=sys.stderr)
 
 
 if __name__ == "__main__":

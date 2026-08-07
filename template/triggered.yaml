@@ -337,12 +337,15 @@
       availability: "true"
 
 # ─── Drive Class (triggered, city|highway) — 2-band hysteresis on the EMA ─────
-# HIGHWAY once the smoothed speed exceeds the floor (default 85 km/h), CITY once
-# it drops below the ceiling (default 70), and HOLDS the last class inside the
-# 70–85 dead-band so boundary noise can't chatter. EPA-anchored (~78 km/h is the
-# highway drive-cycle average). Held across stops because the EMA is frozen while
-# parked. Triggering off the EMA (not raw speed) guarantees the EMA is fresh when
-# this reads it. Consumed by the highway_* accumulators + the dashboard badge.
+# HIGHWAY once the smoothed speed exceeds the floor (default 78 km/h), CITY once
+# it drops below the ceiling (default 63), and HOLDS the last class inside the
+# 63–78 dead-band so boundary noise can't chatter. EPA-anchored: the highway
+# drive cycle (HWFET) AVERAGES 77.7 km/h, so the floor sits ON that number instead
+# of above it — an 80 km/h arterial counts as highway, which is how it drives. The
+# 15 km/h band width is unchanged, just shifted down, so slowing to 70 in freeway
+# traffic no longer drops the trip back to city. Held across stops because the EMA
+# is frozen while parked. Triggering off the EMA (not raw speed) guarantees the EMA
+# is fresh when this reads it. Consumed by highway_* accumulators + the dash badge.
 - trigger:
     - trigger: state
       entity_id: sensor.drive_speed_ema
@@ -353,8 +356,8 @@
         {% if is_state('sensor.drive_class','highway') %}mdi:highway{% else %}mdi:city-variant-outline{% endif %}
       state: >
         {% set ema = states('sensor.drive_speed_ema') | float(none) %}
-        {% set hi = states('input_number.highway_speed_floor') | float(85) %}
-        {% set lo = states('input_number.city_speed_ceiling') | float(70) %}
+        {% set hi = states('input_number.highway_speed_floor') | float(78) %}
+        {% set lo = states('input_number.city_speed_ceiling') | float(63) %}
         {% set prev = this.state if this.state in ['city','highway'] else none %}
         {% if ema is none %}
           {{ prev if prev is not none else 'city' }}
