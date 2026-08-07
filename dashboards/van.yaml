@@ -105,7 +105,7 @@ views:
                 function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
                 function fmt(n,d){ return isNaN(n)?'—':n.toFixed(d); }
                 var rpm=s('sensor.192_168_10_90_0c_enginerpm'), speed=s('sensor.192_168_10_90_0d_vehiclespeed'),
-                    coolant=s('sensor.coolant_temp_last'), throttle=s('sensor.192_168_10_90_11_throttleposition'),
+                    coolant=s('sensor.coolant_temp_last_good'), throttle=s('sensor.192_168_10_90_11_throttleposition'),
                     load=s('sensor.192_168_10_90_04_calcengineload'), chargerV=s('sensor.a32_pro_orion_input_voltage');
                 var gear=states['sensor.wican_gear_display']?states['sensor.wican_gear_display'].state:'—';
                 var running=states['binary_sensor.engine_is_running'].state==='on';
@@ -222,10 +222,10 @@ views:
               [[[
                 function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
                 function fmt(n,d){ return isNaN(n)?'—':n.toFixed(d); }
-                var transTemp=s('sensor.trans_temp_last'), oilLife=s('sensor.192_168_10_90_oil_life'),
+                var transTemp=s('sensor.transmission_temp_last_good'), oilLife=s('sensor.192_168_10_90_oil_life'),
                     wastegate=s('sensor.192_168_10_90_wastegate'),
                     intakeTemp=s('sensor.192_168_10_90_intake_air_tmp'), fuelPress=s('sensor.192_168_10_90_fuel_pressure'),
-                    ambient=s('sensor.ambient_air_temp_last');
+                    ambient=s('sensor.ambient_air_temp_last_good');
                 function row(label,val,unit,color){
                   var c=color||'var(--primary-text-color)';
                   return `<div style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid var(--divider-color);">
@@ -436,19 +436,19 @@ views:
                 title: Engine Temps (6h)
               graph_span: 6h
               series:
-                - entity: sensor.coolant_temp_last
+                - entity: sensor.coolant_temp_last_good
                   name: Coolant
                   type: line
                   color: '#ef4444'
                   curve: smooth
                   stroke_width: 2
-                - entity: sensor.trans_temp_last
+                - entity: sensor.transmission_temp_last_good
                   name: Trans
                   type: line
                   color: '#f59e0b'
                   curve: smooth
                   stroke_width: 2
-                - entity: sensor.ambient_air_temp_last
+                - entity: sensor.ambient_air_temp_last_good
                   name: Ambient
                   type: line
                   color: '#3b82f6'

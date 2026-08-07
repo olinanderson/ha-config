@@ -110,7 +110,11 @@
   unit_of_measurement: "°C"
   device_class: temperature
   state_class: measurement
-  expire_after: 30
+  # PID 0x46 is only read ~once/min by the WiCAN (even while driving), so a 30s
+  # expiry made this sensor flap unavailable constantly. Ambient temp is slow-
+  # changing — a 5 min hold eliminates the flicker. (sensor.ambient_air_temp_last
+  # still provides an indefinite last-good value for when the van is fully off.)
+  expire_after: 300
   device: *wican_device
 
 - name: "Time Since Engine Start"

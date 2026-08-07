@@ -56,82 +56,79 @@ function Stat({ icon, value, label }: { icon: ReactNode; value: string; label: s
   );
 }
 
-// One row of the City / Highway / Total detail table: distance driven, this trip's
-// economy for that segment, your rolling average for it, and where you sit vs that
-// average (lower L/100km is better → green when you beat it, red when you don't).
-// The band you're driving right now (per live drive_class) is ringed + tinted with
-// a "now" tag.
-function BandTile({
-  icon,
-  label,
-  accent,
-  active,
-  live,
+// Accent palette shared by the centre Overall tile and the City/Highway side tiles.
+// 'total' is neutral so it never competes with the amber/sky road-type colours — the
+// hero NUMBER still colours by economy; the Overall tile's emphasis comes from size.
+function bandTheme(accent: 'amber' | 'sky' | 'total') {
+  if (accent === 'sky')
+    return {
+      text: 'text-sky-400',
+      bg: 'bg-sky-500/10',
+      ring: 'ring-2 ring-sky-500/60',
+      chip: 'bg-sky-500/20 text-sky-300',
+      bar: 'bg-sky-400',
+    };
+  if (accent === 'amber')
+    return {
+      text: 'text-amber-400',
+      bg: 'bg-amber-500/10',
+      ring: 'ring-2 ring-amber-500/60',
+      chip: 'bg-amber-500/20 text-amber-300',
+      bar: 'bg-amber-400',
+    };
+  return {
+    text: 'text-foreground/90',
+    bg: 'bg-muted/60',
+    ring: 'ring-2 ring-foreground/30',
+    chip: 'bg-foreground/10 text-foreground/80',
+    bar: 'bg-foreground/50',
+  };
+}
+
+// The headline: THIS trip's overall economy, big and centre-stage. Keeps the full
+// detail (trip distance + your rolling average + how this trip compares to it) since
+// the side tiles are now deliberately minimal. Elevated (shadow + ring + big number)
+// so it reads first, before you glance sideways to the city/highway breakdown.
+function OverallTile({
   km,
   econ,
   avg,
+  scaleMax,
 }: {
-  icon: ReactNode;
-  label: string;
-  accent: 'amber' | 'sky';
-  active: boolean; // dominant band (ring) — set even at rest
-  live: boolean; // actually driving this band right now → "NOW" chip
   km: number | null;
   econ: number | null;
   avg: number | null;
+  scaleMax: number;
 }) {
   const hasTrip = econ != null && km != null && km >= 0.1;
-  // Lead with THIS trip's economy; if you haven't driven this road type yet, fall
-  // back to your rolling average so the tile is never empty.
+  // Lead with this trip; fall back to your rolling average so it's never empty.
   const hero = hasTrip ? econ : avg;
   // Lower L/100km is better, so positive (avg − econ) means you beat your average.
   const delta = hasTrip && avg != null ? avg - econ! : null;
-  const t =
-    accent === 'sky'
-      ? {
-          text: 'text-sky-400',
-          bg: 'bg-sky-500/10',
-          ring: 'ring-2 ring-sky-500/60',
-          chip: 'bg-sky-500/20 text-sky-300',
-          bar: 'bg-sky-400',
-        }
-      : {
-          text: 'text-amber-400',
-          bg: 'bg-amber-500/10',
-          ring: 'ring-2 ring-amber-500/60',
-          chip: 'bg-amber-500/20 text-amber-300',
-          bar: 'bg-amber-400',
-        };
+  const t = bandTheme('total');
   return (
-    <div className={cn('relative overflow-hidden rounded-xl p-2.5 pt-3', t.bg, active && t.ring)}>
-      {/* Colour stripe — makes city vs highway unmistakable at a glance. */}
-      <div className={cn('absolute inset-x-0 top-0 h-1', t.bar)} />
-      <div className="flex items-center justify-between">
-        <span className={cn('flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide', t.text)}>
-          {icon}
-          {label}
-        </span>
-        {live && (
-          <span className={cn('rounded-full px-1.5 py-px text-[9px] font-bold uppercase tracking-wide', t.chip)}>
-            now
-          </span>
-        )}
+    <div className={cn('relative overflow-hidden rounded-2xl p-3.5 pt-4 shadow-lg shadow-black/20', t.bg, t.ring)}>
+      <div className={cn('absolute inset-x-0 top-0 h-1.5', t.bar)} />
+      <div className="flex items-center gap-1.5">
+        <Sigma className="h-4 w-4 text-foreground/80" />
+        <span className="text-xs font-bold uppercase tracking-wider text-foreground/90">Overall</span>
       </div>
-      <div className="mt-1.5 flex items-baseline gap-1">
+      <div className="mt-2 flex items-baseline gap-1.5">
         <span
           className={cn(
-            'text-3xl font-bold leading-none tabular-nums',
+            'text-5xl font-bold leading-none tabular-nums',
             hero != null ? fuelEconomyColor(hero) : 'text-muted-foreground',
           )}
         >
           {hero != null ? hero.toFixed(1) : '—'}
         </span>
-        <span className="text-[10px] text-muted-foreground">L/100km</span>
+        <span className="text-xs text-muted-foreground">L/100km</span>
       </div>
-      <p className="mt-0.5 text-[10px] tabular-nums text-muted-foreground">
+      <p className="mt-1 text-[11px] tabular-nums text-muted-foreground">
         {hasTrip ? `this trip · ${km!.toFixed(1)} km` : hero != null ? 'your average' : 'no data yet'}
       </p>
-      <div className="mt-1.5 flex items-center justify-between border-t border-foreground/10 pt-1 text-[10px] tabular-nums">
+      <MiniMeter econ={econ} avg={avg} scaleMax={scaleMax} accent="total" className="mt-2" />
+      <div className="mt-2 flex items-center justify-between border-t border-foreground/10 pt-1.5 text-[11px] tabular-nums">
         {hasTrip ? (
           <>
             <span className="text-muted-foreground">avg {avg != null ? avg.toFixed(1) : '—'}</span>
@@ -148,9 +145,151 @@ function BandTile({
             )}
           </>
         ) : (
-          <span className="text-muted-foreground/70">none this trip yet</span>
+          <span className="text-muted-foreground/70">—</span>
         )}
       </div>
+    </div>
+  );
+}
+
+// A side tile for one road type: its economy this trip, its share + km, a mini
+// meter, and an avg/better-worse footer — the same anatomy as the Overall tile,
+// just smaller. Ringed + "now"-tagged while you're actually driving this band.
+function BandTile({
+  icon,
+  label,
+  accent,
+  active,
+  live,
+  econ,
+  avg,
+  pct,
+  km,
+  scaleMax,
+}: {
+  icon: ReactNode;
+  label: string;
+  accent: 'amber' | 'sky';
+  active: boolean; // dominant band (ring) — set even at rest
+  live: boolean; // actually driving this band right now → "NOW" chip
+  econ: number | null;
+  avg: number | null; // rolling-average fallback so a fresh trip isn't blank
+  pct: number | null; // share of this trip driven in this band
+  km: number | null; // km driven in this band this trip
+  scaleMax: number; // shared meter scale so all three tiles compare on one axis
+}) {
+  const hasTrip = econ != null;
+  // Lead with this trip's economy; fall back to your rolling average if not yet driven.
+  const hero = hasTrip ? econ : avg;
+  // Lower L/100km is better, so positive (avg − econ) means you beat your average.
+  const delta = hasTrip && avg != null ? avg - econ! : null;
+  const t = bandTheme(accent);
+  return (
+    <div className={cn('relative flex flex-col overflow-hidden rounded-xl p-2.5 pt-3', t.bg, active && t.ring)}>
+      {/* Colour stripe — makes city vs highway unmistakable at a glance. */}
+      <div className={cn('absolute inset-x-0 top-0 h-1', t.bar)} />
+      <div className="flex items-center justify-between">
+        <span className={cn('flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide', t.text)}>
+          {icon}
+          {label}
+        </span>
+        {live && (
+          <span className={cn('rounded-full px-1.5 py-px text-[9px] font-bold uppercase tracking-wide', t.chip)}>
+            now
+          </span>
+        )}
+      </div>
+      <div className="flex flex-1 flex-col justify-center pt-1.5">
+        <div className="flex items-baseline gap-1">
+          <span
+            className={cn(
+              'text-2xl font-bold leading-none tabular-nums',
+              hero != null ? fuelEconomyColor(hero) : 'text-muted-foreground',
+            )}
+          >
+            {hero != null ? hero.toFixed(1) : '—'}
+          </span>
+          <span className="text-[9px] text-muted-foreground">L/100km</span>
+        </div>
+        <p className="mt-1 text-[10px] tabular-nums text-muted-foreground">
+          {pct != null && <span className={cn('font-semibold', t.text)}>{pct.toFixed(0)}%</span>}
+          {pct != null && km != null && <span aria-hidden> · </span>}
+          {km != null
+            ? `${km.toFixed(1)} km`
+            : pct != null
+              ? ' of trip'
+              : econ != null
+                ? 'this trip'
+                : 'your average'}
+        </p>
+        <MiniMeter econ={econ} avg={avg} scaleMax={scaleMax} accent={accent} className="mt-1.5" />
+      </div>
+      {/* Same avg/delta footer as the Overall tile, sized down. flex-wrap lets the
+          delta drop to its own line instead of clipping when the tile gets narrow. */}
+      <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-1 border-t border-foreground/10 pt-1 text-[10px] tabular-nums">
+        {hasTrip ? (
+          <>
+            <span className="text-muted-foreground">avg {avg != null ? avg.toFixed(1) : '—'}</span>
+            {delta != null ? (
+              Math.abs(delta) < 0.05 ? (
+                <span className="text-muted-foreground">on par</span>
+              ) : (
+                <span className={cn('font-semibold', delta > 0 ? 'text-green-400' : 'text-red-400')}>
+                  {Math.abs(delta).toFixed(1)} {delta > 0 ? 'better' : 'worse'}
+                </span>
+              )
+            ) : (
+              <span className="text-muted-foreground/50">—</span>
+            )}
+          </>
+        ) : (
+          <span className="text-muted-foreground/70">—</span>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// A tiny in-tile bullet meter: this trip's economy as the fill, your rolling average
+// as a white tick, on one scale shared by all three tiles so the bands stay
+// comparable. Lower L/100km is better, so a fill stopping LEFT of the tick beat the
+// average → green; past it → red; on par / no average → the band's own colour. The
+// fill-vs-tick position carries the direction too (not colour alone), so it survives
+// colour-blindness/grayscale. With no this-trip data yet it shows just the tick.
+function MiniMeter({
+  econ,
+  avg,
+  scaleMax,
+  accent,
+  className,
+}: {
+  econ: number | null;
+  avg: number | null;
+  scaleMax: number;
+  accent: 'amber' | 'sky' | 'total';
+  className?: string;
+}) {
+  const has = econ != null && econ > 0;
+  const avgPct = avg != null && avg > 0 ? Math.min(100, (avg / scaleMax) * 100) : null;
+  if (!has && avgPct == null) return null;
+  const t = bandTheme(accent);
+  // Keep a 2px sliver visible for very small values so the meter never looks empty.
+  const econPct = has ? Math.max(2, Math.min(100, (econ! / scaleMax) * 100)) : 0;
+  const delta = has && avg != null ? avg - econ! : null; // + = beat your average
+  const fill =
+    delta == null || Math.abs(delta) < 0.05 ? t.bar : delta > 0 ? 'bg-green-500' : 'bg-red-500';
+  return (
+    // Outer wrapper is NOT clipped so the average tick can stand proud of the track.
+    <div className={cn('relative', className)}>
+      <div className="h-1.5 overflow-hidden rounded-full bg-background/50">
+        {has && <div className={cn('h-full rounded-r-full', fill)} style={{ width: `${econPct}%` }} />}
+      </div>
+      {avgPct != null && (
+        <div
+          className="absolute top-1/2 h-2.5 w-0.5 -translate-x-1/2 -translate-y-1/2 rounded-full bg-foreground ring-1 ring-background/60"
+          style={{ left: `${avgPct}%` }}
+        />
+      )}
     </div>
   );
 }
@@ -166,13 +305,16 @@ export function SplitInfo({ className }: { className?: string }) {
         How the city/highway split works
       </summary>
       <p className="mt-1 leading-relaxed text-muted-foreground/80">
-        Your speed picks the mode — <span className="text-sky-400">highway</span> above ~85 km/h,{' '}
-        <span className="text-amber-400">city</span> below ~70, held in between so it can't flip-flop;
-        idling is excluded. Each row shows this trip's km + economy for that segment; the band you're
-        driving is tagged <b>now</b>. <b>avg</b> is the distance-weighted average across your recent
-        trips (total litres ÷ total km for that road type) — your real driving, not an EPA rating — and{' '}
+        Your speed picks the mode — <span className="text-sky-400">highway</span> above ~78 km/h,{' '}
+        <span className="text-amber-400">city</span> below ~63, held in between so it can't flip-flop;
+        idling is excluded; the band you're driving is tagged <b>now</b>. <b>avg</b> is the
+        distance-weighted average across your recent trips (total litres ÷ total km for that road
+        type) — your real driving, not an EPA rating — and{' '}
         <span className="text-green-400/90">better</span>/<span className="text-red-400/90">worse</span>/on
-        par is how this trip compares to it (lower L/100km is better).
+        par is how this trip compares to it (lower L/100km is better). The thin meter under a number
+        races this trip against that average: the white tick is your avg, so a{' '}
+        <span className="text-green-400/90">green</span> fill stopping short of it is beating it and a{' '}
+        <span className="text-red-400/90">red</span> fill past it is trailing it.
       </p>
     </details>
   );
@@ -233,12 +375,23 @@ export function CurrentTripCard() {
     hwyKm != null ||
     summary?.avg_city_l_per_100km != null ||
     summary?.avg_highway_l_per_100km != null;
+  // One shared scale for the in-tile meters so City/Highway/Overall (and their
+  // average ticks) stay comparable. Max of every value present + headroom.
+  const meterVals = [
+    cityEcon,
+    hwyEcon,
+    econ,
+    summary?.avg_city_l_per_100km,
+    summary?.avg_highway_l_per_100km,
+    summary?.avg_l_per_100km,
+  ].filter((v): v is number => v != null && v > 0);
+  const meterScaleMax = meterVals.length ? Math.max(...meterVals) * 1.12 : 30;
   // The band actually being driven right now → drives the "now" tag; null at rest
   // (so a parked "Last Trip" card keeps the dominant-band ring but drops "now").
   const liveBand: 'city' | 'highway' | null =
     isMoving && (driveClass === 'city' || driveClass === 'highway') ? driveClass : null;
-  // Display km so the three rows always reconcile: City = round1(Total) − round1(Highway),
-  // so City + Highway == Total exactly at the one-decimal precision shown.
+  // Reconcile the displayed km so City + Highway == Total exactly at the one-decimal
+  // precision shown: City = round1(Total) − round1(Highway).
   const r1 = (n: number) => Math.round(n * 10) / 10;
   const cityKmDisp =
     distance != null && hwyKm != null ? Math.max(0, r1(r1(distance) - r1(hwyKm))) : cityKm;
@@ -293,69 +446,52 @@ export function CurrentTripCard() {
           </p>
         ) : (
           <>
-            {/* City vs Highway — THE headline. Two big colour-coded tiles (amber =
-                city, sky = highway, each with a stripe + icon) so which is which is
-                unmistakable; the one you're driving is ringed with a NOW chip. */}
-            {showSplit && (
-              <>
-                <div className="grid grid-cols-2 gap-2">
-                  <BandTile
-                    icon={<Building2 className="h-3.5 w-3.5" />}
-                    label="City"
-                    accent="amber"
-                    active={activeBand === 'city'}
-                    live={liveBand === 'city'}
-                    km={cityKmDisp}
-                    econ={cityEcon}
-                    avg={summary?.avg_city_l_per_100km ?? null}
-                  />
-                  <BandTile
-                    icon={<Milestone className="h-3.5 w-3.5" />}
-                    label="Highway"
-                    accent="sky"
-                    active={activeBand === 'highway'}
-                    live={liveBand === 'highway'}
-                    km={hwyKm}
-                    econ={hwyEcon}
-                    avg={summary?.avg_highway_l_per_100km ?? null}
-                  />
-                </div>
-                {hwyPct != null && (
-                  <div className="mt-1.5 flex items-center gap-1.5">
-                    <div className="flex h-1.5 flex-1 overflow-hidden rounded-full bg-muted">
-                      <div className="bg-amber-400" style={{ width: `${100 - hwyPct}%` }} />
-                      <div className="bg-sky-400" style={{ width: `${hwyPct}%` }} />
-                    </div>
-                    <span className="text-[10px] tabular-nums text-muted-foreground">
-                      <span className="text-amber-400">{(100 - hwyPct).toFixed(0)}%</span> city ·{' '}
-                      <span className="text-sky-400">{hwyPct.toFixed(0)}%</span> hwy
-                    </span>
-                  </div>
-                )}
-              </>
-            )}
-            {/* Trip total — kept, but deliberately secondary to the two tiles above. */}
-            <div className="mt-2 flex items-center justify-between rounded-lg bg-muted/30 px-2.5 py-1.5">
-              <span className="flex items-center gap-1 text-xs font-medium text-muted-foreground">
-                <Sigma className="h-3.5 w-3.5" />
-                Trip total
-              </span>
-              <span className="flex items-baseline gap-1.5 tabular-nums">
-                <span
-                  className={cn(
-                    'text-base font-bold',
-                    econ != null ? fuelEconomyColor(econ) : 'text-muted-foreground',
-                  )}
-                >
-                  {econ != null ? econ.toFixed(1) : '—'}
-                </span>
-                <span className="text-[10px] text-muted-foreground">L/100km</span>
-                {summary?.avg_l_per_100km != null && (
-                  <span className="text-[10px] text-muted-foreground">
-                    avg {summary.avg_l_per_100km.toFixed(1)}
-                  </span>
-                )}
-              </span>
+            {/* Overall in the CENTRE — THE headline, big and detailed — flanked by
+                minimal City (left) and Highway (right) tiles that just show each band's
+                economy + its share of the trip. The side you're driving is ringed with
+                a NOW chip. When there's no split data yet, Overall stands alone. */}
+            <div
+              className={cn(
+                'grid items-stretch gap-2',
+                showSplit
+                  ? 'grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)_minmax(0,1fr)]'
+                  : 'grid-cols-1',
+              )}
+            >
+              {showSplit && (
+                <BandTile
+                  icon={<Building2 className="h-3.5 w-3.5" />}
+                  label="City"
+                  accent="amber"
+                  active={activeBand === 'city'}
+                  live={liveBand === 'city'}
+                  econ={cityEcon}
+                  avg={summary?.avg_city_l_per_100km ?? null}
+                  pct={hwyPct != null ? 100 - hwyPct : null}
+                  km={cityKmDisp}
+                  scaleMax={meterScaleMax}
+                />
+              )}
+              <OverallTile
+                km={distance}
+                econ={econ}
+                avg={summary?.avg_l_per_100km ?? null}
+                scaleMax={meterScaleMax}
+              />
+              {showSplit && (
+                <BandTile
+                  icon={<Milestone className="h-3.5 w-3.5" />}
+                  label="Highway"
+                  accent="sky"
+                  active={activeBand === 'highway'}
+                  live={liveBand === 'highway'}
+                  econ={hwyEcon}
+                  avg={summary?.avg_highway_l_per_100km ?? null}
+                  pct={hwyPct}
+                  km={hwyKm}
+                  scaleMax={meterScaleMax}
+                />
+              )}
             </div>
             <div className="mt-2 grid grid-cols-3 gap-2 text-center">
               <Stat

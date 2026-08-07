@@ -282,12 +282,89 @@ function battTempColor(t: number | null): string {
   return 'text-red-500';
 }
 
+/**
+ * Engine coolant — 2016 Transit 3.5L EcoBoost (Gen1), °C.
+ * These run hot by design: owners report 190–210 °F (88–99 °C) warmed up, and the
+ * Gen2 sits hotter still (205–216 °F). Ford's PCM sets P0217 "coolant over
+ * temperature" and pulls power (limp mode) above roughly 220–230 °F (105–110 °C),
+ * and forum consensus treats ~226 °F (108 °C) as the worry point. Below ~70 °C the
+ * engine simply isn't up to temperature yet — economy is poor and it shouldn't be
+ * worked hard, so that reads as its own "warming up" state rather than "good".
+ */
+function coolantTempColor(t: number | null): string {
+  if (t == null) return 'text-foreground';
+  if (t < 70) return 'text-cyan-400'; // still warming up
+  if (t <= 103) return 'text-green-400'; // normal band (≤ ~217 °F)
+  if (t < 110) return 'text-orange-400'; // hot — closing on the P0217 threshold
+  return 'text-red-500'; // ≥110 °C / 230 °F — over-temp, expect limp mode
+}
+
+/**
+ * 6R80 transmission fluid, °C.
+ * Ford's spec band is 180–200 °F (82–93 °C); warmed-up cruising runs 190–210 °F and
+ * the thermal bypass valve opens to the cooler at 185 °F (85 °C). Fluid life drops
+ * sharply once it's held at 220–225 °F (104–107 °C), and 230–240 °F (110–116 °C)
+ * means change it. Cold matters on this van too: below ~60 °C the torque converter
+ * slips noticeably (the diagnosed cold-ATF slip), and the level check wants 80–85 °C.
+ */
+function transTempColor(t: number | null): string {
+  if (t == null) return 'text-foreground';
+  if (t < 60) return 'text-cyan-400'; // cold ATF — converter slips until it warms
+  if (t <= 103) return 'text-green-400'; // normal band (≤ ~218 °F)
+  if (t < 116) return 'text-orange-400'; // 220–240 °F — fluid degrading fast
+  return 'text-red-500'; // ≥116 °C / 240 °F — cooking the fluid
+}
+
+/**
+ * Ambient air, °C — a cold→hot temperature scale, NOT a good/bad one. Outside air
+ * isn't a fault condition, so it diverges from a neutral "comfortable" middle out to
+ * cool hues one way and warm hues the other, with no green/yellow in between (that
+ * would read as a health verdict, and blue→green→red is the rainbow ramp to avoid).
+ * Sub-zero still reads unmistakably cold, which is the one that carries weight on
+ * this van: below 0 °C the LiFePO4 pack can't be charged and the plumbing is at risk.
+ */
+function ambientTempColor(t: number | null): string {
+  if (t == null) return 'text-foreground';
+  if (t <= -15) return 'text-blue-500'; // deep cold
+  if (t <= 0) return 'text-sky-400'; // freezing — no LiFePO4 charging, pipes at risk
+  if (t < 10) return 'text-cyan-400'; // cold
+  if (t < 24) return 'text-foreground'; // comfortable — neutral midpoint
+  if (t < 30) return 'text-amber-400'; // warm
+  if (t < 35) return 'text-orange-400'; // hot
+  return 'text-red-500'; // very hot
+}
+
+/**
+ * Orion input voltage = the 12 V chassis/alternator side, so "healthy" depends on
+ * whether the engine is turning:
+ *  • Running — Ford's smart charge should hold ~13.5 V+ (13.7 V at the 1300 rpm
+ *    knee); the Orion folds its charge rate back at 13.0 V, so a sagging bus is the
+ *    real warning and anything under that means it's throttling or not charging.
+ *  • Parked — the same wire is just the starter battery resting: 12.6 V ≈ 90 %+,
+ *    12.2 V ≈ 50 %, and below ~12.0 V is deep-discharge (DC-DC lockout is 12.0/12.5 V).
+ * Above 15 V is a regulator fault either way.
+ */
+function chargerVoltageColor(v: number | null, running: boolean): string {
+  if (v == null) return 'text-foreground';
+  if (v > 15) return 'text-red-500'; // overvoltage — regulator fault
+  if (running) {
+    if (v > 14.8) return 'text-orange-400'; // higher than smart-charge should command
+    if (v >= 13.6) return 'text-green-400'; // full charge rate
+    if (v >= 13.0) return 'text-orange-400'; // sagging toward Orion fold-back
+    return 'text-red-500'; // not charging / folded back
+  }
+  if (v >= 12.6) return 'text-green-400'; // ~90–100 % resting
+  if (v >= 12.2) return 'text-orange-400'; // ~50–80 %
+  return 'text-red-500'; // under 50 % — starter battery low
+}
+
 /** Main glance card — battery state plus the vitals watched while driving. */
 function MainHeroCard() {
   // Power / battery
   const { value: soc } = useEntityNumeric('sensor.olins_van_bms_battery');
   const { value: battCurrent } = useEntityNumeric('sensor.olins_van_bms_current');
   const { value: battTemp } = useEntityNumeric('sensor.olins_van_bms_temperature');
+  const { value: storedWh } = useEntityNumeric('sensor.olins_van_bms_stored_energy');
   const { value: solarA } = useEntityNumeric('sensor.total_mppt_output_current');
   const estimateEntity = useEntity('sensor.battery_time_estimate');
   const ecoEntity = useEntity('input_boolean.power_saving_mode');
@@ -301,7 +378,9 @@ function MainHeroCard() {
   const aggression = useEntity('sensor.hill_aggression');
   const { value: rpm } = useEntityNumeric('sensor.192_168_10_90_0c_enginerpm');
   const { value: chargerV } = useEntityNumeric('sensor.a32_pro_orion_input_voltage');
-  const { value: ambient } = useEntityNumeric('sensor.192_168_10_90_46_ambientairtemp');
+  // Last-good cache (template sensor) so ambient holds its reading when the van
+  // is off / WiCAN stops publishing, instead of blanking after the 30s expiry.
+  const { value: ambient } = useEntityNumeric('sensor.ambient_air_temp_last_good');
 
   const { open } = useHistoryDialog();
 
@@ -309,8 +388,12 @@ function MainHeroCard() {
   const battCurrentVal = battCurrent ?? 0;
   const battColor = battCurrentVal > 0 ? 'text-green-400' : battCurrentVal < -5 ? 'text-orange-400' : 'text-foreground';
   const solarActive = (solarA ?? 0) > 0.5;
-  const coolantColor = (coolant ?? 0) > 105 ? 'text-red-500' : (coolant ?? 0) > 95 ? 'text-orange-400' : 'text-foreground';
-  const transColor = (transTemp ?? 0) > 110 ? 'text-red-500' : (transTemp ?? 0) > 95 ? 'text-orange-400' : 'text-foreground';
+  const coolantColor = coolantTempColor(coolant);
+  const transColor = transTempColor(transTemp);
+  const ambientColor = ambientTempColor(ambient);
+  // Engine turning? Decides which voltage scale applies (charging vs resting SOC).
+  const engineRunning = (rpm ?? 0) > 400;
+  const chargerVColor = chargerVoltageColor(chargerV, engineRunning);
 
   const estimate = estimateEntity?.state;
   const estimateDisplay =
@@ -358,6 +441,9 @@ function MainHeroCard() {
               <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.olins_van_bms_battery', 'Battery', '%')}>
                 <p className={cn('text-3xl font-bold tabular-nums', socColor)}>{fmt(soc, 0)}%</p>
                 <p className="text-[10px] text-muted-foreground">Battery</p>
+                <p className="text-[9px] tabular-nums text-muted-foreground/70">
+                  {storedWh != null ? `${(storedWh / 1000).toFixed(1)} kWh` : '—'}
+                </p>
               </div>
               <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.olins_van_bms_current', 'Battery Current', 'A')}>
                 <p className={cn('text-3xl font-bold tabular-nums', battColor)}>{fmt(battCurrent, 1)}</p>
@@ -383,7 +469,7 @@ function MainHeroCard() {
               Driving
             </span>
 
-            {/* Most important: coolant, trans, grade */}
+            {/* The three temperatures — each its own slot so they read as peers. */}
             <div className="grid grid-cols-3 gap-2 text-center">
               <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_05_enginecoolanttemp', 'Coolant Temp', '°C')}>
                 <p className={cn('text-2xl font-bold tabular-nums', coolantColor)}>{fmt(coolant, 0)}°</p>
@@ -393,24 +479,25 @@ function MainHeroCard() {
                 <p className={cn('text-2xl font-bold tabular-nums', transColor)}>{fmt(transTemp, 0)}°</p>
                 <p className="text-[10px] text-muted-foreground">Trans</p>
               </div>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.ambient_air_temp_last_good', 'Ambient Air', '°C')}>
+                <p className={cn('text-2xl font-bold tabular-nums', ambientColor)}>{fmt(ambient, 0)}°</p>
+                <p className="text-[10px] text-muted-foreground">Ambient</p>
+              </div>
+            </div>
+
+            {/* Grade, rpm, charger input voltage (Orion 12V side) — same weight as
+                the temperature row above, just a second line of vitals. */}
+            <div className="mt-2 grid grid-cols-3 gap-2 text-center">
               <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.road_grade', 'Road Grade', '%')}>
                 <p className="text-2xl font-bold tabular-nums">{fmt(gradePct, 1)}%</p>
                 <p className="text-[10px] text-muted-foreground">Grade{aggression?.state ? ` · ${aggression.state}` : ''}</p>
               </div>
-            </div>
-
-            {/* Less important: ambient, rpm, charger input voltage (Orion 12V side) */}
-            <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-              <div className="cursor-pointer rounded-lg p-1 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_46_ambientairtemp', 'Ambient Air', '°C')}>
-                <p className="text-lg font-semibold tabular-nums text-muted-foreground">{fmt(ambient, 0)}°</p>
-                <p className="text-[10px] text-muted-foreground">Ambient</p>
-              </div>
-              <div className="cursor-pointer rounded-lg p-1 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_0c_enginerpm', 'RPM', 'rpm')}>
-                <p className="text-lg font-semibold tabular-nums text-muted-foreground">{fmt(rpm, 0)}</p>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_0c_enginerpm', 'RPM', 'rpm')}>
+                <p className="text-2xl font-bold tabular-nums">{fmt(rpm, 0)}</p>
                 <p className="text-[10px] text-muted-foreground">RPM</p>
               </div>
-              <div className="cursor-pointer rounded-lg p-1 transition-colors hover:bg-muted/50" onClick={() => open('sensor.a32_pro_orion_input_voltage', 'Charger Input', 'V')}>
-                <p className="text-lg font-semibold tabular-nums text-muted-foreground">{fmt(chargerV, 2)}</p>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.a32_pro_orion_input_voltage', 'Charger Input', 'V')}>
+                <p className={cn('text-2xl font-bold tabular-nums', chargerVColor)}>{fmt(chargerV, 2)}</p>
                 <p className="text-[10px] text-muted-foreground">Chrg V</p>
               </div>
             </div>
