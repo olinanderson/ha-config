@@ -336,6 +336,13 @@ export function CurrentTripCard() {
   const driveClass = useEntity('sensor.drive_class')?.state; // 'city' | 'highway'
   const { summary } = useFuelTrips(30); // personal distance-weighted economy baseline
   const startEntity = useEntity('input_text.trip_start_ts');
+  // Fuel-model health, not trip data: VE is the speed-density calibration factor
+  // (learned from fill-ups — see ve_update.py), trim is the ECU's own correction.
+  // Both sit near their usual band in normal operation; a jump in either is the
+  // signal something changed (exhaust leak, vacuum leak, sensor fault) before the
+  // pump receipts would tell you.
+  const { value: veCorrection } = useEntityNumeric('input_number.fuel_ve_correction');
+  const { value: trimAvg } = useEntityNumeric('sensor.average_fuel_trim');
   const movingEntity = useEntity('binary_sensor.vehicle_is_moving');
   const isMoving = movingEntity?.state === 'on';
   const { value: splitMin } = useEntityNumeric('input_number.trip_split_minutes');
@@ -540,6 +547,26 @@ export function CurrentTripCard() {
                 <>
                   <span aria-hidden>·</span>
                   <span>since {fmtClock(startTs)}</span>
+                </>
+              )}
+              {veCorrection != null && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span title="Fuel model VE calibration factor (learned from fill-ups)">
+                    VE {veCorrection.toFixed(2)}
+                  </span>
+                </>
+              )}
+              {trimAvg != null && (
+                <>
+                  <span aria-hidden>·</span>
+                  <span
+                    title="ECU fuel trim, avg both banks — a jump here (vs. its normal ~-3%) means an exhaust or vacuum leak, not a fuel-model error"
+                    className={cn(Math.abs(trimAvg) > 8 && 'font-semibold text-orange-400')}
+                  >
+                    trim {trimAvg > 0 ? '+' : ''}
+                    {trimAvg.toFixed(1)}%
+                  </span>
                 </>
               )}
             </div>
