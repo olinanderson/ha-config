@@ -1,0 +1,9 @@
+"Went to enable the SEIC that is now standard on all the Transits.\n\nHad a question about the hookup,  there are 2 wires with the exact same colors in the blunt cut bundle- one of them is the correct one, one isn't! \n\nNot wanting to risk blowing up the PCM I think I had it figured out but wanted to ask to be sure.\nSo I called Ford's BBAS hotline- had to leave a message, after 2 days they called back and confirmed what I thought.\n\nSo this morning I hook it up and sure enough it works- partially-  when enabled it does bump the RPM from 650ish to around 900 as a sort of pre-stage-  then it is supposed to go up to the RPM you select with a resistor value.\nCan't get that part to work....no matter what resistor value I select from their RPM/resistance chart it makes no difference.\n\nSo has anyone made this work?\n\nCalled again and figure it will be Monday before I get a call back from Ford.....\n\n\nOne other thing- the wires in the bundle do NOT match exactly what is in the Ford 2018 Transit Service Manual I just bought, and of course the FSM makes NO mention whatsoever of some of this optional stuff.\n\n
+
+====NEW POST====
+
+\n\nJ\nJim-C\n175 posts · Joined 2020\n#37 · Apr 15, 2020\nYes, I did see your write up. Very helpful. I’ll work to find the new color codes.\n \n2020 Transit , High Roof, Long Wheelbase Extended, RWD\nLike\n\n
+
+====NEW POST====
+
+\n\nYes, I did see your write up. Very helpful. I’ll work to find the new color codes.\n\n

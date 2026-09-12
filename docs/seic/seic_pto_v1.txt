@@ -1,0 +1,2146 @@
+SEIC / PTO
+INDEX
+SEIC / PTO Page
+ 
+2-5
+Voltage Sources (VPWR) 6
+Body Builders Layout Book
+1
+SEIC / PTO
+2016
+MODEL YEAR
+ 7-9Customer Accessible Signals & SEIC Circuit Descriptions
+F-250/350/450/550
+ 14Voltage Sources (VPWR)
+www.fleet.ford.com/truckbbas
+Application Information
+ Access & Pass-Thru Wiring Locations
+ Wiring Schematic
+SEIC Circuit Descriptions
+E-350/450
+16
+RPM / Resistance / Voltage Charts
+18
+Transmission Specifications 20
+19
+Access & Pass-Thru Wiring Locations 10
+17
+Wiring Schematic 11-12
+RPM / Resistance / Voltage Charts 13
+15Customer Accessible Signals
+TRANSIT
+ 21Voltage Sources (VPWR)
+ Access & Pass-Thru Wiring Locations
+ Wiring Schematic
+SEIC Circuit Descriptions 23-24
+RPM / Resistance / Voltage Charts
+26-27
+28-29
+25
+22Customer Accessible Signals
+SEIC / PTO
+APPLICATION INFORMATION
+Body Builders Layout Book
+2
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+(Cont'd next page)
+SEIC strategy
+● Provides elevated engine speed to drive auxiliary 
+commercial equipment such as hydraulic pumps, 
+generators, air compressors; or maintain vehicle 
+battery charge under extreme electrical demands.
+● Blunt-cut wires to access SEIC, and customer 
+access for  VSO,  CTO,   PARK,  PARK-NEUTRAL 
+signals●
+▬ F-Series: Located in the cabin, tagged and 
+bundled above the parking brake assembly. Pass-
+thru wires are in the same bundle.
+▬ E-Series: In the engine compartment, tagged and 
+bundled with the large harness running below the 
+windshield/cowl. Remove some of the plastic 
+harness tape where the harness exits its plastic 
+support gutter above the engine air induction tube 
+to reveal the blunt-cut wires.
+▬ The final stage manufacturer or up-fitter is required 
+to supply the customer interface or controller.
+▬ Further detailed in the “Circuit Descriptions” 
+section.
+● Blunt-cut wires to access the four optional up-
+fitter switches
+▬ Available as an  option on Super Duty  F-Series 
+P/U Option Code 66S.
+▬ May be used as a PTO activation switch.
+▬ Located in the cabin, above the parking brake 
+pedal assembly.
+▬ Further detailed in the “Circuit Descriptions” 
+section.
+VOCABULARY / DEFINITIONS
+BCPIL / BCPSW:  Battery Charge Protection – 
+Illumination (Lamp) / Switch.
+Change-of-State: Part of the Gas engine SEIC strategy 
+only. If any condition is met that disables SEIC, the 
+operator is required to turn off the PTO switch and back 
+on again before SEIC will allow elevated idle to return.
+Clutch-Pump:  A type of PTO that is driven by the 
+vehicle engine crankshaft through the FEAD pulley 
+system.
+Continuous Duty Usage: Greater than five (5) minutes 
+out of a fifteen (15) minute period of continuous 
+operation.
+CTO: Clean Tach Out. An engine speed signal. Blunt-
+cut wire provided for access (see “Circuit 
+Descriptions”).
+ECT: Engine Coolant Temperature.
+FEAD: Front End Accessory Drive (belt and pulley drive 
+system).
+Intermittent Duty Usage:  Five (5) minutes out of a 
+fifteen (15) minute period or less of continuous 
+operation.
+PCM: Powertrain Control Module
+PTO Applications:  Includes all forms of mechanical 
+power, using the vehicle powertrain as the source, 
+including transmission side-mounted PTO, split-shaft 
+PTO, crankshaft PTO, and FEAD-mounted clutch-
+pumps, air compressors, and generators.
+SEIC: Stationary Elevated Idle Control (PCM Strategy). 
+Blunt-cut wires provided for customer access.
+TPO:  Throttle Position Out. Customer access not 
+available.
+TRO_N, TRO_P:  Transmission Range Output, 
+indicating either combination PARK or NEUTRAL, or 
+PARK-ONLY .
+VPWR:  Battery voltage signal only, not intended to 
+carry high current load.
+VSO:  Vehicle Speed Out. Blunt-cut wire provided for 
+access (see “Circuit Descriptions”). 8000 pulses per 
+mile, 2.2 Hz per mile-per-hour.
+VEHICLES USED AS A STATIONARY POWER 
+SOURCE – GENERAL RECOMMENDATIONS AND 
+WARNINGS
+Ford trucks are designed principally to provide vehicle 
+motivation and short-term auxiliary power needs. Power
+activation of hydraulic or mechanically driven devices 
+such as wrecker lift, snowplow blade lift and movement, 
+power tailgate lift or dump body lift, are a few examples.
+The variety of factors such as air circulation available, 
+temperature environment, vehicle maintenance level, 
+and other existing conditions, combined with the range 
+of auxiliary horsepower and torque demands that may 
+be placed upon a vehicle in power take-off usage, 
+make it difficult to assess the ultimate performance of a 
+vehicle subjected to extended duration usage as an 
+auxiliary power source. The guidelines in this book are 
+intended to assist the PTO equipment installer with 
+avoiding inadvertent vehicle performance and safety 
+concerns. These guidelines should not be considered 
+all inclusive; it is the responsibility of the PTO 
+equipment installer to choose and install a PTO system 
+that the vehicle operators will be able to use in a safe 
+manner, and with the necessary precautions to ensure 
+safe operation and customer satisfaction.
+Additional transmission fluid may be required with the 
+addition of the transmission-mounted PTO.
+1. The final stage manufacturer is responsible for 
+alerting the user to proper maintenance. PTO usage 
+may require using the Ford "severe-duty" vehicle 
+maintenance schedules, including transmission fluid 
+changes. Some applications may require an even 
+more frequent maintenance schedule if the PTO 
+system is used in "continuous duty".
+2. Route PTO hydraulic lines and hoses away from the 
+vehicle exhaust system.
+3. Diesel engines are recommended over gas engines 
+for stationary PTO operation of extended duration.
+4. Do not block air flow circulation to the engine coolant 
+radiator, engine, and transmission oil cooler.
+5. The following are some maximum temperatures 
+monitored by the PCM. The aftermarket PTO system 
+designer or installer should consider adding a sensor 
+to monitor these for the purpose of aborting the PTO 
+operation to protect against vehicle powertrain 
+damage. Some PTO suppliers may offer temperature 
+monitors for this purpose.
+a) Maximum Engine Coolant Temperature (ECT): 
+220° F (Gasoline), 234° F (Diesel)
+b) Maximum Engine Oil Sump Temperature: 284° F
+c) Maximum Transmission Oil Temperature (TOT): 
+250° F
+d) Maximum Catalyst Temperature: varies (not 
+intended for aftermarket monitoring).
+If any of the above temperatures are exceeded then 
+"de-clutch" the auxiliary load of the PTO operation 
+and return the vehicle engine speed to base engine 
+idle. Allow the temperature to stabilize at a lower 
+level before re-engaging PTO operation. Gas engine 
+strategy uses these to abort SEIC (return engine to 
+base idle speed and unlock automatic transmission 
+torque converter).
+6. The blunt-cut wires related to SEIC go directly back 
+to pins on the PCM. Care should be taken with any 
+aftermarket circuitry connecting with these or 
+neighboring wires to prevent feeding those modules 
+with any unwanted, threatening signals or voltages. 
+Unwanted vehicle behavior and/or PCM damage 
+may result.
+7. Both gas and diesel powertrains are calibrated to 
+accept up-fitter commands through the SEIC wiring 
+only, which are battery-voltage commands only, no 
+CAN messaging. Any alternate method to obtain 
+stationary elevated idle control may result in 
+unpredictable or inconsistent engine speed or 
+stalling.
+SEIC / PTO
+APPLICATION INFORMATION (Cont'd)
+Body Builders Layout Book
+3
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+(Cont'd next page)
+PRODUCT DESCRIPTIONS
+"Transmission Power Take-Off Provision” (Option 
+Code 62R):
+This Option, available for F-Series only, provides the 5-
+speed (6.8L) and 6-speed (6.7L) auto transmission with 
+an internal PTO drive gear and access port in the 
+transmission case. A unique PCM is not included nor 
+required.
+Automatic Transmission Fluid Temperature Gauge:
+A Transmission Fluid Temperature Gauge is included 
+with the instrument cluster of Super Duty F-Series, 
+signaled by the Transmission Oil Temperature (TOT) 
+sensor. A complete description can be found in the 
+vehicle's Owner Guide. Listed in brief below are some 
+descriptions of gauge readings to help the operator 
+monitor PTO operation:
+● Cold Range: 50° F or less.
+● White Area: Normal operating range of 51° F to 
+248° F.
+● Yellow Area: Warning: Stop driving the vehicle or 
+remove auxiliary loads at the earliest convenience. 
+Typically, leave the engine running at base idle 
+speed and allow to cool into the normal range 
+before starting to drive or operate the PTO. The 
+transmission fluid is not over-heated, but operating 
+in the Yellow Range for extended periods of time 
+may cause internal transmission damage.
+● Red Area: The transmission fluid is over-heating. 
+Stop the vehicle, do not drive, and allow to cool into 
+the normal operating temperature range. If the 
+gauge continues to show high temperatures then 
+see your Ford dealer.
+For readings in the Red and Yellow areas, make sure 
+that snow or debris is not blocking airflow to the radiator
+and transmission fluid cooler, that cooler lines are not 
+kinked nor restricted, and that vehicle load capacities or
+PTO duty cycles are not excessive.
+SEIC (Stationary Elevated Idle Control):
+This feature is included in the powertrain control 
+strategy of all F250/350/450/550 and E350/450 
+vehicles over 8500 lb GVWR, with all powertrains. For 
+a stationary vehicle it allows the operator to elevate 
+engine idle speed to operate a transmission-mounted 
+PTO, or engine FEAD-mounted clutch-pump, air 
+compressor, or generator; or be used to help keep the 
+vehicle battery charged. SEIC uses CAN messaging 
+internally. It is activated by the up-fitter by applying 
+discrete voltage signals to a wire bundle located in the 
+F-Series cabin above the parking brake release handle, 
+and similarly in the E-Series and Transit engine 
+compartments.  The  up-fitter  will  need  to  complete 
+the circuits as described herein, and provide the 
+customer interface (i.e., buttons, LCD read-out for 
+engine speed, PTO switch, etc.). 
+NOTE: The F-Super Duty light truck offers four relayed 
+rocker switches on the instrument panel for the up-fitter 
+to use.
+Ramp-up rate is fixed at approximately 200 rpm/sec for 
+diesel engine and 400 rpm/sec for gas engine.
+PTO Control (For automatic transmission-mounted 
+PTO only):
+This is PCM strategy within the SEIC feature that 
+automatically looks for and recognizes whether the 
+vehicle has a TorqShift automatic transmission with a 
+side-mount PTO ("Transmission PTO Provision", Option
+Code 62R), and for the 6.8L / 5R110 transmission, 
+makes the internal PTO gear function by commanding 
+the torque converter to lock at 1200 rpm minimum 
+speed. For the 6R140 transmission, the PTO gear is 
+splined directly to the transmission torque converter 
+turbine shaft and does not depend on torque converter 
+lock up. When all of the vehicle safety enablers are 
+met, and the engine speed is commanded by the  
+operator to at least 1200 rpm (900 rpm for diesel 
+engine), then the strategy automatically commands the 
+torque converter to lock at 1200 rpm to deliver engine 
+torque to the PTO gear (actual lock-up begins at 
+approximately 1050 rpm), and elevates the 
+transmission hydraulic line pressure to 150 psi nominal 
+for the aftermarket PTO to use to hold its engagement 
+clutch.
+NOTE: Applying battery voltage to the Diesel "PTO" or 
+Gasoline "PTO-Mode" wires is what the transmission 
+looks for to initiate these commands. Failing to do so 
+may show up as low or oscillating hydraulic line 
+pressure and low or no aftermarket PTO torque or 
+pump flow output. Any attempt to operate the 
+aftermarket PTO at elevated idle without these 
+commands may result in under-capacity PTO clutch 
+wear, resulting in rapid contamination of transmission 
+fluid and internal transmission damage. This applies to 
+both stationary and mobile automatic transmission PTO 
+operations.
+SEIC / PTO
+APPLICATION INFORMATION (Cont'd)
+Body Builders Layout Book
+4
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+(Cont'd next page)
+ Vehicle Conditions to Enable 
+SEIC
+(all are required)
+Vehicle Conditions that Disable SEIC
+(any one required-See note 1)
+Gasoline Engine Diesel Engine
+Parking brake applied. Parking brake disengaged. Yes Yes
+Foot off of service brake Depressing service brake Yes Yes
+Vehicle in PARK (automatic trans.) Vehicle taken out of PARK Yes Yes
+Foot off of accelerator pedal
+Yes YesVehicle speed is 0 mph (stationary)
+Yes YesBrake lights functional Brake light circuit disconnected
+Yes2 Yes2Engine at a stable base idle speed
+Yes YesTransmission Oil Temperature (TOT) 
+Limit exceeds 240°F.
+Yes Yes
+Engine Coolant Temperature (ECT) above 234°F No Yes
+Catalyst Temperature Limit Yes Yes
+Trans Oil Temp above 20°F
+Eng Coolant Temp above 20°F
+Engine Coolant Temperature (ECT) above 220°FEng Coolant Temp above 40°F3 Yes No
+SEIC ENABLE-DISABLE CONDITIONS
+(1) A “Change-of-State” at the “PTO-Request” (and “PTO Engage” - Gasoline engines) circuit is required to re-invoke SEIC. When 
+a disabler is seen by the PCM, the "PTO-Indicator" circuit changes from "Ground-Source" to an “Open-Circuit". After 
+approximately 3 seconds SEIC drops out, returning the engine speed to base idle. For vehicle-stationary operation, the 
+automatic transmission torque converter unlocks as engine speed proceeds below 1200 rpm. To re-initiate SEIC the operator 
+must turn off the aftermarket PTO switch (removing command voltage to the “PTO-Mode” circuit) and then turn it back on again.
+(2) If a SEIC disabling condition occurs, the engine must be allowed to reach a stable base idle before the system can be re-
+initiated.
+(3) 5.4L and 6.2L engines- above 140°F.  
+GENERAL SYSTEM BEHAVIOR
+● To guarantee full advertised torque capability at the 
+automatic transmission PTO gear through the 
+aftermarket PTO clutch, the transmission torque 
+converter must be locked (5R110 transmission only) 
+and the hydraulic line pressure serving the 
+aftermarket PTO clutch must be elevated. Applying 
+battery voltage to the PTO circuit is the signal to the 
+transmission to enter SEIC strategy and command 
+these two important functions. This applies to both 
+stationary and mobile PTO operations.
+● If an SEIC disabler occurs:
+▬ Both GASOLINE and DIESEL engines will require 
+a "change-of-state", meaning the operator is 
+required to turn off voltage to the “PTO-Request” 
+circuit, and back on again to re-invoke SEIC and 
+PTO operation.
+● Battery Charge Protection (BCP): Available on 6.8L 
+E-Series and 6.7L Super Duty F-Series. When 
+switched to ON, the engine speed goes immediately 
+to 600 rpm. In this state, the Powertrain Control 
+Module (PCM) monitors battery voltage, ambient air 
+temperature and engine oil temperature information; 
+the PCM will adjust engine speed to maintain battery 
+voltage. Maximum engine speed in BCP mode is 
+1200 rpm. Loss of an enabling condition after BCP is 
+engaged will cancel BCP and require recycling of the 
+BCP switch to re-engage the BCP function.
+● If the Transmission Oil Temperature (TOT) sensor 
+reaches 240°F, then the SEIC system will disengage 
+(torque converter disengages, 5R110) and the 
+hydraulic line pressure serving the aftermarket PTO 
+clutch will drop, preventing torque from being 
+delivered to the aftermarket PTO equipment.
+● SEIC/PTO strategy function in the PCM is not 
+affected by the loss of vehicle battery electrical 
+power.
+● SEIC Ramp Rate (fixed, not programmable):
+▬ Gasoline engines: 400 rpm/second
+▬ Diesel engines: When first applying battery voltage 
+to the PTO circuit, the PCM directs the engine to 
+go to the initial target that it sees at the RPM 
+circuit at 200 rpm/second.
+● Correlation between engine speed and resistor 
+values:
+▬ The external voltage source that the aftermarket 
+PTO system designer uses to command SEIC 
+through the "PTO" or "PTO-Request" circuits must 
+be the same as that used by the PCM internally for 
+predictable SEIC function. Reasoning is that a 
+fully-charged vehicle battery's voltage varies with 
+ambient temperature.
+▬ The correlation will be better for diesel engines 
+since the diesel engine SEIC system offers 
+buffered PCM voltage and ground circuits to 
+complete the resistor circuits for engine speed, 
+while the gas engine system forces the SEIC 
+circuit installer to use chassis voltage and ground.
+▬ If there is a high electrical demand on the chassis 
+battery, such as from aftermarket inverters or 
+generators, etc., the actual elevated idle engine 
+speed may vary with that demand for any given 
+resistance in the SEIC circuit. More so for gasoline 
+engine systems than diesel since gasoline uses 
+chassis battery voltage as a reference.
+● GASOLINE Engine Only:
+▬ Normal base engine calibration allows 
+approximately +/- 50 rpm fluctuation. If any factory 
+vehicle accessories are used during SEIC, e.g., 
+A/C, defroster, etc., then that fluctuation may 
+increase to approximately +/- 100 rpm or more.
+▬ The sudden loss of aftermarket PTO hydraulic 
+pressure during SEIC/PTO operation, like a 
+ruptured hose, may send SEIC engine speed to 
+near 3000 rpm. It is recommended that a hydraulic 
+pressure switch linked to SEIC/PTO be added to 
+disable SEIC/PTO when a hose ruptures.
+▬ Because of a service brake circuit characteristic at 
+engine-start, invoking SEIC may cause the 
+diagnostic error code FFG_BOO to get flagged 
+(recorded in the PCM). To avoid this, simply tap 
+the service brake pedal sometime after engine-
+start and prior to invoking SEIC. Once the code is 
+set, SEIC may not be available until it is erased.
+▬ Gasoline engines require a "change-of-state" at 
+both the PTO-Mode and PTO-Engage circuits 
+whenever a disabler turns off SEIC (remove 
+battery voltage signal and re-apply).
+▬ For aftermarket remote engine start-stop: a 
+change-of-state is required to get SEIC to function 
+again.
+SEIC / PTO
+APPLICATION INFORMATION (Cont'd)
+Body Builders Layout Book
+5
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+GUIDELINES FOR SPECIFIC APPLICATIONS
+FEAD-Mounted Auxiliary Equipment:
+1. An auxiliary crankshaft bearing support is required 
+on all modular gas engine applications where the 
+clutch-pump is drawing greater than 5-hp from the 
+engine crankshaft pulley. This further applies to all 
+tangentially-mounted auxiliary aftermarket 
+equipment in general. 
+A "spider" bracket kit can be obtained for this 
+purpose. It allows up to 70 lb-ft of torque at the 
+clutch-pump. Part Number: (6.8L) XC2E-7275-BB.
+2. Always maintain the clearance relationship between 
+the Ford OEM fan, radiator, and shroud to help 
+maintain optimum engine cooling performance.
+3. Always consider engine roll and body/frame torsion 
+when packaging clearances.
+4. Temperature monitoring of powertrain fluids as 
+discussed earlier in this section is recommended.
+5. Avoid the use of aftermarket “power chips” in the 
+engine powertrain control system. These boost 
+engine power by dumping fuel, which heats the 
+engine, thereby turning on the cooling fan 100%, 
+resulting in accelerated FEAD belt and tensioner 
+wear.
+6. Belt spans greater than 250 mm [9.8 in] require a 
+pulley or tensioner support within the span.
+Split-Shaft PTO (Diesel Only)
+Split-Shaft PTO gearboxes provide a cost effective 
+means for driving a pump, generator, air compressor, 
+winch or other auxiliary equipment from the truck 
+engine. An aftermarket gearbox installed in a mid-ship 
+position of the truck between two sections of a split 
+drive shaft. Split-Shaft mode is activated by applying 
+supply voltage to both the PTORS1 & PTORS2 PCM 
+circuits simultaneously.
+The enablers are as follows:
+▬ Assure engine is running and warmed-up.
+▬ Apply park brake.
+▬ With transmission in NEUTRAL, disengage drive 
+wheels by shifting the PTO gearbox to AUXILIARY 
+POWER.
+▬ Engage the load and apply RPM REQUEST 
+voltage.
+▬ With foot off brake and accelerator, switch Split-
+Shaft PTO to ON.
+Split Shaft Mode/ Live Drive Mobile Mode Enable-Disable Conditions (Diesel only)
+Vehicle Conditions to Enable
+Split Shaft / Mobile (Live Drive)
+Vehicle Conditions that Disable Split Shaft/
+Live Drive
+(any one required - See Note-1)
+Split Shaft Mode
+Live
+Drive
+Parking brake applied. Parking brake disengaged. Yes No
+Foot off of service brake Depressing service brake See note-2 No
+Vehicle in PARK Vehicle taken out of PARK See note-2 No
+Foot off of accelerator pedal Accelerator pedal depressed Yes No
+Vehicle speed is 0 mph (stationary) Vehicle speed is not 0 mph (stationary) Yes No
+Engine at a stable base idle speed Yes No
+Transmission oil Temp above 20° F Transmission Oil Temperature (TOT) 
+exceeds 240° F. Yes Yes
+Engine Coolant Temperature (ECT) 
+20° F minimum
+Engine Coolant Temperature (ECT) 
+exceeds 234° F Yes Yes
+Catalyst Temperature Limit Yes Yes
+(1) A “change-of-state” at the “PTO-Request” circuit is required to re-invoke Split Shaft / Live Drive.  When a disabler is seen 
+by the PCM the "PTO-Indicator" circuit changes from "ground-source" to “open-circuit", the PTO mode drops out, and the 
+engine speed returns to base idle.  To re-initiate Split shaft / Live Drive the operator must turn off the aftermarket PTO 
+switch (removing command voltage to the “PTO-Mode” circuit) and turn it back on again.
+(1) Please see Split Shaft PTO in Special Situations.  
+▬ While pressing the service brake, shift 
+transmission into DRIVE.
+▬ The system will shift the transmission into 4th 
+gear, lock the converter and then ramp up to the 
+desired speed in a controlled manner. Release the 
+service brake.
+▬ If vehicle unexpectedly lurches or moves, 
+immediately depress brake pedal and shift 
+transmission into PARK or NEUTRAL to secure 
+vehicle. Contact upfitter immediately for further 
+guidance.
+An auxiliary engine cooling system may be required to 
+run at full loads above 2400 rpm. This will be 
+determined by the upfitter based upon the application 
+installed. 
+LiveDrive Mobile Mode (Diesel Only)
+LiveDrive Mobile Mode operates in all gears and all 
+vehicle speeds. The engine idle speed is slightly 
+elevated when the Mobile Mode is initiated. Engine rpm 
+is controlled by the driver through the throttle pedal, but 
+peak engine speed is not limited beyond normal 
+operating ranges. There is no built-in provision to limit 
+engine speed to a set rpm. To prevent over-speed 
+damage to attached pumps and equipment, an 
+additional aftermarket rpm limiter will be required. The 
+maximum load allowable for mobile mode is 150 ft-lbs 
+at the transmission PTO gear. If the PTO feature is 
+used for extended periods of time without vehicle 
+movement it is recommended to switch to Stationary 
+Mode.
+SEIC / PTO
+E-350/450
+VOLTAGE SOURCES (VPWR)
+Body Builders Layout Book
+6
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+VOLTAGE SOURCES (VPWR)
+E-350/450 Gasoline
+Circuit Intent Wire Tag Description 
+Hot-at-all-times  
+Circuit no. SBB68    Wire Color:   Green / Red 
+• A fused 50 amp circuit. 
+• Found:  at 4-pin customer access connector above the brake master
+cylinder or above and to the right of parking brake release handle by the 
+relay pack (part of the Modified Vehicle Wiring) 
+Ignition Hot-in-RUN  
+Circuit no. CAC14    Wire Color:  Yellow / Orange 
+• A fused 40 amp circuit
+• Found:  at 4-pin  customer access connector above the brake master
+cylinder or above and to the right of parking brake release handle by the 
+relay pack (part of the Modified Vehicle Wiring) 
+• Upfitter switch Output:  Ign-Hot/ACC 
+ 
+• Found: under windshield cowl on
+            driver’s side engine zone
+• Requires Upfitter Switch Option  52S 
+ Aux-1
+ 
+ [30-amp]             Circuit No. CAC05        Wire Color:  Yellow 
+ 
+Aux-2 [30-amp]             Circuit No. CAC06        Wire Color:  Green / Brown 
+Aux-3 [10-amp]             Circuit No. CAC07        Wire Color:  Violet / Green 
+Aux-4 [15-amp]             Circuit No. CAC08        Wire Color:  Brown 
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK
+SEIC / PTO
+E-350/450
+CUSTOMER ACCESSIBLE SIGNALS & SEIC CIRCUIT DESCRIPTIONS
+5.4L GASOLINE ENGINE
+Body Builders Layout Book
+7
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK
+E-350/450 – 5.4L Gasoline Engine PCM
+Circuit Intent Wire Tag Description 
+ 
+INPUT (VPWR) 
+ 
+ 
+PTO 
+ 
+PCM Pin (5.4L) C175B-3 / C1551B-26    Circuit No. CE912    Wire Color:  Yellow / Green 
+ 
+• Applying vehicle battery voltage to this wire begins SEIC process. 
+• Signals TorqShift™ transmission to enter SEIC strategy. 
+• Verifies safety enablers. 
+• Turns off OBD and other emission-related monitoring. 
+• Elevates engine speed to 900 rpm "standby" speed if it finds an "open-circuit" at  
+  PTO-RPM Select. 
+• Invokes the PTO Indicator circuit when safety enablers are met. 
+• Looks for the target engine speed requested at the PTO_RPM Select circuit using a
+   resistor or potentiometer. 
+ 
+OUTPUT 
+ 
+ 
+ PTO-IND 
+ 
+PCM Pin (5.4L)  C175B-11 / C1551B-42    Circuit No. CE326    Wire Color:  Blue / White 
+ 
+• A low-side driver, changing from "open-circuit" to "ground" indicating that the engine is
+  ready for the PTO operation to begin, and that a PTO load may be applied. 
+• Intended for powering a PTO indicator lamp, or turn on a relay coil (not to exceed 1 amp).
+   LED lights require adding a resistor in series. 
+ 
+INPUT (resistor) 
+ 
+ PTOIC-2 
+ 
+PCM Pin (5.4L)  C175B-8 / C1551B-7    Circuit No. CE914    Wire Color:  Green 
+ 
+• Add a resistor or potentiometer to obtain fixed or variable engine target speed. 
+• Combine in circuit with PTORS2. 
+• Speed range available:  910 rpm to 2400 rpm 
+ 
+INPUT (VPWR) 
+ 
+ PTO-ENGAGE
+ 
+ 
+PCM Pin (5.4L)  C175B-6 / C1551B-9    Circuit No. CE924    Wire Color:  Blue / Green  
+• Applying vehicle battery voltage to this wire signals the PCM that the PTO load is being  
+   applied. 
+• Also used to complete the resistor circuit for engine speed selection. 
+SEIC CIRCUIT DESCRIPTIONS
+E-350/450 – 5.4L Gasoline Engine PCM 
+OUTPUT 
+Park-Only TRO-P PCM Pin C175T-14 / C1551B-43   Circuit No. CET22  Wire Color:  Gray / Brown 
+OUTPUT 
+Neutral-Only TRO-N PCM Pin C175T-39 / C1551B-39   Circuit No. CET21  Wire Color:  Green / White 
+OUTPUT 
+Vehicle Speed VSOUT PCM Pin C175B-5  / C1551B-5   Circuit No. VMC05    Wire Color:  Violet / Orange 
+OUTPUT 
+Engine Speed 
+ PTOIC-1 PCM Pin C175B-10 / C1551B-10   Circuit No. CE913    Wire Color:  Blue 
+CUSTOMER ACCESSIBLE SIGNALS
+(Cont'd next page)
+SEIC / PTO
+E-350/450
+CUSTOMER ACCESSIBLE SIGNALS & SEIC CIRCUIT DESCRIPTIONS (Cont'd)
+6.8L GASOLINE ENGINE
+Body Builders Layout Book
+8
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOKNOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK
+E-350/450 – 6.8L Gasoline Engine PCM
+Circuit Intent Wire Tag Description 
+OUTPUT 
+Park-Only TRO_P 
+PCM Pin 6.8L C1551E-19    Circuit No. CET22  Wire Color:  Gray/Brown  
+• An output from the PCM that indicates when the Transmission Range Sensor is indicating that the 
+Transmission is in the Park Position.   The Low Side driver in the PCM will pull this output to ground 
+when active (Transmission is in the PARK Position).   To properly reference this output, the 
+customer supplied external controller/device needs to pull this output up to VPWR with a 10K Ohm 
+resistor.  Thus when the output is active, the voltage at this output will be 0 volts.  When this output 
+is not active, the output will be pulled up to VPWR by the 10K Ohm pull up resistor. 
+OUTPUT 
+Neutral-Only TRO_N 
+PCM Pin 6.8L C1551B-43   Circuit No. CET21  Wire Color:  White   
+• An output from the PCM that indicates when the Transmission Range Sensor is indicating that the 
+Transmission is in the Neutral Position.   The Low Side driver in the PCM will pull this output to 
+ground when active (Transmission is in the Neutral Position).   To properly reference this output, 
+the customer supplied external controller/device needs to pull this output up to VPWR with a 10K 
+Ohm resistor.  Thus when the output is active, the voltage at this output will be 0 volts.  When this 
+output is not active, the output will be pulled up to VPWR by the 10K Ohm pull up resistor. 
+OUTPUT 
+Vehicle Speed VSOUT 
+PCM Pin 6.8L C1551B-78    Circuit No. VMC05    Wire Color:  Violet / Orange 
+•  An output from the PCM that provides  8000 pulse per mile signal with a 50% duty cycle.   The 
+low side driver in the PCM will switch the output off and on (off will allow the output to be pulled up 
+close to VPWR), (on will put the output to 0 volts).  To properly reference this output, the customer 
+supplied external controller/device needs to pull this output down to ground with a 10K Ohm 
+resistor. 
+OUTPUT 
+Engine Speed 
+CTO  
+PCM Pin 6.8L C1551B-77    Circuit No. CE913    Wire Color:  Blue 
+•  An output from the PCM that indicates a Clean Tachometer Output to provide an indication of 
+engine RPM.  The low side driver in the PCM will switch the output off and on (off will allow the 
+output to be pulled up close to VPWR), (on will put the output to 0 volts), at a frequency = (  (Engine 
+RPM’s * Number of cylinders) / 120), with a duty cycle of 50%.   To properly reference this output, 
+the customer supplied external controller/device needs to pull this output down to ground with a 10K 
+Ohm resistor. 
+PASS-THRU  Circuit No. CAC17   Wire Color:  Violet / Gray    Found:  at 4-pin customer access connector  
+PASS-THRU  Circuit No. CAC18  Wire Color:  Yellow / Gray   Found:  at 4-pin customer access connector 
+NOTE: For additional information, see QVM Bulletin Q-235
+(Cont'd next page)
+CUSTOMER ACCESSIBLE SIGNALS
+SEIC / PTO
+E-350/450
+CUSTOMER ACCESSIBLE SIGNALS & SEIC CIRCUIT DESCRIPTIONS (Cont'd)
+6.8L GASOLINE ENGINE
+Body Builders Layout Book
+9
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK
+E-350/450 – 6.8L Gasoline Engine PCM 
+Circuit Intent Wire Tag Description
+INPUT (VPWR) PTO_REQUEST 
+PCM Pin C1551B-84    Circuit No. CE912    Wire Color: Yellow / Green 
+• Applying vehicle battery voltage to this wire begins SEIC process. 
+• Verifies safety enablers. 
+• Turns off OBD and other emission-related monitoring.
+• Elevates engine speed to 900 rpm "standby" speed if it finds an "open -circuit" at 
+  PTO_RPM Select. 
+• Invokes the PTO Indicator circuit when safety enablers are met. 
+• Looks for the target engine speed requested at the PTO_RPM Select circuit using a resistor
+   or potentiometer. 
+OUTPUT PTO_OK 
+PCM Pin C1551B-98    Circuit No. CE326    Wire Color:  Blue / White 
+• A low-side driver, changing from "open-circuit" to "ground" indicating that the engine is ready
+  for the PTO operation to begin, and that a PTO load may be applied. 
+• Intended for powering a PTO indicator lamp, or  turn on a relay coil (not to exceed 1 amp) 
+   LED lights require adding a resistor in series. 
+OUTPUT PTO_VREF PCM Pin C1551B-52 Circuit No. LE423 Wire Color: Green / Violet 
++5VDC reference voltage.  
+INPUT (resistor) PTO_RPM 
+PCM Pin C1551B-85    Circuit No. VE925    Wire Color:  Green 
+• Add a resistor or a potentiometer  to obtain fixed or variable engine target speed.
+• Combine in circuit with PTO_VREF (+5VDC). 
+• Speed range available: 650 rpm to 2400 rpm  
+INPUT PTO_SIGRTN 
+PCM Pin C1551B-51   Circuit No. RE405   Wire Color:  Green / White 
+• A ground reference, buffered, used to complete the potentiometer circuit for engine speed 
+  selection. 
+INPUT (VPWR) PTO_ENGAGE 
+PCM Pin 6.8L C1551B-88    Circuit No. CE924    Wire Color:  Blue / Green 
+• Applying vehicle battery voltage to this wire signals the PCM that the PTO load is being 
+   applied. 
+OUTPUT BCPIL 
+PCM Pin C1551B-17      Circuit No. CE140     Wire Color: Tan 
+• A low-side driver, changing from "open-circuit" to "ground" indicating that BCP is in effect.
+• Intended for powering an indicator lamp (not to exceed 40mA). 
+INPUT BCP_SW 
+PCM Pin C1551B-82      Circuit No. CE926     Wire Color: Violet / Brown 
+• Applying vehicle battery voltage to this wire begins BCP . 
+ BCP regulates engine speed between 600 to1200 rpm to maintain charge system voltage 
+NOTE: For additional information, see QVM Bulletin Q-235
+SEIC CIRCUIT DESCRIPTIONS
+SEIC / PTO
+E-350/450
+ACCESS & PASS-THRU WIRING LOCATIONS
+Body Builders Layout Book
+10
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+Customer Access
+Upfitter Wiring
+Pass-Thru 
+Wires
+ Customer Access/ Upfitter Wiring
+Pass-Thru 
+Wires
+E350/450
+Engine compartment
+● The two pass-thru wires are part of the same 
+modified vehicle wiring kit as prior years.  Located 
+at the 4-pin connector in the harness below the 
+cowl, outboard of the brake master cylinder, as 
+shown.  Mating pigtail connector, 4C24-14A411, 
+Found in dunnage.  Opposite ends located above 
+driver-side kick-panel.
+E350/450
+Engine Compartment
+● To find Blunt-cut Customer access wires, remove 
+some of the plastic harness tape where the large 
+harness (below the engine cowl) exits its plastic 
+support gutter above the engine air induction tube to 
+reveal the blunt-cut wires.
+E350/450
+Engine Compartment
+● Blunt-cut access for SEIC, “Customer Access” signal 
+circuits for CTO, VSO PARK, optional Upfitter Switch 
+output, and Pass-Thru wires are located below the 
+driver's side windshield/cowl.
+SEIC / PTO
+E-350/450
+WIRING SCHEMATIC
+5.4L GASOLINE ENGINE
+Body Builders Layout Book
+11
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+(Cont'd next page)
+PTO
+PTO_Engage
+PTO_RPM 
+PTO_OK
+PwrGnd
+PwrGnd
+         
+ Lowside Driver Output
+Ford PCM
+n.o.
+12V Power Source
+(Upfitter Switch Recommended)
+To aftermarket
+PTO as needed
+PwrGnd
+1k 4.75k
+20k A/D Input
+PwrGnd
+1k
+Digital Input
+Digital Input
+SEIC Indicator Light
+(Recommended)
+     1k
+Provided by aftermarket body builder
+        Blunt-cut Leads
+ 
+Select resistor from
+SEIC resistor chart
+Yellow/Green
+Green
+Blue/White
+Blue/Orange
+SEIC – 5.4L GASOLINE ENGINE
+n.o.
+SEIC initialization
+ (Upfitter) Switch 
+PTO Relay
+(Required)
+SEIC / PTO
+E-350/450
+WIRING SCHEMATIC (Cont'd)
+6.8L GASOLINE
+Body Builders Layout Book
+12
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+IGNITION
+HOT-IN-RUN
+SEIC and BCP Interface
+2016 E-350/450 6.8L
+Customer Supplied Components
+See resistor 
+table
+PTO_REQUEST_1 D/I
+PCM VPWR
+Customer Access
+External Controllers
+SEIC Switch
+Freq LSD
+On/
+Off LSD
+LSD
+PTO VREF 5VDC
+PTO_RPM
+TRO_P
+TRO_N
+CTO
+Freq LSD
+VPWR
+PTO_RELAY
+VSOUT
+On/
+Off
+D/OLSD
+A/D
+PTO 
+LOADS 
+(12V)
+5000 ohms 
+potentiometer for 
+RPM Setpoint 
+10K 10K
+External Controller
+VPWR
+10K
+External Controller
+VPWR
+10K
+*
+5VDC
+A/D
+Alternate input for RPM Setpoint*
+PTO_RPM
+PTOSIGRTN
+PTOREF
+Input for RPM Setpoint
+PCMCustomer Supplied 
+Components
+GN/WH
+RE405  
+SEIC 
+Relay
+PTOSIGRTN
+D/OLSD
+PTO_ENGAGE D/I
+SEIC Lamp
+Indication Choice
+- or -
+LED
+Lamp
+1 K BCP_SW D/I
+10K 10K
+VT/OG
+VMC05  
+GY/BN
+CET22  
+WH
+CET21  
+BU
+CE913  
+BU/GN
+CE924  
+BL/WH
+CE326  
+GN
+VE925  
+GN/VT
+LE423  
+YE/GN
+CE912  
+YE/OG
+CAC14  
+BCPIL
+PCMCustomer Supplied 
+Components
+BCP_SW D/I
+BCP Switch
+VT/BN
+CE926  
+D/OLSD
+Ignition
+Hot-In-
+Run
+TN
+CE140  BCP LED
+BCPILLED
+1 K
+(Customer Supplied 
+Components)
+GN/VT
+LE423  
+GN
+VE925  
+BCP Interface
+SEIC & BCP INTERFACE – 6.8L GASOLINE ENGINE
+SEIC / PTO
+E-SERIES
+RPM / RESISTANCE / VOLTAGE CHARTS
+Body Builders Layout Book
+13
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+5.4L Gasoline Engine SEIC
+650 (Base)
+912 3.9K
+1024 2.7K 3.61
+1056 2.2K 4.18
+1184 1.8K 4.80
+1264 1.5K 5.39
+1440 1.0K 6.76
+1536 820 7.43
+1648 680 8.06
+1712 560 8.70
+1792 470 9.25
+1904 380 9.89
+1936 330 10.27
+2000 270 10.75
+2064 220 11.20
+2128 180 11.60
+2160 150 11.90
+2208 120 12.23
+2256 100 12.46
+2320 0
+(closed circuit)
+13.77
+100000  0.218
+0.4
+Engine Target
+Speed (RPM)
+Resistor
+(Ohms)
+Voltage
+(volts)* 
+* Voltages are exact to achieve RPM shown.
+  Resistors are standard 5% values (1 watt) and yield RPM
+  values +/- 32rpm
+6.8L Gasoline Engine SEIC
+(Base)
+650 54400
+750 30880 0.665
+800 25320 0.787
+900 17520 1.06
+1000 13280 1.31
+1100 10220 1.578
+1200 8130 1.837
+1300 6500 2.102
+1400 5220 2.375
+1500 4250 2.63
+1600 3430 2.89
+1700 2740 3.162
+1800 2168 3.426
+1900 1684 3.685
+2000 1247 3.954
+2100 891 4.203
+2200 544 4.482
+2300 255 4.741
+2400 0
+(closed circuit)
+5
+Engine Target
+Speed (RPM)
+Resistor
+(Ohms)
+Voltage
+(volts)* 
+* Voltages are exact to achieve RPM shown.
+  Resistors are standard 5% values (1 watt) and yield RPM
+  values +/- 32rpm
+SEIC / PTO
+F-250/350/450/550
+VOLTAGE SOURCES (VPWR)
+Body Builders Layout Book
+14
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+Circuit Intent Wire Tag Description
+Ignition Hot-in-RUN Circuit No. CDC64  Wire Color: White/Blue
+• A fused 5 amp circuit.
+• Found: in cab under driver's side instrument panel near engine bulkhead
+Ford Upfitter Switches:
+Ignition Hot-ACC
+Aux-1
+Aux-2
+Aux-3
+Aux-4
+[25-amp]      Circuit No. CAC05   Wire Color: Yellow
+[25-amp]      Circuit No. CAC06   Wire Color: Green / Brown
+[10-amp]      Circuit No. CAC07   Wire Color: Violet Green
+[15-amp]      Circuit No. CAC08   Wire Color: Brown
+*Found: above and to the right of parking brake release handle by the relay pack.
+F-250/350/450/550 – Voltage Sources (VPWR)
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK
+SEIC / PTO
+F-250/350/450/550
+CUSTOMER ACCESSIBLE SIGNALS
+Body Builders Layout Book
+15
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+F-250/350/450/550 – Gasoline Engine Customer Accessible Signals
+Customer Access Signal Circuits
+Circuit Intent Wire Tag Description
+OUTPUT
+PARK-Only TROP PCM Pin C175B-43    Circuit No. CLS05     Wire Color: Blue / Gray
+OUTPUT
+NEUTRAL-Only TRON PCM Pin C175B-39   Circuit No. CET21     Wire Color: Green / White
+OUTPUT
+Vehicle Speed VSOUT PCM Pin C175B-5     Circuit No. VMC05     Wire Color: Violet / Orange
+OUTPUT
+Engine Speed CTO PCM Pin C175B-10   Circuit No. CE913      Wire Color: Blue
+F-250/350/450/550 – Diesel Engine Customer Accessible Signals
+Circuit Intent Wire Tag Description
+OUTPUT
+PARK-Only TROP TCM Pin C1750-27     Circuit No. CLS05    Wire Color: Blue / Gray
+OUTPUT
+NEUTRAL-Only TRON TCM Pin C1750-30     Circuit No. CET21    Wire Color: Green / White
+OUTPUT
+Vehicle Speed VSOUT PCM Pin C1232B-5     Circuit No.VMC05    Wire Color: Violet / Orange
+OUTPUT
+Engine Speed CTO PCM Pin C1232B-10   Circuit No. CE913    Wire Color: Blue
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK
+SEIC / PTO
+F-250/350/450/550
+SEIC CIRCUIT DESCRIPTIONS
+Body Builders Layout Book
+16
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+F-250/350/450/550 – Gasoline Engine PCM 
+Circuit Intent Wire Tag Description 
+INPUT (VPWR) PTO PCM Pin C175B-22    Circuit No. CE912    Wire Color:  Yellow / Green 
+• Applying vehicle battery voltage to this wire begins SEIC process. 
+• Signals TorqShift™ transmission to enter SEIC strategy. 
+• Verifies safety enablers. 
+• Turns off OBD and other emission-related monitoring. 
+• Elevates engine speed to 900 rpm "standby" speed if it finds an "open-circuit" at PTO- 
+   RPM_Select. 
+• Invokes the PTO Indicator circuit when safety enablers are met. 
+• Looks for the target engine speed requested at the PTO_RPM_Select circuit using a 
+resistor or potentiometer.
+OUTPUT PTO_OK PCM Pin C175B-11    Circuit No. CE326    Wire Color:  Blue / White 
+• A low-side driver, changing from "open-circuit" to "ground" indicating that the engine is 
+ready 
+  for the PTO operation to begin, and that a PTO load may be applied. 
+• Intended for powering a PTO indicator lamp, or turn on a relay coil (not to exceed 1 
+amp).
+● LED lights require adding a resistor in series. 
+INPUT (resistor) PTO_RPM PCM Pin C175B-8    Circuit No. CE914    Wire Color:  Green 
+• Add a resistor or potentiometer to obtain fixed or variable engine target speed. 
+• Combine in circuit with PTO-ENGAGE. 
+• Speed range available:  910 rpm to 2400 rpm 
+INPUT (VPWR) PTO_Engage PCM Pin C175B-6    Circuit No. CE933    Wire Color:  Blue / Orange 
+• Applying vehicle battery voltage to this wire signals the PCM that the PTO load is being 
+  applied. 
+• Also used to complete the resistor circuit for engine speed selection. 
+SEIC CIRCUIT DESCRIPTIONS
+F-250/350/450/550 – Diesel Engine PCM 
+Circuit Intent Wire Tag Description 
+INPUT (VPWR) PTORS1 PCM Pin C1232B-6    Circuit No. CE912    Wire Color:  Yellow / Green 
+• Applying vehicle battery voltage to this wire begins SEIC process. 
+• Signals TorqShift™ transmission to enter SEIC strategy. 
+• Verifies safety enablers. 
+• Turns off OBD and other emission-related monitoring. 
+• Elevates engine speed to target found at PTO-RPM circuit. 
+• Invokes the PTOC circuit when safety enablers are met. 
+• Looks for the target engine speed requested at the PTO_RPM circuit using a resistor or 
+POT.
+OUTPUT PTO RELAY
+(PTO-IND)
+PCM Pin C1232B-11    Circuit No. CE326    Wire Color:  Blue / White 
+• A low-side driver, changing from "open-circuit" to "ground" indicating that the engine is 
+ready   for the PTO operation to begin, and that a PTO load may be applied. 
+• Intended for powering a PTO indicator lamp, or turn on a relay coil (not to exceed 1 
+amp).
+● LED lights require adding a resistor in series. 
+INPUT (resistor) PTO RPM PCM Pin C1232B-8    Circuit No. CE914    Wire Color:  Green 
+• Add a resistor or potentiometer to obtain fixed or variable engine target speed. 
+• Combine in circuit with PTO-VREF and PTO-RTN. 
+• Speed range available:  1200 rpm to 2400 rpm 
+REFERENCE
+VOLTAGE
+PTOREF PCM Pin C1232B-55    Circuit No. LE434    Wire Color:  White / Brown 
+• A 5-volt reference, buffered against shorts to ground or power, used to complete the 
+resistor circuit for engine speed selection.
+PCM GROUND PTORTN PCM Pin C1232B-22    Circuit No. RE327    Wire Color:  Gray / Violet 
+• A ground reference, buffered, used to complete the resistor circuit for engine speed 
+selection.
+INPUT (VPWR) BCP SW PCM Pin C1232B-21    Circuit No. CE926    Wire Color:  Violet / Brown 
+• Applying vehicle battery voltage to this wire begins BCP . 
+• Engine speed is sent to 900 rpm when all safety enablers are met, regardless of the 
+degree of battery charge. 
+• After 900 rpm, BCP regulates engine speed based upon the degree of battery charge, 
+up to 2400 rpm maximum. 
+OUTPUT BCP LAMP PCM Pin C1232B-20    Circuit No. CE140    Wire Color:  Brown 
+• A low-side driver, changing from "open-circuit" to "ground" indicating that BCP is in 
+effect.
+• Intended for powering an indicator lamp. 
+INPUT (VPWR) PTORS2 PCM Pin C1232B-4    Circuit No. CE933    Wire Color:  Blue / Orange 
+• Applying vehicle battery voltage to this wire begins Mobile PTO mode. 
+• Signals TorqShift™ transmission to enter SEIC strategy. 
+• Verifies safety enablers. 
+• Turns off OBD and other emission-related monitoring. 
+• Invokes the PTOC circuit when safety enablers are met. 
+SEIC CIRCUIT DESCRIPTIONS
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK
+SEIC / PTO
+F-250/350/450/550
+ACCESS & PASS-THRU WIRING LOCATIONS
+Body Builders Layout Book
+17
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+Pass-Thru 
+Wires
+SEIC, Pass-
+Thru Wires
+Upfitter Switch 
+Output Wires
+F250/350/450/550
+Cabin / Instrument Panel
+● Blunt-cut access wires for SEI, “Customer Access” 
+signal circuits for  CTO, VS_out,  PARK, TRO-N, and 
+4 pass-thru wire, are bundled together at the harness 
+above the parking brake pedal assembly behind the 
+data link connector.  
+F250/350/450/550
+Cabin / Instrument Panel
+● Blunt-cut access wires for the 4 optional “Upfitter 
+Switches” are taped on a harness near the relay pack 
+that can be found beneath the instrument panel and 
+to the left of the steering column.
+F250/350/450/550
+Engine Compartment
+● The 4 Blunt-cut pass-thru  wires are found in the 
+harness below the cowl, just outboard of the brake 
+master cylinder, as shown.  
+SEIC / PTO
+F-250/350/450/550
+WIRING SCHEMATIC
+Body Builders Layout Book
+18
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+ 
+** For Split Shaft operation, both PTORS1 & PTORS2 must have line voltage applied. 
+ 
+ 
+ 
+ 
+ 
+VPWR 
++12V IGN 
+PTO REF 
+BCP LAMP 
+PTO RPM 
+BCP SW 
+BCP Ind 
+LP 
+BCP ONLY 
+•  Recommended resistor value is 4.7K .   
+•  You may use a value from resistor table B if 
+preferred.  However, the BCP range 
+(min/max is 600 - 1200RPM) will not be 
+altered by this choice as RPM speed is 
+determined by PCM 
+PCM 
+SW3 
+Ckt# LE434White/Brown 
+Ckt# CE914 Green 
+Ckt# CE140 Brown 
+Ckt# CE926 Violet/Brown 
+DIESEL BCP
+    
+ 
+ 
+VPWR 
++12V IGN 
+MOBILE 
+PTO REQ2 
+PTO REQ1 
+PTO Relay/ 
+Module Assy 
+PTO RELAY 
+PTO REF 
+SW2 
+(optional) 
+SW1 
+240  
+ 360  
+5K  
+PTORTN 
+PTO_RPM 5K  
+PTOREF 
+PTO RPM 
+PTO RTN 
+PTO Ind 
+LP 
+W/ Trimmer POT 
+W/ Variable 
+RPM Control 
+ 
+PCM 
+Ckt# CE912 Yellow/Green 
+Ckt# CE933 Blue/Orange 
+Ckt# LE434White/Brown 
+Ckt# CE914 Green 
+Ckt# RE327 Gray/Violet 
+Ckt# CE326 Blue/White 
+PTO_RPM 
+PTOREF 
+W/ Steady 
+Preset RPM 
+See 
+Resistor 
+Table B 
+**Split Shaft Mode 
+Only 
+SEIC 
+6.7L DIESEL ENGINE SEIC
+PTO
+PTO_Engage
+PTO_RPM 
+PTO_OK
+PwrGnd
+PwrGnd
+         
+ Lowside Driver Output
+Ford PCM
+n.o.
+12V Power Source
+(Upfitter Switch Recommended)
+To aftermarket
+PTO as needed
+PwrGnd
+1k 4.75k
+20k A/D Input
+PwrGnd
+1k
+Digital Input
+Digital Input
+SEIC Indicator Light
+(Recommended)
+     1k
+Provided by aftermarket body builder
+        Blunt-cut Leads
+ 
+Select resistor from
+SEIC resistor chart
+Yellow/Green
+Green
+Blue/White
+Blue/Orange
+n.o.
+SEIC initialization
+ (Upfitter) Switch 
+PTO Relay
+(Required)
+5.4L GASOLINE ENGINE SEIC
+SEIC / PTO
+F-250/350/450/550
+RPM / RESISTANCE / VOLTAGE CHARTS
+Body Builders Layout Book
+19
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+Gasoline Engine SEIC
+Engine Target
+Speed (RPM)
+Resistor
+(Ohms)
+(5%, 1/4 Watt)
+Voltage (volts)
+650 (Base)
+912 3.9K
+1024 2.7K 3.61
+1056 2.2K 4.18
+1184 1.8K 4.80
+1264 1.5K 5.39
+1440 1.0K 6.76
+1536 820 7.43
+1648 680 8.06
+1712 560 8.70
+1792 470 9.25
+1904 380 9.89
+1936 330 10.27
+2000 270 10.75
+2064 220 11.20
+2128 180 11.60
+2160 150 11.90
+2208 120 12.23
+2256 100 12.46
+2320 0
+(closed circuit)
+13.77
+Diesel Engine SEIC
+Engine Target 
+Speed (RPM)
+Resistor
+(Ohms)
+(5%, 1/4 Watt)
+Voltage (volts)
+680 (Base)
+1200 20K
+1400 12K 1.352
+1600 9100 1.733
+1800 6200 2.114
+2000 4700 2.495
+2200 3300 2.876
+2400 2400 3.257
+2600 1800 3.638
+2800 1100 4.019
+3000 680 4.400
+0.971
+1000 36K 0.590
+900 51K 0.400
+Diesel Engine Split Shaft
+Engine Target 
+Speed (RPM)
+Resistor
+(Ohms)
+(5%, 1/4 Watt)
+Voltage (volts)
+680 (Base)
+1000 20K
+1200 13K 1.270
+1400 10k 1.617
+1600 7500 1.965
+1800 5600 2.313
+2000 4300 2.661
+2200 3000 3.009
+2400 2200 3.357
+2600 1600 3.704
+2800 1100 4.052
+0.922
+800 36K 0.574
+700 51K 0.400
+3000 680 4.400
+Diesel Engine Live Drive Mobile Mode
+Engine Target 
+Speed (RPM)
+Resistor
+(Ohms)
+(5%, 1/4 Watt)
+Voltage (volts)
+(± 0.0875 v)
+360 4.644Throttle 
+Commanded
+(± 0.0875 v)(± 0.0875 v)
+SEIC / PTO
+F-250/350/450/550
+TRANSMISSION SPECIFICATIONS
+Body Builders Layout Book
+20
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+        TORQSHIFT
+5-SPEED AUTOMATIC
+Transmission Fluid Type (1) Mercon LV ATF Mercon LV ATF
+Hydraulic Fluid Line Pressure (1) At base engine speed: 50-60 psi 70 psi @ 600 rpm
+At 1200 rpm engine speed: 150 psi nominal (2) 150 psi
+Transmission Gear Ratios 1st 3.114 3.974
+2nd 2.218 2.318
+3rd 1.545 1.516
+4th 1.000 1.149
+th 0.712 0.858
+Reverse 2.88 3.128
+Torque Converter 1.86 1.9
+PTO Drive Gear Function All FORWARD Drive Gears (3) Yes Mobile Mode
+REVERSE (3) Yes Mobile Mode
+OVERDRIVE (3): Yes Mobile Mode
+PARK (Stationary) Yes Mobile / Stationary Mode
+NEUTRAL (Stationary) No Mobile Mode
+PTO Drive Gear Data PTO Port • LH (Driver Side) only
+• SAE 6-bolt pattern
+• Requires Option Code 62R
+• LH (Driver Side) only
+• SAE 6-bolt pattern
+• Available Standard
+Gear Torque Rating 250 lb-ft 250 lb-ft Stationary; 150 lb-ft Mobile
+Gear Ratio 1 1
+Number of gear teeth 121
+Pitch Diameter 215.985 mm 108.472 mm
+Normal Pressure Angle 17.989° 19.339°
+Angle and Hand of Helix Spur RH-Spur Gear
+Gear RPM at 1000 Engine RPM 1000 1000
+Pitch Line Diameter Velocity @ 1000 Engine RPM 2226 ft/min 1118 ft/min
+Aftermarket PTO Model Series (4) Chelsea
+Technical Service: (662) 895-1052, chelseatech@parker.com 246
+Muncie
+Customer Service: 1-800-FOR-PTOS, info@munciepower.com
+4x2: FR62 or FR64
+4x4: FR64 only
+Torque Converter – Minimum lock-up speed (vehicle stationary – in PARK or NEUTRAL) 1200 rpm (5) N/A
+Internal Transmission Fluid Temperature Monitor Yes Yes
+NOTES:
+(1)  Affects the "holding power" of the aftermarket PTO clutch.
+(2)  Requires battery voltage applied to “PTO” (diesel engine) or “PTO-Mode” (gas engine) circuit, engine at 1200 rpm, and torque converter locked.
+(3)  Vehicle road speed must be greater than zero.
+(4)  Consult the PTO manufacturer for more complete detail.
+(5)  Although actual lock-up occurs above 1050 rpm, and unlocks below 950 rpm, drawing full torque from the PTO gear is not intended below 1200 rpm engine speed. 
+th
+5
+6 -------- 0.674
+52
+SUBJECT ITEM         TORQSHIFT 6
+6-SPEED AUTOMATIC
+SEIC / PTO
+TRANSIT
+VOLTAGE SOURCES (VPWR)
+Body Builders Layout Book
+21
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK 
+Refer to the electrical section of the BEMM For additional customer access circuit 
+Transit Battery Voltage Sources (VPWR)
+Refer to the Transit Body Equipment Mounting Manual and SVE Bulletin Q-239 for more information.  
+Transit 
+Circuit Intent Wire Tag Description
+Hot-at-all-times 
+Circuit no. SB153
+● A fused 40 amp circuit (F53)
+● Requires modified vehicle wiring option (53K)
+● Found at:
+― Vehicle interface connector C11-H (4-pin connector), Pin #4, at firewall 
+on driver side of the engine compartment.
+― Vehicle interface connector C12-A (6-pin connector), Pin #3, behind left 
+side of center stack.
+― Vehicle interface connector C33-C (6-pin connector), Pin #3, behind 
+passenger side airbag, above glove box.
+Circuit No. SB118      Connector: C33-C      Pin:6
+● A fused 40 amp circuit (F18).
+● Found: at vehicle interface connector C33-C (6-pin connector), Pin #6,
+behind passenger side airbag, above glove box.
+● Requires modified vehicle wiring option (53K).
+Customer Connection Point
+● A fused 60 amp VBATT feed.
+● Found: at right side rear of driver seat pedestal.
+Circuit No. CB121      Connector: C33-E      Pin:6
+● A fused 10 amp circuit.
+● Found:  at vehicle interface connector C33-E (6-pin connector) on right 
+side of driver seat pedestal beneath driver seat.
+ 
+Circuit no. CAC14
+● A fused 40 amp circuit (F52).
+● Requires modified vehicle wiring option (53K).
+● Found at:
+― Vehicle interface connector C11-H (4-pin connector), Pin #1, at
+   firewall on driver side of the engine compartment.
+― Vehicle interface connector C12-A (6-pin connector), Pin #4, behind
+   left side of center stack.
+― Vehicle interface connector C33-C (6-pin connector), Pin #5, behind 
+passenger side airbag, above glove box.
+Ford Upfitter Switches:
+Ignition Hot-ACC
+● Found at vehicle interface connector
+C33-H (4-pin connector) on right side 
+of driver seat pedestal beneath driver 
+seat.
+● Requires Upfitter Switch Option  67C
+Aux-1
+Aux-2
+Aux-3
+Aux-4
+[20-amp]     Circuit No. CAC05     Connector: C33-H     Pin:1
+[20-amp]     Circuit No. CAC06     Connector: C33-H     Pin:2
+[20-amp]     Circuit No. CAC07     Connector: C33-H     Pin:3
+[20-amp]     Circuit No. CAC08     Connector: C33-H     Pin:4
+SEIC / PTO
+TRANSIT
+CUSTOMER ACCESSIBLE SIGNALS
+Body Builders Layout Book
+22
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK 
+Refer to the electrical section of the BEMM For additional customer access circuit 
+Customer Accessible Signals
+Refer to the Transit Body Equipment Mounting Manual and SVE Bulletin Q-239 for more information.  
+Transit
+OUTPUT
+Park-Only
+TRO-P 3.5L - PCM Pin C1551B-40      Circuit No. CET22     Wire Color:  Gray / Yellow
+3.7L - PCM Pin C175B-19        Circuit No. CET22     Wire Color:  Gray / Yellow
+OUTPUT
+Neutral-Only
+TRO-N 3.5L - PCM Pin C1551B-81      Circuit No. CET21     Wire Color:  Green / Orange
+3.7L - PCM Pin C175B-43        Circuit No. CET21     Wire Color:  Green / Orange
+OUTPUT
+Vehicle Speed
+VSOUT Circuit No. VMC05     Connector: C33-E     Pin:4
+See BEMM for signal specification.
+OUTPUT
+Engine Speed
+CTO 3.5L - PCM Pin C1551B-40           Circuit No. VMC02      Wire Color: Blue / White
+3.7L - PCM Pin C175B-19             Circuit No. VMC02      Wire Color:  Blue / White
+3.2L Diesel - PCM Pin C1232B     Circuit No. VMC02      Wire Color:  Blue / Orange
+PASS-THRU
+Circuit No. CAC17
+• Found at:
+- Vehicle interface connector C11-H (4-pin connector), Pin #2, at firewall on driver side of the
+  engine compartment.
+- Vehicle interface connector C12-A (6-pin connector), Pin #1, behind left side of center stack.
+- Requires modified vehicle wiring option (53K).
+PASS-THRU
+Circuit No. CAC18
+• Found at:
+- Vehicle interface connector C11-H (4-pin connector), Pin #3, at firewall on driver side of the
+  engine compartment.
+- Vehicle interface connector C12-A (6-pin connector), Pin #2, behind left side of center stack.
+- Requires modified vehicle wiring option (53K).
+SEIC / PTO
+TRANSIT
+SEIC CIRCUIT DESCRIPTIONS (GASOLINE ENGINE)
+Body Builders Layout Book
+23
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK 
+Refer to the electrical section of the BEMM For additional customer access circuit 
+SEIC Circuit Descriptions
+Refer to the Transit Body Equipment Mounting Manual and SVE Bulletin Q-239 for more information. 
+Transit – 3.5L and 3.7L Gasoline Engine PCM
+Circuit Intent Wire Tag Description
+INPUT (VPWR) PTO_REQUEST1 3.5L - PCM Pin C1551B-87     Circuit No. CE913     Wire Color: Blue
+3.7L - PCM Pin C175B-84       Circuit No. CE913     Wire Color: Blue
+• Applying vehicle battery voltage to this wire begins SEIC process.
+• Signals PCM to enter SEIC strategy.
+• Verifies safety enablers.
+• Elevates engine speed to target found at PTO-RPM circuit.
+• Invokes the PTOIL circuit when safety enablers are met.
+• Looks for the target engine speed requested at the PTO_RPM circuit using a resistor or POT.
+INPUT (VPWR) PTO_REQUEST2 3.5L - PCM Pin C1551B-91     Circuit No. VE935     Wire Color:  Green
+3.7L - PCM Pin C175B-88       Circuit No. VE935     Wire Color:  Green
+• RPM Increase Command Monitor  
+OUTPUT PTOIL 3.5L - PCM Pin C1551B-80     Circuit No. CE326     Wire Color:  Blue / White
+3.7L - PCM Pin C175B-96       Circuit No. CE326     Wire Color:  Blue / White
+• A low-side driver, changing from "open-circuit" to "ground" indicating that the engine is ready 
+for the PTO operation to begin and that a PTO load may be applied. 
+• Intended for powering a PTO indicator lamp, or turn on a relay coil (not to exceed 1 amp).
+• LED lights require adding a resistor in series.
+INPUT (resistor) PTO_RPM 3.5L - PCM Pin C1551B-33   Circuit No. CE925    Wire Color:  Green / White
+3.7L - PCM Pin C175B-85     Circuit No. CE925    Wire Color:  Green / White
+• Add a resistor or a potentiometer to obtain fixed or variable engine target speed.
+• Combine in circuit with PTO_VREF (+5V).
+• Speed range available:  910 rpm to 2400 rpm.
+OUTPUT PTO_VREF 3.5L - PCM Pin C1551B-11   Circuit No. LE458   Wire Color:  Blue / White
+3.7L - PCM Pin C175B-52     Circuit No. LE458   Wire Color:  Blue / White
+• A 5-volt reference, buffered against shorts to ground or power, used to complete the resistor
+circuit for engine speed selection. 
+INPUT PTO_GND 3.5L - PCM Pin C1551B-18   Circuit No. RE407  Wire Color:  Yellow / Violet
+3.7L - PCM Pin C175B-51     Circuit No. RE407  Wire Color:  Yellow / Violet 
+• A ground reference, buffered, used to complete the resistor circuit for engine speed selection 
+when a potentiometer is used. 
+SEIC / PTO
+TRANSIT
+SEIC CIRCUIT DESCRIPTIONS (DIESEL ENGINE)
+Body Builders Layout Book
+24
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK 
+Refer to the electrical section of the BEMM For additional customer access circuit 
+SEIC Circuit Descriptions
+Refer to the Transit Body Equipment Mounting Manual and SVE Bulletin Q-239 for more information.  
+Transit – 3.2L Diesel Engine PCM
+Circuit Intent Wire Tag
+INPUT (VPWR) PTO_NO
+OUTPUT PTOIL
+INPUT (resistor) PTO_RPM
+OUTPUT PTO_VREF
+INPUT PTO_GND
+INPUT BCP_SW
+ 
+INPUT (VPWR) PCM Pin C1232B-33 Circuit No. CE913   Wire Color: Blue
+• Applying vehicle battery voltage to this wire begins SEIC process.
+• Signals PCM to enter SEIC strategy.
+• Verifies safety enablers.
+• Elevates engine speed to target found at PTO-RPM circuit.
+• Invokes the PTOIL circuit when safety enablers are met.
+• Looks for the target engine speed requested at the PTO_RPM circuit using a resistor or POT.
+PCM Pin C1232T-1      Circuit No. CE326      Wire Color:  Blue / White
+• A low-side driver, changing from "open-circuit" to "ground" indicating that the engine is ready
+  for the PTO operation to begin and that a PTO load may be applied.
+• Intended for powering a PTO indicator lamp, or turn on a relay coil (not to exceed 1 amp)
+  LED lights require adding a resistor in series.
+PCM Pin C1232B-43      Circuit No. CE925      Wire Color:  Green / White
+• Add a resistor or a potentiometer to obtain fixed or variable engine target speed.
+• Combine in circuit with PTO_VREF (+5V).
+• Speed range available:  910 rpm to 2400 rpm.
+PCM Pin C1232B-51      Circuit No. LE434      Wire Color:  White / Brown
+• A 5-volt reference, buffered against shorts to ground or power, used to complete the resistor
+  circuit for engine speed selection.
+PCM Pin C1232B-24      Circuit No. RE327      Wire Color:  Green / Violet
+• A ground reference, buffered, used to complete the resistor circuit for engine speed selection
+  when a potentiometer is used.
+PCM Pin C1232T-43      Circuit No. CE926      Wire Color:  Violet / Brown
+• Applying vehicle battery voltage to this wire begins BCP .
+• BCP regulates engine speed between 600 to1200 rpm to maintain required charge system
+  voltage.
+PCM Pin C1232T-42   Circuit No. CE140   Wire Color:  Brown
+• A low-side driver, changing from "open-circuit" to "ground" indicating that BCP is in effect.
+• Intended for powering an indicator lamp.
+OUTPUT BCP_LAMP
+Description
+SEIC / PTO
+TRANSIT
+ACCESS & PASS-THRU WIRING
+Body Builders Layout Book
+25
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK
+ 
+Refer to the electrical section of the BEMM For additional customer access circuit 
+SEIC Circuits
+SEIC Circuits (behind and
+below reservoir)
+TRANSIT ENGINE COMPARTMENT
+● 3.2LD / 3.5L / 3.7L SEIC Circuit Location – found 
+underhood, wrapped in convulaute, taped to harness 
+behind coolant reservoir 
+TRANSIT ENGINE COMPARTMENT
+● 3.5L / 3.7L SEIC Circuit Location – found underhood, 
+taped to harness next to Engine Junction Box
+SEIC Access & Pass-Thru Wiring Locations
+Refer to the Transit Body Equipment Mounting Manual and SVE Bulletin Q-239 for more information.  
+SEIC / PTO
+TRANSIT
+WIRING SCHEMATIC
+3.5L & 3.7L GASOLINE ENGINES
+Body Builders Layout Book
+26
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+VPWR
+5VDC
+A/D
+D/I
+LSD
+PTOIL D/O
+LSDFreq
+LSD
+PTO LOADS 
+(12V)
+CTO
+PTO_GND
+Ignition Hot-
+in-Run
+SEIC Interface
+2016 Transit 3.5L and 3.7L Gasoline Engines 
+Customer Supplied Components
+10K 10K
+External Controllers
+PCM Customer Access
+(Customer Supplied 
+Components)PTO_REQUEST 1
+TRO-N
+10K
+External Controller
+VPWR
+LSDOn/
+Off
+TRO-P
+10K
+VPWR
+On/
+Off
+External Controller
+SEIC Switch
+Input for RPM Setpoint 
+See Resistor 
+Table
+LED
+Lamp
+1.0K
+SEIC Lamp 
+Indication Choice
+-or-
+SEIC 
+Relay
+PTO_Request 2
+D/I
+*
+PTO_VREF
+PTO_RPMGN / WH
+VE925
+BU / WH
+CE326
+GN
+CE914
+BU
+CE913
+BU / WH
+LE458
+GN / OR
+CET21
+GY / YE
+CET22
+BU / WH
+VMC02
+5VDC
+A/D5000 ohms 
+Potentiometer for RPM 
+Setpoint
+Resistor 1
+400 ohms
+10K 10K
+VSOUT (provided at connector C33-E, Pin 2)
+VT / OR, VMC05
+*Alternate input for RPM Setpoint
+Customer Supplied Components
+PTO_GND
+PTO_RPM
+PTO_VREF
+PCM
+YE / VT
+RE407
+GN / WH
+VE925
+BU / WH
+LE458
+PCM5VDC
+A/D
+Fixed resistor example 
+for BCP
+Resistor 2
+5.2 kohms
+PTOSIGRTN
+PTOREF
+PTO_RPMGN / WH
+VE925
+BU / WH
+LE458
+YE / VT
+RE407
+Resistor 1
+200 ohms
+SEIC / PTO
+TRANSIT
+WIRING SCHEMATIC
+3.2L DIESEL ENGINE
+Body Builders Layout Book
+27
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+VPWR
+5VDC
+A/D
+D/I
+LSDPTOIL
+D/O
+LSDFreq
+PTO LOADS 
+(12V)
+CTO
+PTO_GND
+Ignition Hot-
+in-Run SEIC Interface
+2016 Transit 3.2L Diesel Engine
+Customer Supplied Components
+10K 10K
+External Controllers
+PCM Customer Access
+(Customer Supplied 
+Components)PTOIC
+10K
+External Controller
+VPWR
+LSDOn/
+Off
+TRO-P
+10K
+VPWR
+External Controller
+SEIC Switch
+Input for RPM Setpoint 
+See Resistor 
+Table
+LED
+Lamp
+1.0K
+SEIC Lamp 
+Indication Choice
+-or-
+SEIC 
+Relay
+*
+PTO_VREF
+PTO_RPMGN / WH
+VE925
+BU / WH
+CE326
+BU
+CE913
+WH / BN
+LE434
+GY / YE
+CET22
+BU / WH
+VMC02
+LSDBCP_LAMP D/O
+BCP_SW D/I
+PCMCustomer Supplied 
+Components
+BCP_SW D/I
+BCP Switch
+VT/BN
+CE926  
+D/OLSD
+Ignition 
+Hot-in-
+Run
+BN
+CE140  BCP LED
+BCPILLED
+1 K
+BCP Interface
+LSD TRO-NOn/
+Off
+GN / OR
+CET21
+VSOUT (provided at connector C33-E, Pin 2)
+VT / OR, VMC05
+10K 10K
+5VDC
+A/D5000 ohms 
+Potentiometer for RPM 
+Setpoint
+Customer Supplied Components
+PTO_GND
+PTO_RPM
+PTO_VREF
+PCM
+GN / VT
+RE327
+GN / WH
+CE925
+WH /BN
+LE434
+*Alternate input for RPM Setpoint
+SEIC / PTO
+TRANSIT
+RPM / RESISTANCE / VOLTAGE CHARTS
+3.5L / 3.7L GASOLINE ENGINE
+Body Builders Layout Book
+28
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK 
+ 
+ 
+*RPM varies as a function of battery charge state-
+ see BCP description. 
+ 
+ 
+ 
+ 
+ 
+GASOLINE ENGINE PRODUCT DESCRIPTION
+SEIC
+● Intended to be commanded ONLY by applying 
+battery voltage to certain customer-access blunt-cut 
+wire circuits, and adding a target-speed resistor, and 
+is only available when the vehicle road speed signal 
+is zero.
+● Includes a link circuit which changes from open-
+circuit to ground when enablers are met, that may be 
+used to turn on an indicator lamp, while providing 
+battery power to an aftermarket PTO clutch or 
+solenoid.
+● Ramp rates are fixed and cannot be altered by the 
+customer.
+● Minimum engine speed: ~ 800 RPM
+● Maximum engine speed: 2400 RPM
+TYPICAL SEIC ENGAGEMENT SEQUENCE
+Initiating SEIC by applying battery voltage to the SEIC-
+PTO wire immediately commands the PCM to first look 
+for enabling conditions, such as vehicle gearshift 
+selector in PARK, engine at base idle speed of about 
+650 rpm, etc. A complete list of enablers is provided in 
+the "SEIC Enable/Disable Conditions" section of 
+SVE Bulletin Q-239. Once enablers are satisfied, then 
+the following takes place:
+1. Command is sent to increase engine speed to 900 
+rpm standby.
+2. The low-side driver circuit changes from open-circuit 
+to ground.
+3. Engine speed increases to the target RPM 
+determined by resistor (see Table).
+3.5L GTDI & 3.7L GASOLINE ENGINE
+SEIC RESISTOR CHART
+Engine Target
+Speed (RPM)
+Resistor (Ohms)
+(5%, 1/4 watt)
+Voltage
+(volts)
+804 72000 0.3
+850 48000 0.444
+900 35200 0.591
+950 27000 0.743
+1000 21900 0.885
+1100 15400 1.174
+1200 11200 1.64 
+1300 8580 1.47
+1400 6670 1.77
+1500 5240 2.067
+1600 4170 2.365
+1700 3260 2.664
+1800 2590 2.952
+1900 1917 3.221
+2000 1424 3.548
+2100 986 3.836
+2200 620 4.13
+2300 284 4.711
+2396 255 4.995
+Battery Charge Protect (BCP) Mode
+700-1200* 5200 0.1857
+SPECIAL SITUATIONS
+Alternative Calibration
+All new Ford light trucks have an "Alternative 
+Calibration" or ALT-CAL installed in the PCM that 
+conditions the powertrain during its early lifetime. It may 
+increase the PARK-idle or DRIVE-idle speed of the 
+engine, by as small as 50 rpm or by several hundred 
+rpm. It affects SEIC initiation by not letting it activate 
+because one of the SEIC enablers is having a steady 
+base idle speed, generally near 650 rpm. If ALT-CAL 
+sets the idle at 700 rpm, then SEIC activation will be 
+prevented. ALT-CAL is normally removed after 50 key-
+on starts or by driving over 5 continuous miles; it is also 
+erased by disconnecting the battery for approximately 
+one minute.
+Battery Charge Protect Mode
+Battery charge protect mode is available on 3.5L & 3.7L 
+gasoline engine models. On these powertrains, Battery 
+Charge Protect (BCP) mode is det4rmined through 
+resistor selection (see resistor table).
+NOTE:  PTO_RPM REQ must have a voltage input 
+between 0.16V and 0.20V in order for BCP to function.
+When BCP is switched ON the engine speed goes 
+immediately to 600 rpm. From this state, the PCM uses 
+battery voltage as well as ambient air temperature and 
+engine oil temperature information to raise engine 
+speed higher to maintain a design intent battery charge. 
+Maximum engine speed in BCP mode is 1200 rpm. 
+Loss of an operating condition after BCP is engaged 
+will require the BCP switch to be cycled before BCP will 
+re-engage.
+SEIC / PTO
+TRANSIT
+RPM / RESISTANCE / VOLTAGE CHARTS
+3.2L DIESEL ENGINE
+Body Builders Layout Book
+29
+SEIC / PTO
+2016
+MODEL YEAR
+www.fleet.ford.com/truckbbas
+NOTE: FOR PASS THRU CIRCUITS – REFER TO THE ELECTRICAL SECTION OF THIS BOOK 
+GASOLINE ENGINE PRODUCT DESCRIPTION
+SEIC
+● Intended to be commanded ONLY by applying 
+battery voltage to certain customer-access blunt-cut 
+wire circuits, and adding a target-speed resistor, and 
+is only available when the vehicle road speed signal 
+is zero.
+● Includes a link circuit which changes from open-
+circuit to ground when enablers are met, that may be 
+used to turn on an indicator lamp, while providing 
+battery power to an aftermarket PTO clutch or 
+solenoid.
+● Ramp rates are fixed and cannot be altered by the 
+customer.
+● Minimum engine speed: ~ 800 RPM
+● Maximum engine speed: 2400 RPM
+TYPICAL SEIC ENGAGEMENT SEQUENCE
+Initiating SEIC by applying battery voltage to the SEIC-
+PTO wire immediately commands the PCM to first look 
+for enabling conditions, such as vehicle gearshift 
+selector in PARK, engine at base idle speed of about 
+650 rpm, etc. A complete list of enablers is provided in 
+the "SEIC Enable/Disable Conditions" section of 
+SVE Bulletin Q-239. Once enablers are satisfied, then 
+the following takes place:
+1. Command is sent to increase engine speed to 900 
+rpm standby.
+2. The low-side driver circuit changes from open-circuit 
+to ground.
+3. Engine speed increases to the target RPM 
+determined by resistor (see Table).
+SPECIAL SITUATIONS
+Alternative Calibration
+All new Ford light trucks have an "Alternative 
+Calibration" or ALT-CAL installed in the PCM that 
+conditions the powertrain during its early lifetime. It may 
+increase the PARK-idle or DRIVE-idle speed of the 
+engine, by as small as 50 rpm or by several hundred 
+rpm. It affects SEIC initiation by not letting it activate 
+because one of the SEIC enablers is having a steady 
+base idle speed, generally near 650 rpm. If ALT-CAL 
+sets the idle at 700 rpm, then SEIC activation will be 
+prevented. ALT-CAL is normally removed after 50 key-
+on starts or by driving over 5 continuous miles; it is also 
+erased by disconnecting the battery for approximately 
+one minute.
+Battery Charge Protect Mode
+Battery charge protect mode is available on 3.2L diesel 
+engine models. On diesel powertrains, Battery Charge 
+Protect (BCP) mode is activated through dedicated 
+PCM inputs.
+When BCP is switched ON the engine speed goes 
+immediately to 600 rpm. From this state, the PCM uses 
+battery voltage as well as ambient air temperature and 
+engine oil temperature information to raise engine 
+speed higher to maintain a design intent battery charge. 
+Maximum engine speed in BCP mode is 1200 rpm. 
+Loss of an operating condition after BCP is engaged 
+will require the BCP switch to be cycled before BCP will 
+re-engage.
+3.2L DIESEL ENGINE SEIC RESISTOR CHART
+Engine Target
+Speed (RPM)
+Resistor (Ohms)
+(5%, 1/4 watt)
+Voltage
+(volts)
+900 53800 0.4 
+950 40000 0.52 
+1000 31450 0.64 
+1100 21410 0.9 
+1200 15710 1.15 
+1300 12050 1.4 
+1400 9550 1.64 
+1500 7640 1.9 
+1600 6200 2.15 
+1700 5060 2.4 
+1800 4150 2.65 
+1900 3400 2.89 
+2000 2740 3.15 
+2100 2200 3.4 
+2200 1724 3.65 
+2300 1319 3.9 
+2400 959 4.14 
+2500 628 4.4 

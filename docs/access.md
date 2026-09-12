@@ -44,3 +44,28 @@ Stored on HA host at `/config/.gps_filter_token`. Retrieve via:
 ```bash
 TOKEN=$(ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 "cat /config/.gps_filter_token")
 ```
+
+## ⚠️ Reachability gotcha — the van's HA is BEHIND Starlink
+
+`100.80.15.86` is a Tailscale address that routes over the van's Starlink link.
+**When Starlink is down, HA is completely unreachable** — there is no out-of-band
+path (no cellular failover to the HA box). This bites hardest exactly when you
+most want to look at HA: during a Starlink outage.
+
+The failure mode is a *hang*, not an error. A dropped Starlink link blackholes
+packets rather than refusing them, so TCP connects sit until they time out. A
+script that queries N entities with a 60 s timeout each will appear frozen for
+N×60 s. Always preflight before any HA query:
+
+```bash
+# 3-second reachability probe — fails fast instead of hanging for minutes.
+timeout 12 python -c "
+import socket
+s=socket.socket(); s.settimeout(3)
+try: s.connect(('100.80.15.86',8123)); print('HA reachable')
+except Exception as e: print('HA UNREACHABLE:',e)
+finally: s.close()"
+```
+
+Set an explicit short `timeout=` on every `urllib`/`requests` call and an
+`-o ConnectTimeout=10` on every `ssh` — the defaults are far too long.
