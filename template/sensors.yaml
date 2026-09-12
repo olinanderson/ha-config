@@ -746,3 +746,45 @@
             {% if is_state(eid, 'on') %}{% set ns.items = ns.items + [label] %}{% endif %}
           {% endfor %}
           {{ ns.items | join('\n• ') }}
+
+# ─── Starlink status (single human-readable state for the dashboard) ───
+# Collapses the dish's several signals into one word so the React cards/badges
+# don't each re-derive the precedence. Order matters — most specific first:
+#   Powered Off → the PSU switch is off (you cut it, or a recovery cycle is
+#                 mid-cut); nothing else can be known, so it wins.
+#   Recovering  → a power-cycle sequence is running.
+#   Offline     → entities unreachable = the PoE converter lockup.
+#   Sleeping    → scheduled sleep (entities stay available, so this is genuine).
+#   Obstructed / No Signal → dish is talking, just not serving.
+- sensor:
+    - name: "Starlink Status"
+      unique_id: starlink_status
+      icon: >
+        {% set s = states('sensor.starlink_status') %}
+        {% if s == 'Online' %} mdi:satellite-uplink
+        {% elif s in ['Offline', 'Powered Off'] %} mdi:satellite-variant
+        {% elif s == 'Recovering' %} mdi:restart-alert
+        {% elif s == 'Sleeping' %} mdi:sleep
+        {% else %} mdi:signal-off
+        {% endif %}
+      state: >
+        {% set conn = states('binary_sensor.starlink_connectivity') %}
+        {% if is_state('switch.a32_pro_switch26_starlink_power_supply', 'off') %} Powered Off
+        {% elif is_state('input_boolean.starlink_recovery_in_progress', 'on') %} Recovering
+        {% elif conn in ['unavailable', 'unknown'] %} Offline
+        {% elif is_state('binary_sensor.starlink_sleep', 'on') %} Sleeping
+        {% elif is_state('binary_sensor.starlink_obstructed', 'on') %} Obstructed
+        {% elif conn == 'off' %} No Signal
+        {% else %} Online
+        {% endif %}
+      attributes:
+        # Throughput reads as 0 (not "—") while offline; the state word is what
+        # tells you it's offline, these are just the detail line.
+        downlink_mbps: "{{ states('sensor.starlink_downlink_throughput_mbps') | float(0) | round(1) }}"
+        uplink_mbps: "{{ states('sensor.starlink_uplink_throughput_mbps') | float(0) | round(1) }}"
+        ping_ms: "{{ states('sensor.starlink_ping') | float(0) | round(0) }}"
+        obstructed: "{{ is_state('binary_sensor.starlink_obstructed', 'on') }}"
+        last_boot: "{{ states('sensor.starlink_last_boot_time') }}"
+        recovery_attempts: "{{ states('input_number.starlink_recovery_attempts') | int(0) }}"
+        recovery_failed: "{{ is_state('input_boolean.starlink_recovery_failed', 'on') }}"
+        auto_recovery: "{{ is_state('input_boolean.starlink_auto_recovery', 'on') }}"

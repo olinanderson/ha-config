@@ -126,3 +126,24 @@
       device_class: problem
       icon: mdi:steering
       state: "{{ states('sensor.rtd_offenders') | int(0) > 0 }}"
+
+# ─── Starlink link down (PoE DC-DC converter lockup) ───
+# The Starlink integration talks gRPC to the dish through the PoE injector. When
+# the injector's DC-DC converter latches up, EVERY starlink entity goes
+# `unavailable` — that total unreachability is the signature we act on, and it is
+# distinct from the two states that merely mean "no internet":
+#   • connectivity 'off'          → dish reachable, not serving (booting/no sats)
+#   • binary_sensor.starlink_sleep → scheduled sleep; entities stay AVAILABLE
+# Verified against 45 days of history: sleep never produces `unavailable`, so
+# this can't false-fire on the nightly 01:00–08:00 sleep window.
+#
+# Deliberately does NOT check the power-supply switch: when YOU cut the PSU the
+# link genuinely is down. The auto-recovery automation is what refuses to act on
+# a manual cut, so the dashboard still tells the truth in that case.
+- binary_sensor:
+    - name: "Starlink Link Down"
+      unique_id: starlink_link_down
+      device_class: problem
+      icon: mdi:satellite-uplink
+      state: >
+        {{ states('binary_sensor.starlink_connectivity') in ['unavailable', 'unknown'] }}

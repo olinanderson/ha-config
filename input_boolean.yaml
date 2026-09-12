@@ -66,3 +66,63 @@ rtd_guard_override:
   name: "Ready-to-Drive Guard Override"
   icon: mdi:steering
   initial: off
+
+# ─── Starlink PoE auto-recovery ───
+# The PoE DC-DC converter feeding the dish occasionally latches up while driving.
+# The dish goes fully unreachable (every Starlink entity → `unavailable`) and the
+# ONLY fix is to fully de-energise the injector long enough for its capacitors to
+# drain — a quick off/on is NOT enough (2026-08-07: a 25 s cut failed, a 51 s cut
+# worked). script.starlink_recover automates that cycle.
+#
+# None of these declare `initial:` on purpose, so they RESTORE across restarts —
+# `initial:` re-applies every HA start and would silently re-arm auto-recovery
+# right after you deliberately disabled it (same trap as fuel_ve_correction).
+# Master enable — turn OFF to stop HA touching the Starlink power supply at all.
+starlink_auto_recovery:
+  name: "Starlink Auto-Recovery"
+  icon: mdi:satellite-uplink
+
+# ON for the duration of a power-cycle sequence. Suppresses the trigger from
+# re-firing on the outage the script itself is causing, and drives the
+# "Recovering…" state in sensor.starlink_status / the dashboard banner.
+starlink_recovery_in_progress:
+  name: "Starlink Recovery In Progress"
+  icon: mdi:progress-wrench
+
+# Latched after BOTH power cycles failed to bring the link back. This is what
+# raises the big red dashboard banner — it means the fix needs hands (unplug the
+# ethernet at the dish end). Cleared automatically once the link returns.
+starlink_recovery_failed:
+  name: "Starlink Recovery Failed"
+  icon: mdi:satellite-variant
+
+# ─── Shop Mode ───
+# Hands-off lockout for when the van is at a mechanic/body shop. When ON:
+# every automation except a small keep-alive allowlist is disabled, and every
+# actuator HA can reach is forced off (LPG valve closed, hydronic heater off,
+# water system off, bed lift dead, air compressor off, roof lid closed,
+# inverter off + manually locked).
+#
+# Deliberately NO `initial:` — the lockout must RESTORE across restarts. With
+# `initial:` a shop cutting power to the Pi would silently re-arm the whole van
+# on the next boot (same trap documented on starlink_auto_recovery /
+# fuel_ve_correction).
+shop_mode:
+  name: "Shop Mode"
+  icon: mdi:car-wrench
+
+# --- Shoe dryer ---
+# ON while a dry is in progress. This is the restart-durable flag the
+# shoe_dryer_auto_off startup leg keys on: a timer that expires while HA is
+# DOWN fires timer.finished during timer setup — before automation triggers
+# are armed — so the event alone can strand the blower at 100%. No `initial:`.
+shoe_dryer_active:
+  name: "Shoe Dryer Active"
+  icon: mdi:shoe-sneaker
+
+# Whether hydronic heating was running when the dry started. scene.create
+# snapshots live in memory only; input_booleans restore across restarts.
+# No `initial:`.
+shoe_dryer_resume_heat:
+  name: "Shoe Dryer Resume Heat"
+  icon: mdi:radiator

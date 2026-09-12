@@ -1492,3 +1492,527 @@
       data:
         value: "{{ state_attr('sensor.nws_highest_alert','alert_id') }}"
 
+
+# ────────────────────────────────────────────────────────────────
+# Starlink • auto-recover from the PoE DC-DC converter lockup
+# ────────────────────────────────────────────────────────────────
+# While driving, the DC-DC converter feeding the Starlink PoE injector sometimes
+# latches up: the dish goes completely unreachable and stays that way until the
+# injector is fully de-energised long enough to drain (or the ethernet is pulled
+# at the dish end). See script.starlink_recover for the timing rationale.
+#
+# The 15-minute debounce is set from 45 days of history, not taste. Short
+# `unavailable` blips are extremely common and self-heal — 789 spans under a
+# minute, ~36 more under 15 minutes. Everything that actually needed hands ran
+# far longer (2026-08-07: 91 min; 2026-08-06: 242 min; 2026-07-18: 230 min), so
+# 15 min cleanly separates "real lockup" from "integration hiccup" while still
+# cutting today's outage from 91 minutes down to about 17.
+#
+# A template trigger (not a state trigger) so it also re-arms correctly if HA
+# restarts or reloads while the dish is already dark — a state trigger would
+# need a transition that has already happened and would never fire.
+- id: starlink_auto_recover
+  alias: "Starlink • auto power-cycle when the link drops"
+  mode: single
+  trigger:
+    - trigger: template
+      value_template: >
+        {{ states('binary_sensor.starlink_connectivity') in ['unavailable', 'unknown'] }}
+      for: "00:15:00"
+  condition:
+    - condition: state
+      entity_id: input_boolean.starlink_auto_recovery
+      state: "on"
+    # Never fight a deliberate manual cut — if YOU switched the supply off, the
+    # dish being unreachable is the intended outcome, not a fault.
+    - condition: state
+      entity_id: switch.a32_pro_switch26_starlink_power_supply
+      state: "on"
+    - condition: state
+      entity_id: input_boolean.starlink_recovery_in_progress
+      state: "off"
+    # Already tried twice and gave up — don't cycle the supply forever.
+    # Cleared by starlink_recovery_reset once the link genuinely returns.
+    - condition: state
+      entity_id: input_boolean.starlink_recovery_failed
+      state: "off"
+  action:
+    - action: script.turn_on
+      target:
+        entity_id: script.starlink_recover
+
+# Link is genuinely back → clear the latch so the banner disappears and the next
+# lockup gets a fresh pair of attempts. The 5-minute hold stops a dish that is
+# flapping in and out from re-arming the retries every few seconds.
+- id: starlink_recovery_reset
+  alias: "Starlink • clear recovery latch when the link returns"
+  mode: single
+  trigger:
+    - trigger: template
+      value_template: >
+        {{ states('binary_sensor.starlink_connectivity') not in ['unavailable', 'unknown'] }}
+      for: "00:05:00"
+  condition:
+    - condition: state
+      entity_id: input_boolean.starlink_recovery_in_progress
+      state: "off"
+    # Only act when there is actually something to clear.
+    - condition: template
+      value_template: >
+        {{ is_state('input_boolean.starlink_recovery_failed', 'on')
+           or states('input_number.starlink_recovery_attempts') | int(0) > 0 }}
+  action:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.starlink_recovery_failed
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.starlink_recovery_attempts
+      data:
+        value: 0
+    - action: persistent_notification.dismiss
+      data:
+        notification_id: starlink_recovery
+
+# Fail-safe: never leave the dish de-energised because HA restarted mid-cycle.
+# script.starlink_recover holds the supply OFF for 90 s. A restart (or a crash)
+# inside that window kills the script without its turn_on step ever running, and
+# the ESPHome switch's RESTORE_DEFAULT_ON only helps if the ESP itself reboots —
+# not if HA does. in_progress still being ON at startup is exactly that
+# signature, so re-energise and clear the flag.
+- id: starlink_recovery_resume_after_restart
+  alias: "Starlink • re-energise supply if a restart interrupted recovery"
+  mode: single
+  trigger:
+    - trigger: homeassistant
+      event: start
+  condition:
+    - condition: state
+      entity_id: input_boolean.starlink_recovery_in_progress
+      state: "on"
+  action:
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_switch26_starlink_power_supply
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.starlink_recovery_in_progress
+    - action: persistent_notification.create
+      data:
+        notification_id: starlink_recovery
+        title: "🛰 Starlink recovery interrupted"
+        message: >
+          Home Assistant restarted while the Starlink power supply was cut. The
+          supply has been switched back on. If the dish is still offline, the
+          recovery will start again on its own in about 15 minutes.
+
+# ════════════════════════════════════════════════════════════════
+#  SHOP MODE — hands-off lockout while the van is at a shop
+# ════════════════════════════════════════════════════════════════
+# Arm by toggling input_boolean.shop_mode (dashboard, voice, or
+# script.shop_mode_enter). What the mode actually does lives in
+# script.shop_mode_apply — these automations only drive it.
+#
+# What this CANNOT do, and you should plan around:
+#   • The physical rocker switches are wired to the a32_pro directly. HA
+#     turning a light "off" does not stop someone flipping the rocker.
+#   • It cannot stop the shop pulling the battery disconnect — which is the
+#     standard advice for shop visits anyway, and is strictly safer than
+#     anything HA can do in software.
+# ════════════════════════════════════════════════════════════════
+
+- id: shop_mode_on_actions
+  alias: "Shop Mode • arm lockout"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: input_boolean.shop_mode
+      from: "off"
+      to: "on"
+  action:
+    # Record which automations were ALREADY disabled before arming, so exit can
+    # put things back exactly as they were instead of blanket-enabling. Written
+    # BEFORE script.shop_mode_apply disables everything, or the list would just
+    # be "all of them". 'OVERFLOW' means it did not fit the 255-char input_text
+    # cap, and exit falls back to enabling everything.
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.shop_mode_prev_disabled
+      data:
+        value: >-
+          {% set off = states.automation | selectattr('state', 'eq', 'off')
+               | map(attribute='entity_id') | map('replace', 'automation.', '')
+               | list %}
+          {% set j = off | join(',') %}
+          {{ 'none' if off | count == 0 else (j if j | length <= 255 else 'OVERFLOW') }}
+
+    # Snapshot ONLY the comfort items we are willing to bring back automatically
+    # on exit. Gas, water, heat, bed lift and the compressor are deliberately
+    # excluded — those get turned back on by hand, deliberately, not by a toggle
+    # tapped in a shop parking lot.
+    - action: scene.create
+      data:
+        scene_id: pre_shop_mode_state
+        snapshot_entities:
+          - light.led_controller_cct_1
+          - light.led_controller_cct_2
+          - light.led_controller_sc_1
+          - light.led_controller_sc_2
+          - light.main_lighting_switch
+          - light.under_cabinet_lighting_switch
+          - switch.a32_pro_do8_switch06_top_monitor
+          - switch.a32_pro_do8_switch07_bottom_monitor
+
+    - action: script.shop_mode_apply
+
+    - action: persistent_notification.create
+      data:
+        notification_id: shop_mode
+        title: "🔧 Shop Mode ARMED"
+        message: >-
+          Automations disabled, actuators forced off. LPG valve closed, hydronic
+          heater off, water system off, bed lift dead, air compressor off, roof
+          lid closed, inverter off + locked.
+
+
+          Still live: GPS tracking, BMS/battery monitoring, Starlink (remote
+          access). Trip + VE logging is suppressed, so shop test drives will NOT
+          pollute your fuel data.
+
+          {% if states('input_text.shop_mode_prev_disabled') == 'OVERFLOW' %}
+
+          WARNING: too many automations were already disabled to record them
+          all — disarming will enable ALL automations. Re-check any you had off.
+          {% endif %}
+
+
+          The physical rockers still work, and the battery disconnect is still
+          the real lockout.
+
+- id: shop_mode_off_restore
+  alias: "Shop Mode • disarm and restore"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: input_boolean.shop_mode
+      from: "on"
+      to: "off"
+  action:
+    - variables:
+        prev: "{{ states('input_text.shop_mode_prev_disabled') }}"
+
+    # Release the inverter so script.inverter_ensure_on works normally again.
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.inverter_manual_lock
+
+    # Re-energise the hydronic heater's power supply. Switch32 is the heater's
+    # STANDBY supply, not the heater itself: it is normally always on and
+    # script.shop_mode_apply is the only thing that ever cuts it. While it is
+    # off the a32_pro refuses to turn Switch24 on at all — it logs "Cannot turn
+    # on hydronic heater: Power Supply is OFF!" and does nothing — and nothing
+    # on the dashboard exposed Switch32, so after the 2026-08-22 shop visit the
+    # heater looked dead for two weeks (2026-09-06: thermostat calling for
+    # heat at 10.9 °C, heater "Idle.", dashboard switch snapping back off).
+    # The heater enable (Switch24) and its thermostat stay OFF as before —
+    # restoring the supply is what makes turning them back on by hand possible.
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_switch32_hydronic_heater_power_supply
+
+    # Bring back lights/monitors only if the snapshot survived. scene.create
+    # scenes are in-memory, so after a reboot at the shop this is simply gone —
+    # that is expected, not an error.
+    #
+    # ORDER MATTERS: this runs BEFORE automations are re-armed. Re-arming first
+    # would restart rolling_last_active_snapshot_1hz, which would capture the
+    # still-all-off state into scene.last_active_state within 1 s and blow away
+    # the Power Saving Mode restore point. Restoring the lights first means the
+    # rolling snapshot only ever sees the good state.
+    - if:
+        - condition: template
+          value_template: "{{ states.scene.pre_shop_mode_state is not none }}"
+      then:
+        - action: scene.turn_on
+          target:
+            entity_id: scene.pre_shop_mode_state
+
+    # Re-arm everything, then re-disable exactly what was off beforehand.
+    # Same ghost filter as script.shop_mode_apply — only real, loaded automations.
+    - action: automation.turn_on
+      target:
+        entity_id: >-
+          {{ states.automation
+             | selectattr('state', 'in', ['on', 'off'])
+             | map(attribute='entity_id') | list }}
+
+    - if:
+        - condition: template
+          value_template: >-
+            {{ prev not in ['none', 'OVERFLOW', 'unknown', 'unavailable', ''] }}
+      then:
+        - action: automation.turn_off
+          data:
+            stop_actions: true
+          target:
+            # Filter against automations that actually exist, so a stale or
+            # truncated entry can never abort the whole call.
+            entity_id: >-
+              {% set live = states.automation | map(attribute='entity_id') | list %}
+              {{ prev.split(',') | map('trim')
+                 | map('regex_replace', '^', 'automation.')
+                 | select('in', live) | list }}
+
+    - action: persistent_notification.dismiss
+      data:
+        notification_id: shop_mode
+    - action: persistent_notification.create
+      data:
+        notification_id: shop_mode_disarmed
+        title: "✅ Shop Mode disarmed"
+        message: >-
+          Automations re-armed. Lights and monitors restored.
+
+
+          Still OFF on purpose — turn these back on yourself when you are ready:
+          LPG valve, hydronic heater + its thermostat, water system, bed lift
+          power, air compressor, shore charger. The heater's power supply is
+          back on, so the dashboard heater switch works again.
+
+- id: shop_mode_guard
+  alias: "Shop Mode • re-shut anything that comes back on"
+  # queued so a burst of entities coming back at once is handled one at a time
+  # rather than dropped; silent because that burst is normal, not an error.
+  mode: queued
+  max: 30
+  max_exceeded: silent
+  trigger:
+    - trigger: state
+      id: turned_on
+      to: "on"
+      # Must stay in sync with script.shop_mode_apply. Every entity that script
+      # forces off is watched here, so anything that comes back on — an a32_pro
+      # relay reasserting itself, a stray service call — gets re-shut.
+      entity_id:
+        - switch.a32_pro_switch16_lpg_valve
+        - switch.a32_pro_switch24_hydronic_heater
+        - switch.a32_pro_switch32_hydronic_heater_power_supply
+        - switch.a32_pro_switch27_bed_power_supply
+        - switch.a32_pro_switch07_bed_up
+        - switch.a32_pro_switch08_bed_down
+        - switch.a32_pro_switch28_compressor
+        - switch.a32_pro_switch06_grey_water_tank_valve
+        - switch.ag_pro_ceiling_fan_mode
+        # The three water_system_state_* template switches are deliberately not
+        # watched: they are derived from last_water_state and cannot be turned
+        # off, so guarding them would fire a no-op on every mode change.
+        - switch.a32_pro_water_system_master_switch
+        - switch.a32_pro_switch29_shower_system_water_pump
+        - switch.a32_pro_switch30_main_system_water_pump
+        - switch.a32_pro_switch10_water_system_overall
+        - switch.a32_pro_switch11_water_system_state_main
+        - switch.a32_pro_switch12_water_system_state_recirculating_shower
+        - switch.a32_pro_switch13_water_system_state_recirculating_shower_flush
+        - switch.a32_pro_switch01_water_system_valve_1
+        - switch.a32_pro_switch02_water_system_valve_2
+        - switch.a32_pro_switch03_water_system_valve_3
+        - switch.a32_pro_switch14_uv_filter
+        - switch.a32_pro_switch17_silicone_heating_pads_shower_water_tank_x2
+        - switch.a32_pro_switch18_silicone_heating_pads_fresh_water_tank_x4
+        - switch.a32_pro_switch19_silicone_heating_pads_grey_water_tank_x4
+        - switch.a32_pro_switch20_heating_pads_auto_thermostat_grey_water_tank_x2
+        - switch.a32_pro_fresh_water_tank_heater_enable
+        - switch.a32_pro_grey_water_tank_heater_enable
+        - switch.a32_pro_shower_water_tank_heater_enable
+        - switch.a32_pro_do8_switch04_shore_power_charger
+        - switch.a32_pro_do8_switch06_top_monitor
+        - switch.a32_pro_do8_switch07_bottom_monitor
+        - switch.a32_pro_do8_switch08_air_fryer_ventilation_fans
+        - switch.a32_pro_air_fryer_ventilation_enable
+        - switch.a32_pro_switch21_left_outdoor_lights
+        - switch.a32_pro_switch22_right_outdoor_lights
+        - switch.a32_pro_switch23_rear_outdoor_lights
+        - switch.a32_pro_switch31_lightbar
+        - switch.a32_pro_switch09_shower_button_led
+        - fan.ag_pro_roof_fan
+        - light.led_controller_cct_1
+        - light.led_controller_cct_2
+        - light.led_controller_sc_1
+        - light.led_controller_sc_2
+        - light.main_lighting_switch
+        - light.under_cabinet_lighting_switch
+        - light.a32_pro_a32_pro_dac_0
+        - light.a32_pro_a32_pro_dac_1
+        - light.0xa4c138fd668411cd
+    - trigger: state
+      id: lid_opened
+      entity_id: cover.ag_pro_roof_fan_lid
+      to: "open"
+    # The hydronic PID climate runs ON the a32_pro and re-lights the heater by
+    # itself whenever it is in `heat` and the supply is live (its on_state
+    # handler re-evaluates on every temperature sample). script.shop_mode_apply
+    # turns it off; this catches anything turning it back on mid-visit. Its
+    # state is heat/off rather than on/off, so it needs its own trigger.
+    - trigger: state
+      id: climate_heat
+      entity_id: climate.a32_pro_van_hydronic_heating_pid
+      to: heat
+  condition:
+    - condition: state
+      entity_id: input_boolean.shop_mode
+      state: "on"
+  action:
+    - choose:
+        - conditions:
+            - condition: trigger
+              id: turned_on
+          sequence:
+            # homeassistant.turn_off is domain-agnostic, so one call covers
+            # switch / light / fan without a per-domain branch.
+            - action: homeassistant.turn_off
+              target:
+                entity_id: "{{ trigger.entity_id }}"
+        - conditions:
+            - condition: trigger
+              id: lid_opened
+          sequence:
+            - action: cover.close_cover
+              target:
+                entity_id: cover.ag_pro_roof_fan_lid
+        - conditions:
+            - condition: trigger
+              id: climate_heat
+          sequence:
+            - action: climate.set_hvac_mode
+              target:
+                entity_id: climate.a32_pro_van_hydronic_heating_pid
+              data:
+                hvac_mode: "off"
+
+- id: shop_mode_reassert_on_start
+  alias: "Shop Mode • re-assert after HA restart"
+  # initial_state: true is the whole point of this automation — without it a
+  # restart could restore it in the OFF state, and the van would silently come
+  # back to life the first time the shop cycles power to the Pi.
+  initial_state: true
+  mode: single
+  trigger:
+    - trigger: homeassistant
+      event: start
+  condition:
+    - condition: state
+      entity_id: input_boolean.shop_mode
+      state: "on"
+  action:
+    # Let MQTT / BLE / the a32_pro entities actually come online first —
+    # applying against `unavailable` entities would be a silent no-op.
+    - delay: "00:01:00"
+    - action: script.shop_mode_apply
+    - action: persistent_notification.create
+      data:
+        notification_id: shop_mode
+        title: "🔧 Shop Mode re-armed after restart"
+        message: >-
+          HA restarted while Shop Mode was active. The lockout has been
+          re-applied automatically.
+
+# ───────────────────────────────────────────────
+#  Shoe dryer – blower off when the timer ends
+# ───────────────────────────────────────────────
+# Fires on finished AND cancelled so the Stop button takes the same path as
+# natural expiry. The ha_start leg is the restart reconciler: a timer that
+# EXPIRES while HA is down fires timer.finished during timer setup — before
+# automation triggers are armed — so that event is always lost, and with the
+# ESP never having rebooted the blower would run at 100% forever. The durable
+# input_boolean.shoe_dryer_active flag survives the restart and lets this leg
+# finish the job. (restore: true on the timer covers the other case: a restart
+# shorter than the time remaining resumes the countdown; the condition below
+# sees the timer still active and leaves it alone.)
+- id: shoe_dryer_auto_off
+  alias: "Shoe Dryer • blower off when timer ends"
+  mode: single
+  trigger:
+    - trigger: event
+      id: finished
+      event_type: timer.finished
+      event_data:
+        entity_id: timer.shoe_dryer
+    - trigger: event
+      id: cancelled
+      event_type: timer.cancelled
+      event_data:
+        entity_id: timer.shoe_dryer
+    - trigger: homeassistant
+      id: ha_start
+      event: start
+  condition:
+    # Only ever act on a dry that is actually in progress...
+    - condition: state
+      entity_id: input_boolean.shoe_dryer_active
+      state: "on"
+    # ...and on the startup leg, only if the timer did NOT survive the
+    # restart (still active = the dry legitimately continues, hands off).
+    - condition: template
+      value_template: "{{ trigger.id != 'ha_start' or is_state('timer.shoe_dryer', 'idle') }}"
+  action:
+    # After a restart the a32_pro needs time to reconnect — commanding an
+    # `unavailable` entity is a silent no-op (same reason
+    # shop_mode_reassert_on_start waits a minute before applying).
+    - if:
+        - condition: trigger
+          id: ha_start
+      then:
+        - wait_template: >-
+            {{ has_value('light.a32_pro_a32_pro_dac_0')
+               and has_value('climate.a32_pro_van_hydronic_heating_pid') }}
+          timeout: "00:05:00"
+          continue_on_timeout: true
+    - action: light.turn_off
+      target:
+        entity_id: light.a32_pro_a32_pro_dac_0
+      continue_on_error: true
+    # Restore heating only if it was on before the dry AND nobody has taken
+    # the climate over since we paused it — if the user re-enabled heat
+    # mid-dry, their newer intent wins over our stale snapshot.
+    - if:
+        - condition: state
+          entity_id: climate.a32_pro_van_hydronic_heating_pid
+          state: "off"
+        - condition: state
+          entity_id: input_boolean.shoe_dryer_resume_heat
+          state: "on"
+      then:
+        - action: climate.set_temperature
+          target:
+            entity_id: climate.a32_pro_van_hydronic_heating_pid
+          data:
+            temperature: >-
+              {{ states('input_number.shoe_dryer_prev_setpoint') | float(21) }}
+            hvac_mode: heat
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.shoe_dryer_active
+
+# If something re-enables the hydronic climate mid-dry (app, voice, wall
+# tablet), its PID re-takes the blower within ~10 s and the dry is dead
+# anyway — cancel the timer so the dashboard card stops claiming otherwise.
+# The cancel routes through shoe_dryer_auto_off, whose climate-off guard then
+# correctly SKIPS the snapshot restore (the user's newer intent wins). This
+# can't self-trigger from the start script: that only ever moves the climate
+# heat→off, never off→heat.
+- id: shoe_dryer_cancel_on_climate_takeover
+  alias: "Shoe Dryer • cancel when heating retakes the blower"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: climate.a32_pro_van_hydronic_heating_pid
+      from: "off"
+      to: heat
+  condition:
+    - condition: state
+      entity_id: timer.shoe_dryer
+      state: active
+  action:
+    - action: timer.cancel
+      target:
+        entity_id: timer.shoe_dryer

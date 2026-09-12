@@ -153,3 +153,37 @@ highway_speed_floor:
   step: 1
   initial: 78
   unit_of_measurement: "km/h"
+
+# --- Starlink PoE auto-recovery ---
+# Which power cycle of the current recovery run we're on (0 = idle, 1 = first
+# cut, 2 = second/last). Drives "attempt N of 2" in the dashboard. No `initial:`
+# so a mid-recovery HA restart doesn't silently reset the count.
+starlink_recovery_attempts:
+  name: "Starlink Recovery Attempts"
+  icon: mdi:restart-alert
+  min: 0
+  max: 10
+  step: 1
+
+# --- Shoe dryer ---
+# How long script.shoe_dryer_start runs the coolant blower before the timer
+# shuts it off. No `initial:` — the last chosen duration should survive
+# restarts.
+shoe_dryer_minutes:
+  name: "Shoe Dryer Run Time"
+  icon: mdi:shoe-sneaker
+  min: 5
+  max: 240
+  step: 5
+  unit_of_measurement: "min"
+
+# Climate target captured when a dry pauses heating; put back by
+# shoe_dryer_auto_off. No `initial:` — must survive restarts.
+shoe_dryer_prev_setpoint:
+  name: "Shoe Dryer Saved Heat Setpoint"
+  icon: mdi:thermometer
+  min: 5
+  max: 35
+  step: 0.5
+  unit_of_measurement: "°C"
+  mode: box

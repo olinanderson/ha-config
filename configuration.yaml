@@ -57,6 +57,21 @@ input_number: !include input_number.yaml
 input_text: !include input_text.yaml
 input_select: !include input_select.yaml
 
+# --- Timers ---
+# Shoe dryer: script.shoe_dryer_start runs the coolant blower at 100% and
+# starts this timer; the shoe_dryer_auto_off automation shuts the blower off
+# when it finishes OR is cancelled. restore: true only covers a restart
+# SHORTER than the time remaining (the countdown resumes). A timer that
+# expired while HA was down fires timer.finished during timer setup — before
+# automation triggers are armed — so that event is always lost; the ha_start
+# leg of shoe_dryer_auto_off (keyed on input_boolean.shoe_dryer_active)
+# handles that case instead.
+timer:
+  shoe_dryer:
+    name: "Shoe Dryer"
+    icon: mdi:shoe-sneaker
+    restore: true
+
 # --- Template sensors & binary sensors ---
 template: !include_dir_merge_list template/
 
@@ -79,6 +94,96 @@ rest:
           - alert_id
           - expires
           - headline
+
+  # How fast driving refills a LOW house battery, averaged over the last 20
+  # drives from the vanlife proxy's fuel-trips endpoint (the same per-trip
+  # energy-based battery gain the map cards show: stored-Wh delta ÷ full-pack
+  # Wh). Time-weighted — Σ gain ÷ Σ trip-hours — so a 10-minute hop can't
+  # skew the number the way a per-trip mean would.
+  #
+  # "LOW" is the whole point, and it is enforced by TAPER_MAX below. Measured
+  # 2026-08-21 over 18 trips: per-trip rates ran 3 → 31 %/h and the unfiltered
+  # time-weighted average was 13.85 %/h, well under the ~16 %/h median. The
+  # cause is not near-full trips as such — it is that time-weighting gives the
+  # LONGEST trips the most weight, and long trips fill the pack partway through
+  # and then coast. The worst case started at 88.1 %, ran 1.59 h (3-6× any
+  # other trip) and gained 4.7 % → 3 %/h, dominating the denominator. Above
+  # ~85 % the LiFePO4 is in absorption taper and the charge rate genuinely
+  # collapses, so those hours say nothing about refilling a low pack.
+  #
+  # Two filters, both required:
+  #   • battery_start_pct < 85 — only trips that began with real headroom.
+  #   • battery_end_pct <= 100 — drops BMS resync artifacts. The BMS
+  #     re-baselines its coulomb count when it detects a full pack, which
+  #     appears as a step in stored_energy that is bookkeeping, not charge.
+  #     Two of 18 trips reported 106 % and 109 % end-SOC that way.
+  #
+  # Still true and deliberate:
+  #   • The gain is the NET pack change over the trip window (solar input
+  #     counts toward it, house loads against it), not isolated alternator/
+  #     DC-DC output — so the hours must be the same window: wall-clock
+  #     end_ts − start_ts, NOT moving_ms, whose excluded 3-20 min stops the
+  #     gain still covers.
+  #   • Sub-zero trips are charge-blocked and gain ~0; they are excluded as a
+  #     side effect of the headroom filter only when they also started high,
+  #     so battery_start_c is checked explicitly too.
+  # Only trips still inside recorder retention carry battery data; the rest
+  # are skipped. battery_start_pct/battery_end_pct come from osrm_proxy.py —
+  # if the proxy predates them the filter matches nothing and the sensor goes
+  # unavailable rather than silently reverting to the unfiltered average.
+  - resource: http://127.0.0.1:8765/vanlife/fuel-trips?limit=20
+    scan_interval: 900
+    sensor:
+      - name: "Average Drive Charge Rate"
+        unique_id: average_drive_charge_rate
+        unit_of_measurement: "%/h"
+        state_class: measurement
+        icon: mdi:battery-charging
+        availability: >-
+          {{ value_json is defined and value_json.trips is defined
+             and value_json.trips | selectattr('battery_start_pct', 'defined')
+                                  | selectattr('battery_start_pct', 'lt', 85)
+                                  | list | count > 0 }}
+        value_template: >-
+          {% set ns = namespace(pct=0.0, ms=0) %}
+          {% for t in value_json.trips | default([], true) %}
+            {% if t.battery_gain_pct is defined
+                  and t.battery_start_pct is defined and t.battery_start_pct < 85
+                  and t.battery_end_pct is defined and t.battery_end_pct <= 100
+                  and (t.battery_start_c is not defined or t.battery_start_c >= 0)
+                  and (t.end_ts - t.start_ts) > 0 %}
+              {% set ns.pct = ns.pct + t.battery_gain_pct %}
+              {% set ns.ms = ns.ms + (t.end_ts - t.start_ts) %}
+            {% endif %}
+          {% endfor %}
+          {{ (ns.pct / (ns.ms / 3600000)) | round(1) if ns.ms > 0 else 0 }}
+      # Same average expressed as power: net Wh into the pack per trip-hour.
+      # Same net-of-solar-and-loads caveat as above — it is NOT charger output.
+      # Filters must stay identical to the %/h sensor above, or the two numbers
+      # describe different trip sets and stop being convertible into each other.
+      - name: "Average Drive Charge Power"
+        unique_id: average_drive_charge_power
+        unit_of_measurement: "W"
+        device_class: power
+        state_class: measurement
+        availability: >-
+          {{ value_json is defined and value_json.trips is defined
+             and value_json.trips | selectattr('battery_start_pct', 'defined')
+                                  | selectattr('battery_start_pct', 'lt', 85)
+                                  | list | count > 0 }}
+        value_template: >-
+          {% set ns = namespace(wh=0.0, ms=0) %}
+          {% for t in value_json.trips | default([], true) %}
+            {% if t.battery_gain_wh is defined
+                  and t.battery_start_pct is defined and t.battery_start_pct < 85
+                  and t.battery_end_pct is defined and t.battery_end_pct <= 100
+                  and (t.battery_start_c is not defined or t.battery_start_c >= 0)
+                  and (t.end_ts - t.start_ts) > 0 %}
+              {% set ns.wh = ns.wh + t.battery_gain_wh %}
+              {% set ns.ms = ns.ms + (t.end_ts - t.start_ts) %}
+            {% endif %}
+          {% endfor %}
+          {{ (ns.wh / (ns.ms / 3600000)) | round(0) if ns.ms > 0 else 0 }}
 
 # --- Integration sensors (Riemann, statistics, history) ---
 # NOTE: the smoothed fuel level sensor.wican_fuel_5_min_mean (statistics, mean

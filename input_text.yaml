@@ -51,3 +51,19 @@ nws_last_notified_id:
   icon: mdi:weather-lightning
   max: 255
   initial: ""
+
+# Restore point for Shop Mode: the automations that were ALREADY disabled when
+# Shop Mode was armed, stored as a comma-separated list of object_ids (no
+# `automation.` prefix, to fit more in the 255-char cap). Shop Mode exit turns
+# every automation back ON and then re-disables exactly these, so arming and
+# disarming is state-preserving.
+#
+# input_text is used rather than a scene.create snapshot on purpose: scenes made
+# by scene.create live in memory only and are GONE after a restart, and a shop
+# pulling power is exactly the case this has to survive. input_text state IS
+# restored. If the list ever overflows 255 chars it is truncated and the exit
+# step falls back to "enable everything" — the notification says so.
+shop_mode_prev_disabled:
+  name: "Shop Mode – Previously Disabled Automations"
+  icon: mdi:playlist-remove
+  max: 255

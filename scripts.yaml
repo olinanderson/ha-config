@@ -469,3 +469,515 @@ vanlife_quick_save_stop:
         entity_id: input_number.vanlife_stop_rating
       data:
         value: 0
+
+# ─────────────────────────────────────────────────────────────────
+# Starlink • PoE power-cycle recovery
+# ─────────────────────────────────────────────────────────────────
+# Fixes the PoE DC-DC converter lockup that kills the dish while driving.
+#
+# The critical detail is the OFF duration. The converter only resets once its
+# capacitors have actually drained — observed 2026-08-07: a 25 s cut left it
+# still latched, a 51 s cut recovered it. 90 s gives real margin over the value
+# that was merely *just* long enough, and costs nothing (the link is already
+# down). Do not shorten this to make the automation feel snappier.
+#
+# Two cycles max, 20 min apart, then it gives up and latches
+# input_boolean.starlink_recovery_failed for the dashboard banner — because the
+# other known fix (reseating the ethernet at the dish end) needs hands, and
+# cycling a power supply forever accomplishes nothing.
+starlink_recover:
+  alias: "Starlink • power-cycle recovery sequence"
+  icon: mdi:restart-alert
+  mode: single
+  max_exceeded: silent
+  sequence:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.starlink_recovery_in_progress
+    - action: persistent_notification.dismiss
+      data:
+        notification_id: starlink_recovery
+
+    - repeat:
+        sequence:
+          - action: input_number.set_value
+            target:
+              entity_id: input_number.starlink_recovery_attempts
+            data:
+              value: "{{ repeat.index }}"
+
+          # De-energise the injector and hold it down long enough to drain.
+          - action: switch.turn_off
+            target:
+              entity_id: switch.a32_pro_switch26_starlink_power_supply
+          - delay: "00:01:30"
+          - action: switch.turn_on
+            target:
+              entity_id: switch.a32_pro_switch26_starlink_power_supply
+
+          # Recovery = the dish is REACHABLE again (entities leave `unavailable`).
+          # Deliberately not "connectivity == on": a reachable-but-obstructed dish
+          # means the PoE link is fixed, which is the whole fault domain here.
+          # Re-cycling over an obstruction would just be noise.
+          - wait_template: >
+              {{ states('binary_sensor.starlink_connectivity') not in ['unavailable', 'unknown'] }}
+            timeout: "00:20:00"
+            continue_on_timeout: true
+        until:
+          - condition: or
+            conditions:
+              - condition: template
+                value_template: >
+                  {{ states('binary_sensor.starlink_connectivity') not in ['unavailable', 'unknown'] }}
+              - condition: template
+                value_template: "{{ repeat.index >= 2 }}"
+
+    - choose:
+        # Still dark after both cycles → latch the banner and notify.
+        - conditions:
+            - condition: template
+              value_template: >
+                {{ states('binary_sensor.starlink_connectivity') in ['unavailable', 'unknown'] }}
+          sequence:
+            - action: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.starlink_recovery_failed
+            - action: persistent_notification.create
+              data:
+                notification_id: starlink_recovery
+                title: "🛰 Starlink still offline"
+                message: >
+                  Two automatic power cycles of the Starlink power supply did not
+                  bring the dish back. Try unplugging the ethernet cable at the
+                  DISH end, or cut the power supply by hand for a full minute.
+      default:
+        - action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.starlink_recovery_failed
+        - action: input_number.set_value
+          target:
+            entity_id: input_number.starlink_recovery_attempts
+          data:
+            value: 0
+
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.starlink_recovery_in_progress
+
+# Abort a running recovery SAFELY.
+# Cancelling script.starlink_recover on its own is a footgun: HA does not run a
+# stopped script's remaining steps, so a cancel during the 90 s off-window would
+# leave the supply switched OFF — worse than the fault we're fixing. Always stop
+# the sequence through here (the dashboard "Stop" button does).
+starlink_recover_abort:
+  alias: "Starlink • abort recovery and re-energise"
+  icon: mdi:stop-circle-outline
+  mode: single
+  sequence:
+    - action: script.turn_off
+      target:
+        entity_id: script.starlink_recover
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_switch26_starlink_power_supply
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.starlink_recovery_in_progress
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.starlink_recovery_attempts
+      data:
+        value: 0
+
+########################################################################
+#  Shop Mode – apply the lockdown (idempotent)                         #
+########################################################################
+# The single source of truth for "what does Shop Mode actually shut off".
+# Called by BOTH the input_boolean on-transition automation AND the
+# post-restart re-assert automation, so a reboot at the shop reproduces the
+# exact same state instead of a half-applied one.
+#
+# ORDER MATTERS: automations are disabled BEFORE any actuator is touched.
+# rolling_last_active_snapshot_1hz rewrites scene.last_active_state every
+# single second, so if it were still armed while this script turns the lights
+# off it would capture the all-off state within 1 s and permanently destroy the
+# Power Saving Mode restore point.
+shop_mode_apply:
+  alias: "Shop Mode – Apply lockdown (idempotent)"
+  mode: single
+  variables:
+    # Automations that stay ARMED during Shop Mode. Matched on the automation's
+    # `id:` attribute, NOT its entity_id — entity_ids are slugified from the
+    # alias and several aliases here contain "•"/"–", which makes them fragile.
+    # Anything not listed (including automations with no `id:` at all, and any
+    # automation added in future) is disabled by default: fail-safe.
+    shop_keep_ids:
+      # Shop Mode's own control surface — disabling these would strand the van
+      # in lockdown with no way to toggle back out.
+      - shop_mode_on_actions
+      - shop_mode_off_restore
+      - shop_mode_guard
+      - shop_mode_reassert_on_start
+      # Battery / BMS monitoring — you asked to keep watching the pack remotely.
+      - bms_ble_reload_after_boot
+      - bms_ble_runtime_recovery
+      # GPS position feed: know where the van is. The trip/stop RECORDERS
+      # (starlink_filtered_start_move / _stop_move, live_trip_*, wican_*) are
+      # deliberately NOT here — that's what keeps the shop's test drives out of
+      # your fuel + VE data.
+      - starlink_bootstrap_if_missing
+      - starlink_filtered_while_moving
+      - keep_home_zone_on_starlink
+      # Daemons + proxies that back the GPS feed and remote access.
+      - daemons_liveness_watchdog
+      - syncthing_start_on_boot
+      - osrm_proxy_start_on_boot
+      - gps_ublox_start_on_boot
+      - gps_filter_start_on_boot
+      - dvr_proxy_start_on_boot
+      # Starlink stays powered, so let its auto-recovery keep healing the link —
+      # otherwise a PoE latch-up mid-visit locks you out of the van entirely.
+      - starlink_auto_recover
+      - starlink_recovery_reset
+      - starlink_recovery_resume_after_restart
+      # Notify-only, touches no hardware. Weather at the van still matters.
+      - nws_severe_alert_notify
+      # Shoe dryer cleanup: kept armed so the timer.cancel in step 0 below
+      # (and any dryer timer that somehow ends during Shop Mode) still turns
+      # the blower off and restores the climate — and so stop_actions can't
+      # kill that cleanup mid-flight.
+      - shoe_dryer_auto_off
+  sequence:
+    # ── 0. End any running shoe dry first ──────────────────────────────
+    # timer.cancel → shoe_dryer_auto_off (still armed, and on the keep list
+    # above) turns the blower off and restores the climate snapshot BEFORE
+    # the lockdown decides the heater's fate. Cancelling an idle timer is a
+    # no-op — it fires no event.
+    - action: timer.cancel
+      target:
+        entity_id: timer.shoe_dryer
+
+    # ── 1. Disable every automation except the allowlist ───────────────
+    # stop_actions: true also kills any sequence mid-flight (e.g. a running
+    # bed-lift 30 s timer or a Starlink power-cycle delay).
+    - action: automation.turn_off
+      data:
+        stop_actions: true
+      target:
+        # selectattr('state', 'in', ['on','off']) skips orphaned entity-registry
+        # ghosts. This HA instance carries 22 of them — automations long since
+        # deleted from automations.yaml whose registry entries survive and report
+        # `unavailable`. Targeting them is harmless (verified: the service returns
+        # 200 and no-ops) but it triples the apparent size of the disable list and
+        # makes the logbook unreadable. Only real, loaded automations are touched.
+        entity_id: >-
+          {% set keep = states.automation
+               | selectattr('attributes.id', 'defined')
+               | selectattr('attributes.id', 'in', shop_keep_ids)
+               | map(attribute='entity_id') | list %}
+          {{ states.automation
+             | selectattr('state', 'in', ['on', 'off'])
+             | map(attribute='entity_id')
+             | reject('in', keep) | list }}
+
+    # ── 2. Gas and heat — closed first, they matter most around hot work ──
+    # switch24 is the heater ENABLE; switch32 is its power supply. Killing only
+    # the enable leaves the diesel heater energised, which is exactly the wrong
+    # state if anyone puts a grinder or a torch near it.
+    # Switch32 (the supply) is NOT cut here. The a32_pro refuses to drop it
+    # while Switch24 is on or within 180 s of the heater last running — that is
+    # the Espar purge cycle, and cutting power early cokes the burner. Doing
+    # both in one call just gets "Cannot turn off hydronic heater power supply
+    # yet!" in the ESP log and silently leaves the supply live (observed
+    # 2026-08-21). It is cut at the end of this script instead, after the
+    # interlock has expired.
+    # The hydronic PID climate lives ON the a32_pro and re-lights the heater by
+    # itself whenever it is in `heat` and the supply is live — its on_state
+    # handler re-evaluates on every temperature sample. Left in heat, the ESP
+    # and the guard automation fight over the burner for the ~3 min until step
+    # 10 cuts the supply: repeated aborted starts, the worst thing you can do to
+    # an Espar. Deliberately NOT restored on disarm (same rule as the heater
+    # enable: heat comes back by hand).
+    - action: climate.set_hvac_mode
+      target:
+        entity_id: climate.a32_pro_van_hydronic_heating_pid
+      data:
+        hvac_mode: "off"
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_switch16_lpg_valve
+          - switch.a32_pro_switch24_hydronic_heater
+
+    # ── 3. Anything that can MOVE or spray ────────────────────────────
+    # Bed lift (a mechanic's head is in that space), air compressor, grey
+    # water dump valve, roof fan + its lid — a lid left open is a torn lid if
+    # they put it on a lift or through a low door.
+    #
+    # switch07/08 are the bed motor's actual up/down commands. Cutting switch27
+    # (the supply) should already make them inert, but a dead-man's belt costs
+    # nothing and this is the one item in the van that can crush someone.
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_switch27_bed_power_supply
+          - switch.a32_pro_switch07_bed_up
+          - switch.a32_pro_switch08_bed_down
+          - switch.a32_pro_switch28_compressor
+          - switch.a32_pro_switch06_grey_water_tank_valve
+          - switch.ag_pro_ceiling_fan_mode
+    - action: fan.turn_off
+      target:
+        entity_id: fan.ag_pro_roof_fan
+    - action: cover.close_cover
+      target:
+        entity_id: cover.ag_pro_roof_fan_lid
+
+    # ── 4. Water — pumps, valves and both naming schemes ──────────────
+    # The a32_pro exposes most relays twice: a friendly alias
+    # (water_system_state_main) and the raw channel (switch11_...). They are
+    # separate entities, so turning off only the alias can leave the raw
+    # channel reporting on. Both are listed deliberately.
+    # water_system_state_main / _recirculating_shower / _..._flush are NOT here.
+    # They are derived template switches (`lambda: last_water_state == N`) with a
+    # turn_on_action and no turn_off_action, so turning them off is a silent
+    # no-op — they report the remembered MODE, not whether water is flowing.
+    # The master switch's turn_off_action is what actually drops the system, and
+    # the raw switch10-13 channels below are the real relays.
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_water_system_master_switch
+          - switch.a32_pro_switch29_shower_system_water_pump
+          - switch.a32_pro_switch30_main_system_water_pump
+          - switch.a32_pro_switch10_water_system_overall
+          - switch.a32_pro_switch11_water_system_state_main
+          - switch.a32_pro_switch12_water_system_state_recirculating_shower
+          - switch.a32_pro_switch13_water_system_state_recirculating_shower_flush
+          - switch.a32_pro_switch01_water_system_valve_1
+          - switch.a32_pro_switch02_water_system_valve_2
+          - switch.a32_pro_switch03_water_system_valve_3
+          - switch.a32_pro_switch14_uv_filter
+
+    # ── 5. Tank heating pads ──────────────────────────────────────────
+    # Resistive heat left running in a shop is both a power drain and a heat
+    # source nobody there is expecting.
+    #
+    # switch.a32_pro_battery_heater_enable and do8_switch05_battery_heater are
+    # deliberately NOT here. That heater is what stops the LiFePO4 pack being
+    # charged below freezing, and silently disabling a battery protection
+    # device for a shop visit is not a call this script should make.
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_switch17_silicone_heating_pads_shower_water_tank_x2
+          - switch.a32_pro_switch18_silicone_heating_pads_fresh_water_tank_x4
+          - switch.a32_pro_switch19_silicone_heating_pads_grey_water_tank_x4
+          - switch.a32_pro_switch20_heating_pads_auto_thermostat_grey_water_tank_x2
+          - switch.a32_pro_fresh_water_tank_heater_enable
+          - switch.a32_pro_grey_water_tank_heater_enable
+          - switch.a32_pro_shower_water_tank_heater_enable
+
+    # ── 6. Charging, screens + galley ventilation ─────────────────────
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_do8_switch04_shore_power_charger
+          - switch.a32_pro_do8_switch06_top_monitor
+          - switch.a32_pro_do8_switch07_bottom_monitor
+          - switch.a32_pro_do8_switch08_air_fryer_ventilation_fans
+          - switch.a32_pro_air_fryer_ventilation_enable
+
+    # ── 7. All lighting, inside and out ───────────────────────────────
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_switch21_left_outdoor_lights
+          - switch.a32_pro_switch22_right_outdoor_lights
+          - switch.a32_pro_switch23_rear_outdoor_lights
+          - switch.a32_pro_switch31_lightbar
+          - switch.a32_pro_switch09_shower_button_led
+    # light.0xa4c138fd668411cd is the battery vent fan (a `light` entity, not a
+    # `fan` one) — the Ready-to-Drive guard already treats it as a hard offender.
+    # a32_pro_dac_0/1 are the analogue dimmer outputs.
+    - action: light.turn_off
+      target:
+        entity_id:
+          - light.led_controller_cct_1
+          - light.led_controller_cct_2
+          - light.led_controller_sc_1
+          - light.led_controller_sc_2
+          - light.main_lighting_switch
+          - light.under_cabinet_lighting_switch
+          - light.a32_pro_a32_pro_dac_0
+          - light.a32_pro_a32_pro_dac_1
+          - light.0xa4c138fd668411cd
+
+    # ── 8. Inverter off, and LOCKED off ───────────────────────────────
+    # The manual lock is what stops script.inverter_ensure_on from quietly
+    # bringing 120 V back up if anything calls it.
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.inverter_manual_lock
+    - action: script.inverter_ensure_off
+
+    # ── 9. Clear the comfort modes so exit starts from a clean slate ──
+    # Safe to force here: their on/off handler automations are already disabled
+    # by step 1, so none of these fire a wind-down or a restore.
+    - action: input_boolean.turn_off
+      target:
+        entity_id:
+          - input_boolean.shower_mode
+          - input_boolean.sleep_mode
+          - input_boolean.sleep_winddown_complete
+          - input_boolean.hot_water_mode
+          - input_boolean.shore_power_charger_enabled
+          - input_boolean.rtd_guard_override
+          - input_boolean.speedtest_running
+
+    # ── 10. Hydronic heater power supply — deferred cut ──────────────
+    # Runs last because it has to outwait the a32_pro's 180 s purge interlock
+    # (see step 2). Everything else is already locked down by this point, so the
+    # wait costs nothing. Only entered if the supply is actually still live, so
+    # a heater that has been cold for a while is cut in step 2's slipstream and
+    # this is skipped entirely.
+    - if:
+        - condition: state
+          entity_id: switch.a32_pro_switch32_hydronic_heater_power_supply
+          state: "on"
+      then:
+        - delay: "00:03:05"
+        # Re-check Shop Mode: disarming during the wait must NOT then cut heater
+        # power out from under someone who has already taken the van back.
+        - if:
+            - condition: state
+              entity_id: input_boolean.shop_mode
+              state: "on"
+          then:
+            - action: switch.turn_off
+              target:
+                entity_id: switch.a32_pro_switch32_hydronic_heater_power_supply
+
+    # NOTE: switch.a32_pro_switch26_starlink_power_supply is intentionally left
+    # ON — it's what keeps HA reachable from outside the van. ~40-50 W.
+
+########################################################################
+#  Shop Mode – convenience wrappers                                    #
+########################################################################
+# Prefer toggling input_boolean.shop_mode (dashboard / voice); these exist so
+# the mode can also be driven from a script call or a button card.
+shop_mode_enter:
+  alias: "Shop Mode – Arm"
+  mode: single
+  sequence:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.shop_mode
+
+shop_mode_exit:
+  alias: "Shop Mode – Disarm"
+  mode: single
+  sequence:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.shop_mode
+
+########################################################################
+#  Shoe Dryer – run the coolant blower for a set time, then auto-off   #
+########################################################################
+# The blower (light.a32_pro_a32_pro_dac_0) is normally owned by the hydronic
+# PID climate: its on_state re-asserts blower_active (= Auto mode) every ~10 s
+# whenever the climate is not OFF, which silently overrides any manual
+# brightness. So the climate MUST be off for a manual run to stick. The prior
+# climate state is captured in input_boolean.shoe_dryer_resume_heat +
+# input_number.shoe_dryer_prev_setpoint — restart-proof, unlike a scene.create
+# snapshot — and put back by shoe_dryer_auto_off, so a running heat cycle only
+# pauses.
+shoe_dryer_start:
+  alias: "Shoe Dryer • start"
+  description: >-
+    Pause hydronic heating, run the coolant blower at 100%, and start
+    timer.shoe_dryer. duration_seconds overrides the dashboard duration
+    (input_number.shoe_dryer_minutes) — used for testing.
+  mode: restart
+  fields:
+    duration_seconds:
+      description: "Run time in seconds (default: input_number.shoe_dryer_minutes)"
+      required: false
+      example: 1200
+  sequence:
+    # Shop Mode's guard automation force-kills this blower within seconds —
+    # starting under it would just flap. The dashboard card greys out too.
+    - condition: state
+      entity_id: input_boolean.shop_mode
+      state: "off"
+    # Snapshot the climate only when starting fresh — a re-tap mid-dry would
+    # otherwise capture the "off" WE set and lose the real prior state.
+    - if:
+        - condition: state
+          entity_id: timer.shoe_dryer
+          state: idle
+      then:
+        - action: input_number.set_value
+          target:
+            entity_id: input_number.shoe_dryer_prev_setpoint
+          data:
+            value: >-
+              {{ state_attr('climate.a32_pro_van_hydronic_heating_pid', 'temperature') | float(21) }}
+        - if:
+            - condition: state
+              entity_id: climate.a32_pro_van_hydronic_heating_pid
+              state: heat
+          then:
+            - action: input_boolean.turn_on
+              target:
+                entity_id: input_boolean.shoe_dryer_resume_heat
+          else:
+            - action: input_boolean.turn_off
+              target:
+                entity_id: input_boolean.shoe_dryer_resume_heat
+        - action: input_boolean.turn_on
+          target:
+            entity_id: input_boolean.shoe_dryer_active
+    # The timer starts BEFORE the climate is touched: the moment it goes
+    # `active` the idle-guard above is closed, so a double-tap can't
+    # re-snapshot the climate we just turned off (and the dashboard card
+    # flips to the countdown immediately).
+    - action: timer.start
+      target:
+        entity_id: timer.shoe_dryer
+      data:
+        duration: >-
+          {{ duration_seconds | default((states('input_number.shoe_dryer_minutes') | float(30)) * 60) | int }}
+    # Order matters: climate off FIRST (stops the ~10 s blower_active stomp),
+    # then flip the mode switch to Manual so the change is instant.
+    - action: climate.set_hvac_mode
+      target:
+        entity_id: climate.a32_pro_van_hydronic_heating_pid
+      data:
+        hvac_mode: "off"
+    - delay: "00:00:01"
+    - action: switch.turn_off
+      target:
+        entity_id: switch.a32_pro_coolant_blower_mode_auto_manual
+    - action: light.turn_on
+      target:
+        entity_id: light.a32_pro_a32_pro_dac_0
+      data:
+        brightness_pct: 100
+
+shoe_dryer_stop:
+  alias: "Shoe Dryer • stop"
+  mode: single
+  sequence:
+    # Cancelling fires timer.cancelled → shoe_dryer_auto_off does the real
+    # shutdown + climate restore. The direct light.turn_off after it is the
+    # belt-and-braces path for a stuck blower with an already-idle timer
+    # (cancelling an idle timer fires nothing); harmless when both run.
+    - action: timer.cancel
+      target:
+        entity_id: timer.shoe_dryer
+    - action: light.turn_off
+      target:
+        entity_id: light.a32_pro_a32_pro_dac_0
+      continue_on_error: true
