@@ -382,10 +382,10 @@ views:
                 if (status === 'Idle.' || status === 'unavailable' || status === 'unknown') return '';
                 var color = 'var(--secondary-text-color)';
                 if (status.includes('Low fuel lockout')) color = '#ef4444';
-                else if (status.includes('Retrying') || status.includes('Cooldown')) color = '#f59e0b';
-                else if (status.includes('failed')) color = '#ef4444';
+                else if (status.includes('never warmed') || status.includes('failed')) color = '#ef4444';
+                else if (status.includes('restart') || status.includes('Retrying') || status.includes('Cooldown')) color = '#f59e0b';
+                else if (status.includes('blower waits') || status.includes('waiting')) color = '#3b82f6';
                 else if (status.includes('warming') || status.includes('running')) color = '#22c55e';
-                else if (status.includes('Waiting')) color = '#3b82f6';
                 return `<div style="display:flex; align-items:center; gap:8px; justify-content:center;">
                   <div style="width:6px;height:6px;border-radius:50%;background:${color};flex-shrink:0;"></div>
                   <span style="font-size:12px; font-weight:500; color:${color};">${status}</span>

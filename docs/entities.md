@@ -95,7 +95,12 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor, plus `sensor.mppt1_
 |---|---|
 | `climate.a32_pro_van_hydronic_heating_pid` | PID thermostat |
 | `switch.a32_pro_switch24_hydronic_heater` | Hydronic heater relay |
+| `switch.a32_pro_switch32_hydronic_heater_power_supply` | Heater standby supply — Switch24 refuses to turn on while this is off |
 | `sensor.a32_pro_hydronic_heater_status` | Heater status text |
+| `number.a32_pro_hydronic_blower_start_temp` | Coolant temp the PID blower waits for (default 55 °C; stops 10 °C below) |
+| `number.a32_pro_hydronic_heater_ok_temp` | Coolant temp that counts as "heater healthy" (default 45 °C) |
+| `number.a32_pro_hydronic_heater_max_restarts` | Relay off/on cycles before the heater gives up (default 3) |
+| `binary_sensor.a32_pro_hydronic_blower_coolant_ready` | Blower coolant gate open (diagnostic) |
 | `sensor.a32_pro_coolant_blower_heating_pid_climate_result` | PID output (0–1) |
 | `light.a32_pro_a32_pro_dac_0` | Blower matrix (DAC fan speed as light entity) |
 | `switch.a32_pro_fan_override_manual_on_off` | Fan manual override |

@@ -408,6 +408,7 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 |---|---|
 | `climate.a32_pro_van_hydronic_heating_pid` | PID thermostat |
 | `switch.a32_pro_switch24_hydronic_heater` | Hydronic heater relay |
+| `switch.a32_pro_switch32_hydronic_heater_power_supply` | Heater standby supply — Switch24 refuses to turn on while this is off (see docs/heating.md) |
 | `sensor.a32_pro_hydronic_heater_status` | Heater status text (retry state, fuel lockout, cooldown) |
 | `sensor.a32_pro_coolant_blower_heating_pid_climate_result` | PID output (0–1) |
 | `light.a32_pro_a32_pro_dac_0` | Blower matrix (DAC fan speed as light entity) |
@@ -944,24 +945,52 @@ Espar Hydronic S3 B5E (gasoline burner, 12V signal wire on/off)
 - **Coolant temperature** (`s5140_ch34_temp`) is measured at the blower matrix inlet —
   this is *after* the water HXs have extracted some heat, so it reads lower than the
   heater outlet temperature.
+- **The engine heats this loop too.** With the Espar off, the coolant sensor reads
+  90–96 °C after a few minutes of driving and decays ~0.5 °C/min once the engine stops
+  (HA history, Sept 2026). "Coolant is hot" therefore does not prove the burner is lit;
+  the firmware treats either heat source as "running" and only steps in when the loop
+  is cold and not warming.
 
-### Heater Startup & Retry Logic (ESPHome)
+### Heater Warm-up Monitor & Auto-restart (ESPHome)
 
-When the PID climate entity turns ON:
-1. ESPHome starts `heater_start_with_retry` script
-2. Records baseline coolant temp, turns on heater relay
-3. Waits **5 minutes**, checks if coolant rose ≥ 2°C
-4. If yes → state 3 ("running, confirmed")
-5. If no → cycles heater off/on (retry), waits another 5 min
-6. If retry succeeds → state 3; if fails + fuel < 25% → state 5 (fuel lockout);
-   otherwise → state 4 (failed)
+Whoever lights the heater (PID climate, Hot Water Mode, Switch24, rocker), the relay's
+`on_turn_on` arms a monitor (`interval: 30s`) that watches the HX#1 coolant sensor
+(`s5140_ch34_temp`) while the relay is on:
+
+1. Coolant ≥ **Heater OK Temp** (`number.a32_pro_hydronic_heater_ok_temp`, default
+   45 °C) → state 3 (running). Any heat source counts.
+2. Else coolant rose ≥ **8 °C over the trailing 5 min** → state 3 (burner lit). A lit
+   burner lifts this sensor ~12 °C/min; failed starts drift < 2.5 °C.
+3. Else, after **6 min** (from relay-on for a start; since the coolant last looked
+   healthy for a running heater) → attempt failed / burner died: relay off 10 s, on
+   again (state 2), up to **Heater Max Restarts**
+   (`number.a32_pro_hydronic_heater_max_restarts`, default 3).
+4. All restarts used up → relay dropped: state 5 (fuel lockout) if
+   `sensor.stable_fuel_level` < 25 %, else state 4 (failed). State 4 waits for the user
+   to toggle the climate or heater; the climate handler will not relight it by itself.
+
+History (2026-07 → 09): 4 of 8 relay-on runs never lit, at 68 %, 68 %, 93 % and 20 %
+fuel; every ignition came within 4 min of a fresh relay-on (the third attempt lit on both
+multi-attempt days). Engine-off replay of the new monitor: 9 restarts, all justified, 0
+spurious; lit-burner coolant band at the sensor 77–92 °C. The previous one-shot "≥ 2 °C in 5 min" check passed on a +2.1 °C engine drift and then
+stopped watching for the rest of the run.
+
+### Blower Coolant Gate
+
+In Auto (PID) mode the blower DAC stays at 0 until the coolant reaches **Hydronic Blower
+Start Temp** (`number.a32_pro_hydronic_blower_start_temp`, default 55 °C) and runs until
+it falls 10 °C below that (residual heat still gets blown out). The gate is re-evaluated
+on every coolant sample; `binary_sensor.a32_pro_hydronic_blower_coolant_ready` shows it
+and the status text says "blower waits for coolant…" meanwhile. Manual blower control and
+the shoe dryer bypass the gate.
 
 ### Low Fuel Lockout
 
-- **Trigger**: Heater fails to start after retry AND `sensor.stable_fuel_level` < 25%
+- **Trigger**: Heater never warms up after all restarts AND `sensor.stable_fuel_level` < 25%
 - **Effect**: Sets `input_boolean.heater_low_fuel_lockout` ON → ESPHome blocks heater
   startup, dashboard shows red lockout message + override button
-- **Auto-clear**: HA automation clears lockout when fuel rises above 30% for 2 min
+- **Auto-clear**: HA automation clears lockout when fuel rises above 30% for 2 min; the
+  ESP drops its lockout verdict when the boolean clears, so a still-on climate relights
 - **Manual override**: Dashboard button (with confirmation dialog)
 
 ### Heater Status Messages (`sensor.a32_pro_hydronic_heater_status`)
@@ -969,13 +998,16 @@ When the PID climate entity turns ON:
 | State | Message |
 |---|---|
 | 0 (idle, heater off) | "Idle." (hidden on dashboard) |
-| 1 (first attempt) | "Starting heater -> Waiting for coolant to warm up..." |
-| 2 (retrying) | "First attempt failed -> Retrying..." |
-| 3 (confirmed) | "Heater running -> Coolant warming up." |
-| 4 (failed) | "Heater failed to start after retry." |
+| 1 (starting) | "Starting heater -> waiting for coolant to warm up (NN °C)..." |
+| 2 (restarting) | "Coolant not warming -> heater restart N of M..." |
+| 3 (running, blower gated) | "Heater running -> blower waits for coolant to reach 55 °C (now NN °C)." |
+| 3 (running) | "Heater running -> coolant NN °C." |
+| 4 (failed) | "Heater never warmed up after N restarts -> turned off. Toggle climate or heater to try again." |
 | 5 (fuel lockout) | "Low fuel lockout (XX%) -> Refuel or override from dashboard." |
-| Running (no retry) | "Heater running." |
-| Cooldown | "Cooldown -> Xs before power can be removed." |
+| Relay on, monitor not yet ticked | "Heater running." |
+
+States 4 and 5 outlive the relay (it is dropped when they are given); turning the climate
+off, or any new relay-on, resets them.
 
 ### Dashboard Heating Mode Context
 
