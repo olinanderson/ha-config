@@ -1,4 +1,5 @@
 import { PageContainer } from '@/components/layout/PageContainer';
+import { ShopModeCard } from '@/components/ShopModeCard';
 import { ToggleButton } from '@/components/ToggleButton';
 import { SparklineStat } from '@/components/ClickableValue';
 import { StatValue } from '@/components/StatValue';
@@ -193,6 +194,9 @@ export default function System() {
         <div className="space-y-4">
           <ModesCard />
           <SwitchesCard />
+        </div>
+        <div className="space-y-4">
+          <ShopModeCard />
         </div>
       </div>
     </PageContainer>

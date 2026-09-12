@@ -96,11 +96,25 @@ export function useFuelTrips(limit = 20): FuelTripsResult {
 
   useEffect(() => {
     let cancelled = false;
+    let retryTimer: ReturnType<typeof setTimeout> | undefined;
+
+    // A single failed fetch (network handoff, brief Starlink drop, token not
+    // ready yet) shouldn't blank the averages until the next 5-min refresh —
+    // schedule one quick retry instead. Replaced on each failure, so repeated
+    // failures poll gently rather than stacking timers.
+    const retrySoon = (ms: number) => {
+      if (cancelled) return;
+      clearTimeout(retryTimer);
+      retryTimer = setTimeout(load, ms);
+    };
 
     async function load() {
       try {
         const headers = await getAuthHeaders();
-        if (!headers) return; // remote without a token yet — skip; retry next interval (avoids 401 auth-ban)
+        if (!headers) {
+          retrySoon(10_000); // remote without a token yet — skip the request (avoids 401 auth-ban), try again shortly
+          return;
+        }
         const r = await fetch(`${API_BASE()}/vanlife/fuel-trips?limit=${limit}`, {
           headers,
         });
@@ -112,7 +126,10 @@ export function useFuelTrips(limit = 20): FuelTripsResult {
         setSummary(d.summary ?? null);
         setError(null);
       } catch (e) {
-        if (!cancelled) setError(String(e));
+        if (!cancelled) {
+          setError(String(e));
+          retrySoon(30_000);
+        }
       } finally {
         if (!cancelled) setLoading(false);
       }
@@ -123,6 +140,7 @@ export function useFuelTrips(limit = 20): FuelTripsResult {
     return () => {
       cancelled = true;
       clearInterval(interval);
+      clearTimeout(retryTimer);
     };
   }, [limit]);
 

@@ -35,21 +35,29 @@ window.addEventListener('unhandledrejection', (evt) => {
 });
 // ─────────────────────────────────────────────────────────────────────────
 
-// Load module fresh each page load
+// Load module fresh each page load.
+// A failed load must NOT stay cached — if the first attempt races an HA
+// restart, a cached rejection would brick the panel until a manual refresh
+// (the watchdog would retry _doMount forever against the same dead promise).
 let _modulePromise = null;
 function getModule() {
   if (!_modulePromise) {
-    _modulePromise = import(`${BASE}/van-dashboard.js?${CACHE_VER}`);
+    _modulePromise = import(`${BASE}/van-dashboard.js?${CACHE_VER}`)
+      .catch((err) => { _modulePromise = null; throw err; });
   }
   return _modulePromise;
 }
 
-// Fetch CSS fresh each page load
+// Fetch CSS fresh each page load — same retry-on-failure rule as the module.
 let _cssPromise = null;
 function getCss() {
   if (!_cssPromise) {
     _cssPromise = fetch(`${BASE}/van-dashboard.css?${CACHE_VER}`)
-      .then(r => r.text());
+      .then(r => {
+        if (!r.ok) throw new Error(`CSS HTTP ${r.status}`);
+        return r.text();
+      })
+      .catch((err) => { _cssPromise = null; throw err; });
   }
   return _cssPromise;
 }

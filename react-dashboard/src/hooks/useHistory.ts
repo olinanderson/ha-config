@@ -31,8 +31,16 @@ export function useHistory(
     const ts = new Date(entity.last_updated || entity.last_changed).getTime();
     if (!Number.isFinite(ts) || ts <= lastTRef.current) return;
     lastTRef.current = ts;
-    setData((prev) => [...prev, { t: ts, v }]);
-  }, [entityId, store]);
+    setData((prev) => {
+      // Drop points that scrolled out of the window — without this, a chart
+      // left open accumulates live points forever (memory + render cost).
+      const cutoff = Date.now() - hours * 3600_000;
+      const kept = prev.length > 0 && prev[0].t < cutoff
+        ? prev.filter((p) => p.t >= cutoff)
+        : prev;
+      return [...kept, { t: ts, v }];
+    });
+  }, [entityId, store, hours]);
 
   // Fetch historical data
   useEffect(() => {

@@ -34,29 +34,8 @@ export function useEntityNumeric(
   return { value: Number.isFinite(n) ? n : null, entity };
 }
 
-/**
- * Subscribe to multiple entities. Returns a record of entityId → HassEntity.
- * Re-renders when ANY of the listed entities change.
- */
-export function useEntities(
-  entityIds: string[],
-): Record<string, HassEntity | null> {
-  const store = useHassStore();
-  const subscribe = useCallback(
-    (cb: () => void) => {
-      const unsubs = entityIds.map((id) => store.subscribeEntity(id, cb));
-      return () => unsubs.forEach((u) => u());
-    },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-    [store, entityIds.join(',')],
-  );
-  const getSnapshot = useCallback(() => {
-    const result: Record<string, HassEntity | null> = {};
-    for (const id of entityIds) {
-      result[id] = store.getEntity(id);
-    }
-    return result;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [store, entityIds.join(',')]);
-  return useSyncExternalStore(subscribe, getSnapshot);
-}
+// NOTE: a `useEntities(ids[])` variant used to live here. It returned a fresh
+// object from getSnapshot on every call, which useSyncExternalStore treats as
+// "always changed" — an instant infinite re-render loop for any component that
+// used it. It had no callers, so it was removed rather than fixed. If you need
+// multi-entity subscription, call useEntity() per id.

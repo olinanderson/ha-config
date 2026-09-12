@@ -59,6 +59,7 @@ interface Summary {
   avgL100: number | null;
   battWh: number | null;
   battPct: number | null;
+  chargeRate: number | null; // avg battery %/h while driving, over this window's trips
 }
 
 export function TodayTripsCard() {
@@ -180,7 +181,7 @@ export function TodayTripsCard() {
 
         if (!segs.length) {
           setHasTrips(false);
-          setSummary({ trips: 0, km: 0, driveSec: 0, fuelL: null, avgL100: null, battWh: null, battPct: null });
+          setSummary({ trips: 0, km: 0, driveSec: 0, fuelL: null, avgL100: null, battWh: null, battPct: null, chargeRate: null });
           setLoading(false);
           return;
         }
@@ -232,6 +233,20 @@ export function TodayTripsCard() {
         const avgL100 = fuelKm > 0 ? (fuelL / fuelKm) * 100 : null;
         const battWh = windowTrips.reduce((acc, t) => acc + (t.battery_gain_wh ?? 0), 0);
         const battPct = windowTrips.reduce((acc, t) => acc + (t.battery_gain_pct ?? 0), 0);
+        // Charge rate = Σ gain ÷ Σ trip-hours over the battery-carrying trips
+        // (time-weighted, like the L/100km average above is km-weighted).
+        // Hours are WALL-CLOCK end−start, not moving time: the gain is a
+        // stored-Wh delta across that whole window (mid-trip stops included),
+        // so a moving-only denominator would mix bases and bias the rate low.
+        let chargePct = 0;
+        let chargeMs = 0;
+        for (const t of windowTrips) {
+          if (t.battery_gain_pct != null && t.end_ts > t.start_ts) {
+            chargePct += t.battery_gain_pct;
+            chargeMs += t.end_ts - t.start_ts;
+          }
+        }
+        const chargeRate = chargeMs > 0 ? chargePct / (chargeMs / 3600000) : null;
 
         setHasTrips(true);
         setSummary({
@@ -240,6 +255,7 @@ export function TodayTripsCard() {
           avgL100: anyFuel ? avgL100 : null,
           battWh: anyBatt ? battWh : null,
           battPct: anyBatt ? battPct : null,
+          chargeRate,
         });
         setLoading(false);
 
@@ -302,6 +318,14 @@ export function TodayTripsCard() {
                     <span className={summary.battPct >= 0 ? 'text-green-400' : 'text-orange-400'}>
                       🔋 {summary.battPct >= 0 ? '+' : '−'}{Math.abs(summary.battPct).toFixed(1)}%
                       {summary.battWh != null && ` (${summary.battWh >= 0 ? '+' : '−'}${Math.abs(summary.battWh)} Wh)`}
+                    </span>
+                  )}
+                  {summary.chargeRate != null && (
+                    <span
+                      className={summary.chargeRate >= 0 ? 'text-green-400' : 'text-orange-400'}
+                      title="Avg house-battery %/h across these 7 days' trips — net of solar input and house loads"
+                    >
+                      ⚡ {summary.chargeRate >= 0 ? '+' : '−'}{Math.abs(summary.chargeRate).toFixed(1)}%/h
                     </span>
                   )}
                 </div>

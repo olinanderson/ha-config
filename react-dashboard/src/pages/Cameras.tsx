@@ -35,6 +35,21 @@ const CAMERAS = [
 type StreamState = 'connecting' | 'playing' | 'error' | 'unsupported';
 
 /**
+ * Whether the browser tab/webview is currently visible. Streams are torn down
+ * while hidden — a backgrounded dashboard otherwise keeps 4 video pipelines
+ * alive for hours, which is the main driver of renderer OOM kills.
+ */
+function usePageVisible(): boolean {
+  const [visible, setVisible] = useState(() => !document.hidden);
+  useEffect(() => {
+    const onVis = () => setVisible(!document.hidden);
+    document.addEventListener('visibilitychange', onVis);
+    return () => document.removeEventListener('visibilitychange', onVis);
+  }, []);
+  return visible;
+}
+
+/**
  * Resolve the best available MSE class.
  * Safari 17.1+ (including iOS WKWebView / HA companion app) provides
  * ManagedMediaSource instead of (or in addition to) MediaSource.
@@ -1771,8 +1786,8 @@ function TimelineBar({
 
 // ─── Playback Mode ───
 
-function PlaybackMode() {
-  return <PlaybackModeInner />;
+function PlaybackMode({ suspended = false }: { suspended?: boolean }) {
+  return <PlaybackModeInner suspended={suspended} />;
 }
 
 // ─── Saved Clips List ───
@@ -1888,7 +1903,7 @@ function ClipsList({ clips, onRefresh }: { clips: SavedClip[]; onRefresh: () => 
   );
 }
 
-function PlaybackModeInner() {
+function PlaybackModeInner({ suspended = false }: { suspended?: boolean }) {
   const [channel, setChannel] = useState(1);
   const [date, setDate] = useState(() => {
     const d = new Date();
@@ -2165,7 +2180,7 @@ function PlaybackModeInner() {
       {playbackKey ? (
         <PlaybackFeed
           key={playbackKey}
-          paused={paused}
+          paused={paused || suspended}
           onError={stopPlayback}
         />
       ) : (
@@ -2421,9 +2436,13 @@ function PlaybackModeInner() {
 
 // ─── Page ───
 
-export default function Cameras() {
+export default function Cameras({ active = true }: { active?: boolean }) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [mode, setMode] = useState<'live' | 'playback'>('live');
+  const pageVisible = usePageVisible();
+  // Streams only run while this page is the active tab AND the browser tab is
+  // visible. The component stays mounted either way, so UI state survives.
+  const suspended = !active || !pageVisible;
 
   return (
     <PageContainer title="Cameras">
@@ -2481,7 +2500,7 @@ export default function Cameras() {
                 lightEntityId={cam.lightEntityId}
                 hidden={isHidden}
                 expanded={isExpanded}
-                paused={mode === 'playback'}
+                paused={suspended || mode === 'playback'}
                 onExpand={() => setExpanded(cam.stream)}
                 onCollapse={() => setExpanded(null)}
               />
@@ -2491,7 +2510,7 @@ export default function Cameras() {
       </div>
 
       {/* Playback mode */}
-      {mode === 'playback' && <PlaybackMode />}
+      {mode === 'playback' && <PlaybackMode suspended={suspended} />}
     </PageContainer>
   );
 }

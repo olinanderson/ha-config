@@ -17,6 +17,11 @@ export function BatteryCard({ compact = false }: { compact?: boolean }) {
   const { value: temp } = useEntityNumeric('sensor.olins_van_bms_temperature');
   const { value: cycles } = useEntityNumeric('sensor.olins_van_bms_cycles');
   const { value: delta } = useEntityNumeric('sensor.olins_van_bms_delta_voltage');
+  // Charging pace while driving: avg battery %/h (and net W) across the last
+  // 20 drives (REST sensors fed by the vanlife proxy) — null until the API has
+  // trip data. NET pack change: solar counts toward it, house loads against it.
+  const { value: driveRate } = useEntityNumeric('sensor.average_drive_charge_rate');
+  const { value: drivePower } = useEntityNumeric('sensor.average_drive_charge_power');
   const estimateEntity = useEntity('sensor.battery_time_estimate');
 
   const { data: socHistory } = useHistory('sensor.olins_van_bms_battery', 12);
@@ -61,6 +66,28 @@ export function BatteryCard({ compact = false }: { compact?: boolean }) {
           <SparklineStat entityId="sensor.olins_van_bms_voltage" label="Voltage" value={fmt(voltage, 2)} unit="V" color="#6366f1" />
           <SparklineStat entityId="sensor.olins_van_bms_current" label="Current" value={fmt(current, 2)} unit="A" color="#06b6d4" />
           <SparklineStat entityId="sensor.olins_van_bms_power" label="Power" value={fmt(power != null ? Math.abs(power) : null, 0)} unit="W" color="#f59e0b" />
+          {driveRate != null && (
+            <SparklineStat
+              entityId="sensor.average_drive_charge_rate"
+              label="Drive Charge"
+              value={`${driveRate >= 0 ? '+' : ''}${fmt(driveRate, 1)}`}
+              unit="%/h"
+              color="#22c55e"
+              hours={24}
+              title="Avg battery %/h over your last 20 drives — net of solar input and house loads"
+            />
+          )}
+          {drivePower != null && (
+            <SparklineStat
+              entityId="sensor.average_drive_charge_power"
+              label="Drive Power"
+              value={`${drivePower >= 0 ? '+' : ''}${fmt(drivePower, 0)}`}
+              unit="W"
+              color="#4ade80"
+              hours={24}
+              title="Avg net W into the pack over your last 20 drives — includes solar, minus house loads (not raw charger output)"
+            />
+          )}
           <SparklineStat entityId="sensor.olins_van_bms_stored_energy" label="Stored" value={fmt(stored, 0)} unit="Wh" color="#8b5cf6" />
           <SparklineStat entityId="sensor.olins_van_bms_temperature" label="Temperature" value={fmt(temp, 1)} unit="°C" color="#ef4444" />
           {!compact && (

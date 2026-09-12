@@ -40,6 +40,7 @@ interface SparklineStatProps {
   color?: string;
   hours?: number;
   className?: string;
+  title?: string; // hover tooltip — for stats whose basis/window needs spelling out
 }
 
 export function SparklineStat({
@@ -51,6 +52,7 @@ export function SparklineStat({
   color = '#3b82f6',
   hours = 6,
   className,
+  title,
 }: SparklineStatProps) {
   const { data } = useHistory(entityId, hours);
   const { open } = useHistoryDialog();
@@ -61,6 +63,7 @@ export function SparklineStat({
         'flex items-center justify-between gap-2 cursor-pointer hover:bg-muted/50 rounded-md transition-colors -mx-1 px-1 py-0.5',
         className,
       )}
+      title={title}
       onClick={() => open(entityId, label, unit)}
       role="button"
       tabIndex={0}

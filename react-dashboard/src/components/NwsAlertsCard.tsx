@@ -16,6 +16,12 @@ import { RadarWidget } from './RadarWidget';
 
 const SEV_RANK: Record<string, number> = { Extreme: 4, Severe: 3, Moderate: 2, Minor: 1, Unknown: 0 };
 
+// Points NWS has rejected with 400 (outside US coverage, e.g. Canada).
+// A 400 for a given ~1km point is deterministic — remembering it module-wide
+// stops every card mount / 3-min tick from re-asking and spamming the console.
+// Cleared naturally when the van moves to a new rounded point.
+const NWS_OUTSIDE_COVERAGE = new Set<string>();
+
 export interface Alert {
   id: string;
   event: string;
@@ -51,6 +57,7 @@ export function useNwsAlerts(lat?: number, lon?: number) {
     if (latKey == null || lonKey == null) return;
     let cancelled = false;
     const load = async () => {
+      if (NWS_OUTSIDE_COVERAGE.has(`${latKey},${lonKey}`)) return;
       setLoading(true);
       try {
         const url =
@@ -60,6 +67,10 @@ export function useNwsAlerts(lat?: number, lon?: number) {
         // api.weather.gov returns 400 for points outside US coverage (e.g. Canada).
         // Treat that as "no NWS data here": stay quiet and leave `ready` false so
         // the card renders nothing rather than a misleading "no alerts" pill.
+        if (r.status === 400) {
+          NWS_OUTSIDE_COVERAGE.add(`${latKey},${lonKey}`);
+          return;
+        }
         if (!r.ok) return;
         const j = await r.json();
         if (cancelled) return;

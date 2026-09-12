@@ -6,6 +6,7 @@ import { TankLevel } from '@/components/TankLevel';
 import { ThermostatControl } from '@/components/ThermostatControl';
 import { HeatingControls } from '@/components/HeatingControls';
 import { FanControl } from '@/components/FanControl';
+import { ShoeDryerCard } from '@/components/ShoeDryerCard';
 import { PresenceBar } from '@/components/PresenceBar';
 import { ToggleButton } from '@/components/ToggleButton';
 import { LightControl } from '@/components/LightControl';
@@ -13,6 +14,7 @@ import { InverterButton } from '@/components/InverterButton';
 import { StatusDot } from '@/components/StatusDot';
 import { TodayTripsCard } from '@/components/TodayTripsCard';
 import { ReadyToDriveBanner } from '@/components/ReadyToDriveBanner';
+import { StarlinkBanner } from '@/components/StarlinkStatus';
 import { WeatherSummaryCard } from '@/components/WeatherSummaryCard';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useToggle, useService } from '@/hooks/useService';
@@ -79,6 +81,7 @@ function BadgeBar() {
   const { value: fuel } = useEntityNumeric('sensor.stable_fuel_level');
   const { value: propane } = useEntityNumeric('sensor.propane_tank_percentage');
   const { value: dlSpeed } = useEntityNumeric('sensor.starlink_downlink_throughput_mbps');
+  const starlink = useEntity('sensor.starlink_status');
   const inverter = useEntity('binary_sensor.shelly_em_reachable');
   const powerSaving = useEntity('input_boolean.power_saving_mode');
   const greyValve = useEntity('switch.a32_pro_switch06_grey_water_tank_valve');
@@ -93,6 +96,8 @@ function BadgeBar() {
   const callService = useService();
 
   const inverterOn = inverter?.state === 'on';
+  const starlinkStatus = starlink?.state ?? 'Unknown';
+  const starlinkOnline = starlinkStatus === 'Online';
   const ecoOn = powerSaving?.state === 'on';
   const greyOpen = greyValve?.state === 'on';
   const lightsOn = [light1, light2, light3, light4].filter((l) => l?.state === 'on').length;
@@ -139,10 +144,24 @@ function BadgeBar() {
         icon={Zap}
         onClick={() => open('sensor.inverter_power_24v', 'Inverter Power', 'W')}
       />
+      {/* Speed is only meaningful when the dish is actually up — otherwise show
+          WHY it's down (Offline / Recovering / Sleeping) instead of "— Mbps". */}
       <BadgeItem
         label="Internet"
-        value={`${fmt(dlSpeed, 0)} Mbps`}
-        color={v(dlSpeed) > 50 ? 'text-green-500' : v(dlSpeed) > 10 ? 'text-orange-500' : 'text-red-500'}
+        value={starlinkOnline ? `${fmt(dlSpeed, 0)} Mbps` : starlinkStatus}
+        color={
+          starlinkOnline
+            ? v(dlSpeed) > 50
+              ? 'text-green-500'
+              : v(dlSpeed) > 10
+                ? 'text-orange-500'
+                : 'text-red-500'
+            : starlinkStatus === 'Offline'
+              ? 'text-red-500'
+              : starlinkStatus === 'Recovering'
+                ? 'text-orange-500'
+                : 'text-muted-foreground'
+        }
         icon={Wifi}
         onClick={() => open('sensor.starlink_downlink_throughput_mbps', 'Internet Speed', 'Mbps')}
       />
@@ -317,6 +336,7 @@ export default function Home() {
   return (
     <PageContainer title="Home">
       <ReadyToDriveBanner />
+      <StarlinkBanner />
       <BadgeBar />
       <PresenceBar />
 
@@ -338,6 +358,7 @@ export default function Home() {
           <ThermostatControl />
           <HeatingControls />
           <FanControl />
+          <ShoeDryerCard />
         </div>
 
         {/* Column 2: Power */}

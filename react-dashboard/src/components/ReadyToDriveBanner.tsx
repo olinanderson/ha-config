@@ -46,6 +46,7 @@ export function ReadyToDriveBanner() {
   const inverter = useEntity('binary_sensor.shelly_em_reachable');
 
   const override = useEntity('input_boolean.rtd_guard_override');
+  const shopMode = useEntity('input_boolean.shop_mode');
   const call = useService();
   const toggleOverride = useToggle('input_boolean.rtd_guard_override');
 
@@ -65,6 +66,12 @@ export function ReadyToDriveBanner() {
     { id: 'input_boolean.shore_power_charger_enabled', label: 'Shore charger enabled', on: isOn(shore?.state), canOff: true },
     { id: 'binary_sensor.shelly_em_reachable', label: 'Inverter on', on: isOn(inverter?.state), canOff: false },
   ].filter((x) => x.on);
+
+  // Shop Mode suppresses the guard entirely. The shop WILL start the engine and
+  // test-drive it, and a teardown checklist for a van you are not camping in is
+  // pure noise — the HA-side rtd_guard_* automations are already disabled by
+  // script.shop_mode_apply, so this keeps the client-side copy consistent.
+  if (isOn(shopMode?.state)) return null;
 
   // Only surface the guard when actually heading toward a drive.
   const gearState = gear?.state;

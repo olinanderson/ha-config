@@ -2,6 +2,7 @@ import { useEffect, useState, useCallback, useRef, type ComponentType } from 're
 import { HassProvider, useHassStore } from '@/context/HomeAssistantContext';
 import { HistoryDialogProvider } from '@/components/EntityHistoryDialog';
 import { DTCDialogProvider } from '@/components/DTCDialog';
+import { ShopModeBanner } from '@/components/ShopModeBanner';
 import { PortalProvider } from '@/context/PortalContext';
 import { cn } from '@/lib/utils';
 import {
@@ -158,11 +159,17 @@ export default function App() {
               ))}
             </div>
           </nav>
+          {/* Shop Mode — global strip, because while it is armed nothing on any
+              page responds and the dashboard otherwise just looks broken. */}
+          <ShopModeBanner />
           {/* Page content */}
           <div className={`flex-1 ${page === 'map' ? 'overflow-hidden' : 'overflow-auto'}`}>
-            {/* Cameras always mounted — hidden when not active to preserve WebRTC */}
+            {/* Cameras stays mounted so channel/timeline state survives tab
+                switches, but `active` gates the actual MSE streams — otherwise
+                4 HD feeds keep decoding in the background from every tab and
+                the renderer eventually gets OOM-killed (blank screen). */}
             <div className={page === 'cameras' ? '' : 'hidden'}>
-              <Cameras />
+              <Cameras active={page === 'cameras'} />
             </div>
             {page !== 'cameras' && <Page />}
           </div>

@@ -830,10 +830,25 @@ class ProxyHandler(BaseHTTPRequestHandler):
                 # than the integer SOC delta). Can be negative if loads outran
                 # the charger on a short hop.
                 if wh_start is not None and wh_end is not None:
+                    full_wh = _battery_full_wh_cached(ha_con)
                     gain_wh = round(wh_end - wh_start)
                     trip["battery_gain_wh"]  = gain_wh
-                    trip["battery_gain_pct"] = round(
-                        gain_wh / _battery_full_wh_cached(ha_con) * 100, 1)
+                    trip["battery_gain_pct"] = round(gain_wh / full_wh * 100, 1)
+                    # Absolute pack state at both endpoints, not just the delta.
+                    # Without these a consumer cannot tell "charged slowly" from
+                    # "had no headroom left to charge" — a trip starting at 88%
+                    # spends most of its time in LiFePO4 absorption taper and
+                    # posts a low %/h that says nothing about how fast a LOW pack
+                    # refills. sensor.average_drive_charge_rate needs this to
+                    # filter on headroom rather than on gain alone.
+                    #
+                    # end_pct can exceed 100: the BMS re-baselines its coulomb
+                    # count when it detects a full pack, which shows up here as a
+                    # step increase in stored_energy that is bookkeeping, not
+                    # charge. Callers should treat end_pct > 100 as a resync
+                    # artifact and drop the trip.
+                    trip["battery_start_pct"] = round(wh_start / full_wh * 100, 1)
+                    trip["battery_end_pct"]   = round(wh_end / full_wh * 100, 1)
 
                 # ── Primary economy: OBD fuel-rate integral ÷ GPS distance ──
                 # Uses the new u-blox GPS distance + OBD speed-density litres;

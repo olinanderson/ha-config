@@ -139,18 +139,28 @@ export async function fetchFilteredGps(
 export async function fetchNamedPlaces(signal?: AbortSignal): Promise<NamedPlace[]> {
   const h = await authHeaders();
   if (!h) return [];
-  const r = await fetch(`${API_BASE()}/vanlife/named-places`, { signal, headers: h });
-  if (!r.ok) return [];
-  const d = await r.json();
-  return d.places ?? [];
+  // Network failure = same as HTTP failure: no places. Callers use this
+  // fire-and-forget, so a rejection would surface as an unhandled rejection.
+  try {
+    const r = await fetch(`${API_BASE()}/vanlife/named-places`, { signal, headers: h });
+    if (!r.ok) return [];
+    const d = await r.json();
+    return d.places ?? [];
+  } catch {
+    return [];
+  }
 }
 
 export async function fetchDataRange(signal?: AbortSignal): Promise<DataRange | null> {
   const h = await authHeaders();
   if (!h) return null;
-  const r = await fetch(`${API_BASE()}/vanlife/data-range`, { signal, headers: h });
-  if (!r.ok) return null;
-  return r.json();
+  try {
+    const r = await fetch(`${API_BASE()}/vanlife/data-range`, { signal, headers: h });
+    if (!r.ok) return null;
+    return await r.json();
+  } catch {
+    return null;
+  }
 }
 
 export async function fetchFuelTrips(

@@ -1,6 +1,7 @@
 import { PageContainer } from '@/components/layout/PageContainer';
 import { CurrentTripCard } from '@/components/CurrentTripCard';
 import { FuelTripHistory } from '@/components/FuelTripHistory';
+import { StarlinkBanner, StarlinkBadge } from '@/components/StarlinkStatus';
 import { SparklineStat, ClickableValue } from '@/components/ClickableValue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
@@ -363,8 +364,15 @@ function MainHeroCard() {
   // Power / battery
   const { value: soc } = useEntityNumeric('sensor.olins_van_bms_battery');
   const { value: battCurrent } = useEntityNumeric('sensor.olins_van_bms_current');
+  const { value: battPower } = useEntityNumeric('sensor.olins_van_bms_power');
+  const { value: battVoltage } = useEntityNumeric('sensor.olins_van_bms_voltage');
   const { value: battTemp } = useEntityNumeric('sensor.olins_van_bms_temperature');
   const { value: storedWh } = useEntityNumeric('sensor.olins_van_bms_stored_energy');
+  // Avg battery %/h across the last 20 drives (vanlife-proxy REST sensor) —
+  // shown in the battery tile while the engine runs, as "what to expect". Net
+  // pack change (solar in, loads out); negative means drives have been
+  // DRAINING the pack, which is the DC-DC-failure symptom worth surfacing.
+  const { value: driveChargeRate } = useEntityNumeric('sensor.average_drive_charge_rate');
   const { value: solarA } = useEntityNumeric('sensor.total_mppt_output_current');
   const estimateEntity = useEntity('sensor.battery_time_estimate');
   const ecoEntity = useEntity('input_boolean.power_saving_mode');
@@ -387,6 +395,13 @@ function MainHeroCard() {
   const socColor = (soc ?? 0) < 20 ? 'text-red-500' : (soc ?? 0) < 40 ? 'text-orange-400' : 'text-green-400';
   const battCurrentVal = battCurrent ?? 0;
   const battColor = battCurrentVal > 0 ? 'text-green-400' : battCurrentVal < -5 ? 'text-orange-400' : 'text-foreground';
+  // Watts into (+) / out of (−) the pack, shown under the amps so you can see
+  // whether the charger actually backs off as SOC climbs or just holds power
+  // while the current falls. BMS power is signed; fall back to I×V if that
+  // entity is missing so the sub-line never blanks on its own.
+  const battWatts =
+    battPower ?? (battCurrent != null && battVoltage != null ? battCurrent * battVoltage : null);
+  const battWattsRounded = battWatts != null ? Math.round(battWatts) : null;
   const solarActive = (solarA ?? 0) > 0.5;
   const coolantColor = coolantTempColor(coolant);
   const transColor = transTempColor(transTemp);
@@ -444,10 +459,33 @@ function MainHeroCard() {
                 <p className="text-[9px] tabular-nums text-muted-foreground/70">
                   {storedWh != null ? `${Math.round(storedWh)} Wh` : '—'}
                 </p>
+                {engineRunning && driveChargeRate != null && (
+                  <p
+                    className={cn(
+                      'text-[9px] font-medium tabular-nums',
+                      driveChargeRate >= 0 ? 'text-green-400/90' : 'text-orange-400',
+                    )}
+                    title="Avg battery %/h over your last 20 drives — net of solar input and house loads"
+                  >
+                    ≈{driveChargeRate >= 0 ? '+' : ''}{driveChargeRate.toFixed(1)}%/h driving
+                  </p>
+                )}
               </div>
               <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.olins_van_bms_current', 'Battery Current', 'A')}>
                 <p className={cn('text-3xl font-bold tabular-nums', battColor)}>{fmt(battCurrent, 1)}</p>
                 <p className="text-[10px] text-muted-foreground">Amps</p>
+                <p
+                  className="text-[9px] tabular-nums text-muted-foreground/70 transition-colors hover:text-muted-foreground"
+                  title="Watts into (+) or out of (−) the pack — tap for history"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    open('sensor.olins_van_bms_power', 'Battery Power', 'W');
+                  }}
+                >
+                  {battWattsRounded != null
+                    ? `${battWattsRounded > 0 ? '+' : ''}${battWattsRounded === 0 ? 0 : battWattsRounded} W`
+                    : '—'}
+                </p>
               </div>
               <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.olins_van_bms_temperature', 'Battery Temp', '°C')}>
                 <p className={cn('text-3xl font-bold tabular-nums', battTempColor(battTemp))}>{fmt(battTemp, 0)}°</p>
@@ -464,10 +502,15 @@ function MainHeroCard() {
 
           {/* ── Driving vitals ── */}
           <div className="pt-4 sm:pt-0 sm:pl-4">
-            <span className="mb-2 flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
-              <Gauge className="h-3.5 w-3.5" />
-              Driving
-            </span>
+            <div className="mb-2 flex items-center justify-between">
+              <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
+                <Gauge className="h-3.5 w-3.5" />
+                Driving
+              </span>
+              {/* PoE converter lockup this covers happens while driving, so this
+                  is where you'll be looking when it bites. */}
+              <StarlinkBadge className="font-mono text-[10px]" />
+            </div>
 
             {/* The three temperatures — each its own slot so they read as peers. */}
             <div className="grid grid-cols-3 gap-2 text-center">
@@ -582,6 +625,7 @@ export default function Van() {
   return (
     <PageContainer title="Van & Vehicle">
       <DTCBanner placement="top" />
+      <StarlinkBanner />
       <MainHeroCard />
       <div className="mt-4">
         <CurrentTripCard />

@@ -131,7 +131,12 @@ function OverallTile({
       <div className="mt-2 flex items-center justify-between border-t border-foreground/10 pt-1.5 text-[11px] tabular-nums">
         {hasTrip ? (
           <>
-            <span className="text-muted-foreground">avg {avg != null ? avg.toFixed(1) : '—'}</span>
+            <span className="text-muted-foreground">
+              avg{' '}
+              <span className="text-base font-semibold text-foreground/90">
+                {avg != null ? avg.toFixed(1) : '—'}
+              </span>
+            </span>
             {delta != null ? (
               Math.abs(delta) < 0.05 ? (
                 <span className="text-muted-foreground">on par</span>
@@ -229,7 +234,12 @@ function BandTile({
       <div className="mt-1.5 flex flex-wrap items-center justify-between gap-x-1 border-t border-foreground/10 pt-1 text-[10px] tabular-nums">
         {hasTrip ? (
           <>
-            <span className="text-muted-foreground">avg {avg != null ? avg.toFixed(1) : '—'}</span>
+            <span className="text-muted-foreground">
+              avg{' '}
+              <span className="text-sm font-semibold text-foreground/90">
+                {avg != null ? avg.toFixed(1) : '—'}
+              </span>
+            </span>
             {delta != null ? (
               Math.abs(delta) < 0.05 ? (
                 <span className="text-muted-foreground">on par</span>
