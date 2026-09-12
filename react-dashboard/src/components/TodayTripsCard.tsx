@@ -5,6 +5,7 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import L from 'leaflet';
+import { cartoTiles } from '@/lib/carto';
 import 'leaflet/dist/leaflet.css';
 import { Card, CardContent } from '@/components/ui/card';
 import { Map as MapIcon, Loader2 } from 'lucide-react';
@@ -99,7 +100,7 @@ export function TodayTripsCard() {
       keyboard: false,
       touchZoom: false,
     }).setView([39.5, -98.35], 4);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    L.tileLayer(cartoTiles('rastertiles/voyager'), {
       maxZoom: 19,
     }).addTo(map);
     layerRef.current = L.layerGroup().addTo(map);

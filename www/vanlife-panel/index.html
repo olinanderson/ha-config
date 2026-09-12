@@ -961,7 +961,9 @@ function initMap() {
   const vanPos = getVanLocation();
   _map = L.map("vl-map", { zoomControl: true }).setView(vanPos || [39.5, -98.35], vanPos ? 13 : 4);
   L.tileLayer(
-    "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png",
+    // CARTO watermarks keyless raster tiles since Aug 2026; the key is public
+    // (it rides in the tile URL). Shared with react-dashboard/src/lib/carto.ts.
+    "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=cb1_3ijq_1_b3eca1cfab0a6b9f89186b05",
     { attribution: "&copy; OpenStreetMap &copy; CARTO", maxZoom: 19 }
   ).addTo(_map);
   _routeLayer = L.layerGroup().addTo(_map);

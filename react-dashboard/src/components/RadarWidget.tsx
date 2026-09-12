@@ -6,6 +6,7 @@ import { useState, useEffect, useRef } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { CloudRain, X, Play, Pause, ChevronLeft, ChevronRight, ChevronUp } from 'lucide-react';
 import L from 'leaflet';
+import { cartoTiles } from '@/lib/carto';
 
 interface RadarFrame {
   time: number;
@@ -70,7 +71,7 @@ function RadarLeafletMap({ frame, lat, lon }: { frame: RadarFrame | null; lat: n
       keyboard: false,
     }).setView([lat, lon], 6);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', {
+    L.tileLayer(cartoTiles('dark_nolabels'), {
       maxZoom: 10,
     }).addTo(map);
 

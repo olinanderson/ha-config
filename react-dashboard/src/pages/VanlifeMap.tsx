@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, useCallback, useMemo } from 'react';
 import L from 'leaflet';
+import { cartoTiles } from '@/lib/carto';
 import 'leaflet/dist/leaflet.css';
 import { useEntity } from '@/hooks/useEntity';
 import {
@@ -250,7 +251,7 @@ export default function VanlifeMap() {
     const startZoom = vanPos ? 13 : 4;
 
     const map = L.map(mapRef.current, { zoomControl: true }).setView(startPos, startZoom);
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png', {
+    L.tileLayer(cartoTiles('rastertiles/voyager'), {
       attribution: '&copy; OpenStreetMap &copy; CARTO',
       maxZoom: 19,
     }).addTo(map);

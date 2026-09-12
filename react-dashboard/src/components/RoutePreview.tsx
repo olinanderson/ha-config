@@ -5,6 +5,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useEntity } from '@/hooks/useEntity';
 import { fetchFilteredGps } from '@/lib/vanlife-api';
+import { cartoTiles } from '@/lib/carto';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { MapPin, Navigation, ExternalLink } from 'lucide-react';
 
@@ -43,7 +44,7 @@ export function RoutePreview({ onNavigateToMap, tall = false }: { onNavigateToMa
         keyboard: false,
       });
 
-      L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png', {
+      L.tileLayer(cartoTiles('dark_all'), {
         maxZoom: 19,
       }).addTo(map);
 

@@ -15,7 +15,9 @@ views:
           - type: custom:map-card
             card_size: 10
             zoom: 8
-            tile_layer_url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+            # CARTO watermarks keyless raster tiles since Aug 2026; the key is public
+            # (it rides in the tile URL). Shared with react-dashboard/src/lib/carto.ts.
+            tile_layer_url: "https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png?key=cb1_3ijq_1_b3eca1cfab0a6b9f89186b05"
             tile_layer_attribution: "&copy; OpenStreetMap &copy; CARTO"
             entities:
               - entity: device_tracker.vanlife_tracker_van_location

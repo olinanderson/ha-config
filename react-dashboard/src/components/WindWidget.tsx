@@ -6,6 +6,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Wind, X, ChevronUp } from 'lucide-react';
 import L from 'leaflet';
+import { cartoTiles } from '@/lib/carto';
 
 interface WindPoint {
   lat: number;
@@ -150,7 +151,7 @@ function WindLeafletMap({ lat, lon, zoom = 6, height = 'h-52' }: { lat: number; 
       keyboard: false,
     }).setView([lat, lon], zoom);
 
-    L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_nolabels/{z}/{x}/{y}{r}.png', { maxZoom: 12 }).addTo(map);
+    L.tileLayer(cartoTiles('dark_nolabels'), { maxZoom: 12 }).addTo(map);
 
     // Current position dot
     const icon = L.divIcon({
