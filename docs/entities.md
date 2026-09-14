@@ -107,6 +107,12 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor, plus `sensor.mppt1_
 | `input_boolean.hot_water_mode` | Hot water mode |
 | `input_boolean.heater_low_fuel_lockout` | Low fuel lockout |
 
+## a32-Pro I/O Diagnostics
+| Entity | Description |
+|---|---|
+| `binary_sensor.a32_pro_di33_40_expander_fault` | ON while the DI33–40 rocker expander (PCF8574 @ I²C 0x23) reads "all rockers pressed" — an I²C fault, not presses; the firmware ignores them, re-inits the chip and restarts if it stays faulted |
+| `sensor.a32_pro_di33_40_expander_faults` | Count of those faults since flash (kept across reboots) |
+
 ## Roof Fan
 | Entity | Description |
 |---|---|

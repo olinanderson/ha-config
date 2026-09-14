@@ -445,6 +445,21 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 | `button.a32_pro_inverter_on_off_toggle` | Inverter toggle (momentary) |
 | `binary_sensor.192_168_10_174` | Shelly EM ping → inverter AC is live |
 
+### a32-Pro rocker expander fault guard (DI33–40)
+DI33–DI40 (outdoor-light rockers, heater rocker, grey-water valve, LPG valve, bed power,
+bed down) sit on a PCF8574 at I²C 0x23 — a 1-bit address neighbour of both XL9535
+relay chips (0x21/0x22). Twice (2026-09-04, 2026-09-14) it read "all eight pressed"
+in one instant and stayed there until a reset: LPG + grey-water valves opened, the bed
+drove down, the heater toggled, and the rockers went dead (a stuck-pressed rocker can't
+press again). Both a failed I²C read and a latch corrupted low read back as all-LOW =
+all pressed; the 32 XL9535 inputs were fine both times. The firmware treats ≥ 5
+simultaneous inputs as a fault (`a32::pcf_active_count` in `esphome/a32_helpers.h`):
+the DI33–40 handlers ignore the presses, and a 1 s monitor rewrites the chip's port
+after 2 s (what a reboot's setup does) and restarts the board after 10 s — never within
+10 min of boot. `binary_sensor.a32_pro_di33_40_expander_fault` and
+`sensor.a32_pro_di33_40_expander_faults` show it in HA. If the counter keeps climbing,
+next knobs are the I²C clock (400 kHz in `i2c:`) and the chip's address jumpers.
+
 ### Vehicle / OBD — WiCAN Pro via MQTT
 
 The WiCAN Pro connects via **MQTT** to `core-mosquitto` (192.168.10.173:1883). Entities are

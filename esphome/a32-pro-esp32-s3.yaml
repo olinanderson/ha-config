@@ -3,6 +3,9 @@ esphome:
   friendly_name: a32-Pro
   platformio_options:
     board_build.flash_mode: dio
+  # C++ helpers shared by the lambdas below (DI33-40 expander sanity check).
+  includes:
+    - a32_helpers.h
 
 # Hydronic heater monitor / blower gate constants that aren't worth a HA
 # entity. The user-tunable thresholds (blower start temp, heater OK temp, max
@@ -21,6 +24,10 @@ substitutions:
   # Blower gate hysteresis: the blower stops once coolant falls this far below
   # the start temp, so residual heat still gets blown into the van.
   blower_gate_hysteresis_c: "10.0"
+  # DI33-40 (PCF8574 rocker expander): this many inputs active at once is
+  # treated as an I2C fault rather than as presses. Real use is 1-2 rockers;
+  # a failed read or a corrupted latch shows all 8 (2026-09-04, 2026-09-14).
+  pcf_fault_min_pins: "5"
 
 external_components:
   - source: github://Fabian-Schmidt/esphome-victron_ble
@@ -875,6 +882,16 @@ binary_sensor:
     device_class: heat
     entity_category: diagnostic
 
+  # ON while the DI33-40 rocker expander (PCF8574 @0x23) reads an impossible
+  # "all rockers pressed" - an I2C fault, not presses. The rocker handlers
+  # ignore presses in that state and the monitor under `interval:` re-inits
+  # the chip / restarts the board. Published from that monitor.
+  - platform: template
+    name: "DI33-40 Expander Fault"
+    id: pcf_fault_sensor
+    device_class: problem
+    entity_category: diagnostic
+
   # Follow HA's Shop Mode toggle. Arming input_boolean.shop_mode drives the
   # firmware-level lockout above, so both stay in step from a single switch.
   - platform: homeassistant
@@ -1267,7 +1284,10 @@ binary_sensor:
     on_press:
       - if:
           condition:
-            switch.is_off: shop_lockout
+            and:
+              - switch.is_off: shop_lockout
+              # Not while the DI33-40 expander reads "all pressed" (I2C fault).
+              - lambda: 'return a32::pcf_active_count(id(pcf8574_in_3)) < ${pcf_fault_min_pins};'
           then:
             - switch.toggle: left_outdoor_lights_on_off
     filters:
@@ -1284,7 +1304,10 @@ binary_sensor:
     on_press:
       - if:
           condition:
-            switch.is_off: shop_lockout
+            and:
+              - switch.is_off: shop_lockout
+              # Not while the DI33-40 expander reads "all pressed" (I2C fault).
+              - lambda: 'return a32::pcf_active_count(id(pcf8574_in_3)) < ${pcf_fault_min_pins};'
           then:
             - switch.toggle: right_outdoor_lights_on_off
     filters:
@@ -1301,7 +1324,10 @@ binary_sensor:
     on_press:
       - if:
           condition:
-            switch.is_off: shop_lockout
+            and:
+              - switch.is_off: shop_lockout
+              # Not while the DI33-40 expander reads "all pressed" (I2C fault).
+              - lambda: 'return a32::pcf_active_count(id(pcf8574_in_3)) < ${pcf_fault_min_pins};'
           then:
             - switch.toggle: hydronic_heater_on_off
     filters:
@@ -1318,7 +1344,10 @@ binary_sensor:
     on_press:
       - if:
           condition:
-            switch.is_off: shop_lockout
+            and:
+              - switch.is_off: shop_lockout
+              # Not while the DI33-40 expander reads "all pressed" (I2C fault).
+              - lambda: 'return a32::pcf_active_count(id(pcf8574_in_3)) < ${pcf_fault_min_pins};'
           then:
             - switch.toggle: grey_water_tank_valve_open_closed
     filters:
@@ -1335,7 +1364,10 @@ binary_sensor:
     on_press:
       - if:
           condition:
-            switch.is_off: shop_lockout
+            and:
+              - switch.is_off: shop_lockout
+              # Not while the DI33-40 expander reads "all pressed" (I2C fault).
+              - lambda: 'return a32::pcf_active_count(id(pcf8574_in_3)) < ${pcf_fault_min_pins};'
           then:
             - switch.toggle: LPG_valve
     filters:
@@ -1352,7 +1384,10 @@ binary_sensor:
     on_press:
       - if:
           condition:
-            switch.is_off: shop_lockout
+            and:
+              - switch.is_off: shop_lockout
+              # Not while the DI33-40 expander reads "all pressed" (I2C fault).
+              - lambda: 'return a32::pcf_active_count(id(pcf8574_in_3)) < ${pcf_fault_min_pins};'
           then:
             - switch.toggle: bed_power_supply_on_off
     filters:
@@ -1383,6 +1418,8 @@ binary_sensor:
             and:
               - switch.is_off: shop_lockout
               - binary_sensor.is_on: di_40
+              # Not while the DI33-40 expander reads "all pressed" (I2C fault).
+              - lambda: 'return a32::pcf_active_count(id(pcf8574_in_3)) < ${pcf_fault_min_pins};'
           then:
             - switch.turn_on: bed_down_on_off
           else:
@@ -1603,6 +1640,22 @@ globals:
     restore_value: no
     initial_value: 'false'
 
+  # DI33-40 expander fault monitor (interval:): true while the PCF8574 reads
+  # an impossible "everything pressed"; ticks = consecutive 1 s checks in that
+  # state; count = faults seen since flash (kept across reboots).
+  - id: pcf_fault
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: pcf_fault_ticks
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: pcf_fault_count
+    type: int
+    restore_value: yes
+    initial_value: '0'
+
 number:
   # Hydronic heater / blower tuning. Restored across reboots. Defaults come
   # from the 2026-09 history: a lit burner lifts the HX#1 sensor ~12 °C/min,
@@ -1655,6 +1708,57 @@ number:
     optimistic: true
 
 interval:
+  ########################################################################
+  #  DI33-40 rocker expander (PCF8574 @0x23) fault monitor               #
+  #                                                                      #
+  #  Twice (2026-09-04, 2026-09-14) all eight inputs on this chip read   #
+  #  "pressed" in the same instant and stayed that way until the board   #
+  #  was reset: the LPG and grey-water valves opened, the bed drove down #
+  #  and the heater toggled, and the rockers were dead afterwards. The   #
+  #  32 XL9535 inputs were fine both times, so it is the PCF8574 being   #
+  #  upset on the I2C bus (its output latch driven low, or the chip not  #
+  #  answering - both read back as all-LOW = all pressed). Every 1 s:    #
+  #    * >= pcf_fault_min_pins active -> fault. The rocker handlers      #
+  #      already ignore presses in this state (a32::pcf_active_count).   #
+  #    * 2 s in: rewrite the chip's port to all-high (what a reboot's    #
+  #      setup does) - clears a corrupted latch without a restart.       #
+  #    * 10 s in (then every 60 s): still faulted -> restart the board   #
+  #      (relays hold through a reboot), but never within 10 min of      #
+  #      boot so a dead chip cannot put the board in a restart loop.     #
+  ########################################################################
+  - interval: 1s
+    then:
+      - lambda: |-
+          int active = a32::pcf_active_count(id(pcf8574_in_3));
+          if (active >= ${pcf_fault_min_pins}) {
+            int ticks = ++id(pcf_fault_ticks);
+            if (ticks == 2) {
+              id(pcf_fault) = true;
+              id(pcf_fault_count) += 1;
+              id(pcf_fault_sensor).publish_state(true);
+              id(pcf_fault_count_sensor).publish_state(id(pcf_fault_count));
+              ESP_LOGE("PCF8574", "%d of 8 DI33-40 inputs active at once -> expander fault #%d, rewriting its port.",
+                       active, id(pcf_fault_count));
+              id(pcf8574_in_3).pin_mode(0, gpio::FLAG_INPUT);   // write_gpio_(): every pin back to input/high
+            } else if (ticks >= 10 && (ticks == 10 || ticks % 60 == 0)) {
+              if (millis() > 600000) {
+                ESP_LOGE("PCF8574", "DI33-40 expander still faulted %d s after re-init -> restarting the board.", ticks);
+                id(restart_a32).press();
+              } else {
+                ESP_LOGE("PCF8574", "DI33-40 expander still faulted (%d s) but uptime < 10 min -> not restarting yet.", ticks);
+              }
+            }
+            return;
+          }
+          if (id(pcf_fault)) {
+            ESP_LOGW("PCF8574", "DI33-40 expander reads normal again (%d active) after %d s.", active, id(pcf_fault_ticks));
+          }
+          id(pcf_fault_ticks) = 0;
+          if (id(pcf_fault) || !id(pcf_fault_sensor).has_state()) {
+            id(pcf_fault) = false;
+            id(pcf_fault_sensor).publish_state(false);
+          }
+
   ########################################################################
   #  Hydronic heater warm-up / health monitor                            #
   #                                                                      #
@@ -2811,6 +2915,17 @@ sensor:
     id: system_uptime
     name: "System Uptime"
     update_interval: 1s
+
+  # Faults caught by the DI33-40 expander monitor (interval:), since flash.
+  - platform: template
+    name: "DI33-40 Expander Faults"
+    id: pcf_fault_count_sensor
+    icon: mdi:alert-circle-outline
+    state_class: total_increasing
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: 'return id(pcf_fault_count);'
 
 
 web_server:
