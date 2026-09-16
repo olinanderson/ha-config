@@ -625,7 +625,14 @@ function TrendsCard() {
               </span>
             </div>
           ) : (
-            <HistoryChart data={data} unit={metric.unit} color={metric.color} height={280} trend />
+            <HistoryChart
+              key={`${metric.key}:${hours}:${useStats ? 'stats' : 'history'}`}
+              data={data}
+              unit={metric.unit}
+              color={metric.color}
+              height={280}
+              trend
+            />
           )}
         </div>
       </CardContent>

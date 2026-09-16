@@ -92,16 +92,69 @@ function niceStep(range: number, ticks: number): number {
   return 10 * mag;
 }
 
+// Zoom window. A live window ends on the newest sample and slides forward as
+// live points arrive; any other window stays where the user put it.
+interface ViewWindow {
+  lo: number;
+  hi: number;
+  live: boolean;
+}
+
+// A zoom or pan that ends this close to the newest sample (as a fraction of
+// the window) snaps onto it. Wheel and pinch zooms pivot on the pointer, so
+// zooming in near the right edge otherwise stops just short of "now".
+const LIVE_EDGE_SNAP = 0.03;
+
+// Place a window on the current data: live windows are pinned to the newest
+// sample, others are kept inside the data as useHistory trims old points.
+// Null = show everything.
+function resolveView(view: ViewWindow | null, data: HistoryPoint[]): [number, number] | null {
+  if (!view || data.length < 2) return null;
+  const first = data[0].t;
+  const last = data[data.length - 1].t;
+  const span = view.hi - view.lo;
+  if (span >= last - first) return null;
+  const lo = view.live ? last - span : Math.min(Math.max(view.lo, first), last - span);
+  return [lo, lo + span];
+}
+
+// Zoom survives data updates. Key the chart on the series (entity + range) so
+// a new fetch starts unzoomed.
 export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6', unit = '', trend = false }: ChartProps) {
   const [hoverIdx, setHoverIdx] = useState<number | null>(null);
   const svgRef = useRef<SVGSVGElement>(null);
-  const [viewRange, setViewRange] = useState<[number, number] | null>(null);
-  // Live ref for viewRange — updated immediately so rapid touch events don't read stale state
-  const viewRangeRef = useRef<[number, number] | null>(null);
+  const [view, setView] = useState<ViewWindow | null>(null);
+  // Live ref for the window — updated immediately so rapid touch events don't read stale state
+  const viewRef = useRef<ViewWindow | null>(null);
+
+  // Ref for stable native event handlers (avoids re-attaching on every state change)
+  const stateRef = useRef({ data, width });
+  stateRef.current = { data, width };
+
   const setViewRangeLive = useCallback((range: [number, number] | null) => {
-    viewRangeRef.current = range;
-    setViewRange(range);
+    const { data } = stateRef.current;
+    let next: ViewWindow | null = null;
+    if (range && data.length >= 2) {
+      const [lo, hi] = range;
+      // Gestures clamp to the newest sample, so the margin only absorbs float
+      // noise. A wider one would pull slow touch pans back onto the edge.
+      next = { lo, hi, live: hi >= data[data.length - 1].t - (hi - lo) * 1e-6 };
+    }
+    viewRef.current = next;
+    setView(next);
   }, []);
+
+  // End of a gesture: a window left just short of the newest sample snaps onto it.
+  const settleViewRange = useCallback(() => {
+    const v = viewRef.current;
+    const { data } = stateRef.current;
+    if (!v || v.live || data.length < 2) return;
+    if (data[data.length - 1].t - v.hi > (v.hi - v.lo) * LIVE_EDGE_SNAP) return;
+    viewRef.current = { ...v, live: true };
+    setView(viewRef.current);
+  }, []);
+
+  const viewRange = useMemo(() => resolveView(view, data), [view, data]);
 
   // Drag-to-pan refs (mouse)
   const isDragging = useRef(false);
@@ -109,27 +162,9 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
   const dragStartX = useRef(0);
   const dragStartRange = useRef<[number, number] | null>(null);
 
-  // Ref for stable native event handlers (avoids re-attaching on every state change)
-  const stateRef = useRef({ data, width });
-  stateRef.current = { data, width };
-
-  // Reset zoom only when the historical fetch range changes (time range button),
-  // NOT when live points are appended (which changes the last timestamp).
-  const dataId = data.length > 0 ? `${data[0].t}-${data.length}` : '';
-  const prevDataId = useRef(dataId);
-  const prevDataLen = useRef(data.length);
-  if (dataId !== prevDataId.current) {
-    // Only reset zoom if data shrank or first point changed (= new fetch), not if points were appended
-    const firstChanged = data.length > 0 && prevDataId.current !== '' && !prevDataId.current.startsWith(`${data[0].t}-`);
-    const dataShrunk = data.length < prevDataLen.current;
-    if ((firstChanged || dataShrunk) && viewRange) setViewRangeLive(null);
-    prevDataId.current = dataId;
-  }
-  prevDataLen.current = data.length;
-
   // Filter data to view range
   const visibleData = useMemo(() => {
-    if (!viewRange || data.length < 2) return data;
+    if (!viewRange) return data;
     const [lo, hi] = viewRange;
     return data.filter((p) => p.t >= lo && p.t <= hi);
   }, [data, viewRange]);
@@ -156,7 +191,7 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
     // Helper: apply zoom centered on a fraction
     const applyZoom = (zoomFactor: number, frac: number) => {
       const { data, width } = stateRef.current;
-      const viewRange = viewRangeRef.current;
+      const viewRange = resolveView(viewRef.current, data);
       if (data.length < 2) return;
       const fullMinT = data[0].t;
       const fullMaxT = data[data.length - 1].t;
@@ -207,6 +242,7 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
       const frac = pxFrac(toSvgX(e.clientX));
       const zoomFactor = e.deltaY > 0 ? 1.3 : 1 / 1.3;
       applyZoom(zoomFactor, frac);
+      settleViewRange();
     };
 
     // ─── Touch: incremental pinch-to-zoom + pan ───
@@ -238,7 +274,7 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
 
     const touchMoveHandler = (e: TouchEvent) => {
       const { data, width } = stateRef.current;
-      const viewRange = viewRangeRef.current;
+      const viewRange = resolveView(viewRef.current, data);
       if (data.length < 2) return;
       e.preventDefault();
 
@@ -325,6 +361,7 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
         touchState = 'idle';
         prevTouchA = null;
         prevTouchB = null;
+        settleViewRange();
       } else if (e.touches.length === 1 && touchState === 'pinch') {
         // Released one finger during pinch → seamless transition to pan
         touchState = 'pan';
@@ -438,6 +475,9 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
   // Shared pan logic (used by both SVG onMouseMove and window mousemove)
   const doPan = useCallback(
     (clientX: number) => {
+      // From the ref: this runs from listeners bound at mousedown, and live
+      // points can arrive mid-drag.
+      const { data, width } = stateRef.current;
       if (!svgRef.current || !dragStartRange.current || data.length < 2) return;
       const rect = svgRef.current.getBoundingClientRect();
       const scaleX = width / rect.width;
@@ -465,7 +505,7 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
         setViewRangeLive([newMin, newMax]);
       }
     },
-    [data, width, setViewRangeLive],
+    [setViewRangeLive],
   );
 
   const handleMouseMove = useCallback(
@@ -514,7 +554,7 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
       dragStartX.current = (e.clientX - rect.left) * scaleX;
       const fullMinT = data[0].t;
       const fullMaxT = data[data.length - 1].t;
-      dragStartRange.current = viewRangeRef.current ?? [fullMinT, fullMaxT];
+      dragStartRange.current = resolveView(viewRef.current, data) ?? [fullMinT, fullMaxT];
 
       // Attach window-level listeners so drag works outside SVG
       cleanupWindowDrag();
@@ -525,13 +565,14 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
       const onUp = () => {
         isDragging.current = false;
         cleanupWindowDrag();
+        settleViewRange();
       };
       windowMoveRef.current = onMove;
       windowUpRef.current = onUp;
       window.addEventListener('mousemove', onMove);
       window.addEventListener('mouseup', onUp);
     },
-    [data, viewRange, width, doPan, cleanupWindowDrag],
+    [data, width, doPan, cleanupWindowDrag, settleViewRange],
   );
 
   // Cleanup window drag on unmount

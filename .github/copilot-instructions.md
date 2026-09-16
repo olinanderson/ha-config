@@ -1268,8 +1268,7 @@ react-dashboard/
       WeatherCard.tsx      # Current conditions + 7-day forecast (WS subscription)
       TemperatureCard.tsx  # BME280 readings (4 zones)
       TankLevel.tsx        # Reusable tank bar (fresh/grey water)
-      HeatingControls.tsx  # PID thermostat + heater status
-      ThermostatControl.tsx # Temperature set-point control
+      HeaterCard.tsx       # Hydronic heater: thermostat, blower Auto/Manual, one Hot Water / Hydronic Heater switch, status
       FanControl.tsx       # Roof fan speed/direction/lid
       PowerBreakdown.tsx   # Per-circuit power consumption
       ToggleButton.tsx     # Animated toggle with glow/pulse when active

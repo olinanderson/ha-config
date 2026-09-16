@@ -1,15 +1,10 @@
 import { PageContainer } from '@/components/layout/PageContainer';
-import { HeatingControls } from '@/components/HeatingControls';
-import { ThermostatControl } from '@/components/ThermostatControl';
+import { HeaterCard } from '@/components/HeaterCard';
 import { AirConditionerCard } from '@/components/AirConditionerCard';
 import { TemperatureCard } from '@/components/TemperatureCard';
 import { FanControl } from '@/components/FanControl';
 import { BangBangControl } from '@/components/BangBangControl';
-import { Card, CardContent } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
-import { useEntity } from '@/hooks/useEntity';
-import { useToggle } from '@/hooks/useService';
-import { Battery, Droplets, Trash2, ShowerHead, ToggleLeft, Flame } from 'lucide-react';
+import { Battery, Droplets, Trash2, ShowerHead, Flame } from 'lucide-react';
 
 const zones = [
   {
@@ -34,39 +29,15 @@ const zones = [
   },
 ];
 
-function BlowerModeCard() {
-  const blowerMode = useEntity('switch.a32_pro_coolant_blower_mode_auto_manual');
-  const toggleMode = useToggle('switch.a32_pro_coolant_blower_mode_auto_manual');
-  const isAuto = blowerMode?.state === 'on';
-
-  return (
-    <Card>
-      <CardContent className="pt-4">
-        <div className="flex items-center justify-between">
-          <span className="text-sm flex items-center gap-1.5">
-            <ToggleLeft className="h-3.5 w-3.5" />
-            Blower Fan Mode
-          </span>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{isAuto ? 'Auto (PID)' : 'Manual'}</span>
-            <Switch checked={isAuto} onCheckedChange={toggleMode} />
-          </div>
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
-
 export default function Climate() {
 
   return (
     <PageContainer title="Climate & Heating">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {/* Column 1: Thermostat + AC + Heating System */}
+        {/* Column 1: Heater + AC */}
         <div className="space-y-4">
-          <ThermostatControl />
+          <HeaterCard />
           <AirConditionerCard />
-          <HeatingControls />
         </div>
 
         {/* Column 2: Temperatures + Freeze Protection */}
@@ -123,7 +94,6 @@ export default function Climate() {
         {/* Column 3: Fan + Controls + Air Fryer + Wind + Radar */}
         <div className="space-y-4">
           <FanControl />
-          <BlowerModeCard />
           <BangBangControl
             climateEntity="climate.a32_pro_air_fryer_ventilation_thermostat"
             enableEntity="switch.a32_pro_air_fryer_ventilation_enable"

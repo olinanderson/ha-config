@@ -165,7 +165,7 @@ function DialogContent({
         {loading ? (
           <div className="text-sm text-muted-foreground animate-pulse">Loading history…</div>
         ) : (
-          <HistoryChart data={data} unit={state.unit} />
+          <HistoryChart key={`${state.entityId}:${hours}`} data={data} unit={state.unit} />
         )}
       </div>
     </div>

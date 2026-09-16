@@ -3,13 +3,13 @@ import { BatteryCard } from '@/components/BatteryCard';
 import { SolarCard } from '@/components/SolarCard';
 import { TemperatureCard } from '@/components/TemperatureCard';
 import { TankLevel } from '@/components/TankLevel';
-import { ThermostatControl } from '@/components/ThermostatControl';
-import { HeatingControls } from '@/components/HeatingControls';
+import { HeaterCard } from '@/components/HeaterCard';
 import { FanControl } from '@/components/FanControl';
 import { ShoeDryerCard } from '@/components/ShoeDryerCard';
 import { PresenceBar } from '@/components/PresenceBar';
 import { ToggleButton } from '@/components/ToggleButton';
 import { LightControl } from '@/components/LightControl';
+import { SundownDimmingChip } from '@/components/SundownDimmingChip';
 import { InverterButton } from '@/components/InverterButton';
 import { StatusDot } from '@/components/StatusDot';
 import { TodayTripsCard } from '@/components/TodayTripsCard';
@@ -260,7 +260,10 @@ function QuickControls() {
 
       {/* Indoor lights */}
       <div>
-        <p className="text-xs text-muted-foreground font-medium mb-1.5">Indoor Lights</p>
+        <div className="flex items-center justify-between mb-1.5">
+          <p className="text-xs text-muted-foreground font-medium">Indoor Lights</p>
+          <SundownDimmingChip />
+        </div>
         <div className="grid grid-cols-2 gap-2">
           <LightControl entityId="light.led_controller_cct_1" name="Main" hasCct />
           <LightControl entityId="light.led_controller_cct_2" name="Cabinet" hasCct />
@@ -355,8 +358,7 @@ export default function Home() {
               humidityEntity="sensor.a32_pro_bme280_4_relative_humidity"
             />
           </div>
-          <ThermostatControl />
-          <HeatingControls />
+          <HeaterCard />
           <FanControl />
           <ShoeDryerCard />
         </div>

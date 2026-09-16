@@ -100,6 +100,15 @@ every heat session starts on Auto. That is also how the shoe dryer's climate res
 hands the blower back. With the thermostat off the blower is always manual, and the
 switch reads off. The dashboard's Heater card has the Auto / Manual buttons.
 
+The same card has a single **Hot Water / Hydronic Heater** switch in place of separate
+Switch24 and Hot Water Mode toggles, since both just run the burner without the
+thermostat. It drives `input_boolean.hot_water_mode`, and it also reads on whenever the
+burner runs with the thermostat off (e.g. started from the rocker, which sets Switch24's
+manual request). Turning it off in that case also turns Switch24 off, because Hot Water
+Mode off alone leaves a manual request burning. Turning it on is blocked while the
+supply is off, Shop Mode is armed, or the low-fuel lockout is active, since the a32 would
+ignore it.
+
 ## Low Fuel Lockout
 
 - **Trigger**: Heater never warms up after all restarts AND fuel < 25%
