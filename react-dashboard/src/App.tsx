@@ -4,6 +4,7 @@ import { HistoryDialogProvider } from '@/components/EntityHistoryDialog';
 import { DTCDialogProvider } from '@/components/DTCDialog';
 import { ShopModeBanner } from '@/components/ShopModeBanner';
 import { PortalProvider } from '@/context/PortalContext';
+import { ATTACHED_EVENT } from '@/lib/panel-host';
 import { cn } from '@/lib/utils';
 import {
   Home as HomeIcon,
@@ -121,7 +122,13 @@ export default function App() {
   useEffect(() => {
     const onHash = () => setPage(getPageFromHash());
     window.addEventListener('hashchange', onHash);
-    return () => window.removeEventListener('hashchange', onHash);
+    // The app survived a trip to another HA panel; the URL HA navigated back
+    // to may not carry our #page any more.
+    window.addEventListener(ATTACHED_EVENT, onHash);
+    return () => {
+      window.removeEventListener('hashchange', onHash);
+      window.removeEventListener(ATTACHED_EVENT, onHash);
+    };
   }, []);
 
   const navigate = useCallback((id: string) => {

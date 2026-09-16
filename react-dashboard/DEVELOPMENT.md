@@ -104,6 +104,7 @@ beforeEach(() => {
 | Leaflet CSS not loaded | Map shows broken tiles | Ensure `import 'leaflet/dist/leaflet.css'` in the page |
 | CORS on Open-Meteo/RainViewer | Console shows CORS errors | These are public APIs — only happens if blocked (van on cellular with filtering) |
 | Build succeeds but page is blank | JS runtime error | Check console for the actual error |
+| Panel blank after coming back to the tab | Sidebar shows, content area empty, fixed by reload | HA parks panels after 5 min hidden; `src/lib/panel-host.ts` restores them. See docs/react-dashboard.md "Panel Lifecycle" |
 
 ---
 
@@ -115,7 +116,7 @@ react-dashboard/
 │   ├── components/       # Reusable widgets (WindWidget, RadarWidget, etc.)
 │   ├── pages/            # Full pages (Home, Climate, Cameras, VanlifeMap, ...)
 │   ├── hooks/            # HA entity hooks, weather hooks, etc.
-│   ├── lib/              # Utilities, vanlife API client
+│   ├── lib/              # Utilities, vanlife API client, panel host (HA panel lifecycle)
 │   └── test/             # Vitest tests + setup
 ├── dist/                 # Built output (not committed)
 ├── vite.config.ts        # Vite build config

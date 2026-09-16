@@ -11,9 +11,10 @@ Registered via `panel_custom` as `<van-dashboard>` with hash-based tab routing.
 
 ```
 react-dashboard/
-  panel-loader.js          # Custom element registration + cache busting
+  panel-loader.js          # Custom element registration + cache busting (keep it thin)
   vite.config.ts           # Library mode build
   src/
+    main.tsx               # mount() for the loader + dev-mode WebSocket connector
     App.tsx                # Root: HassProvider → hash router → navbar + pages
     context/
       HomeAssistantContext.tsx  # HassStore + HassProvider
@@ -21,6 +22,7 @@ react-dashboard/
       useEntity.ts         # useEntity, useEntityNumeric, useEntities
       useHistory.ts        # Entity history from HA REST API
       useService.ts        # useToggle, useButtonPress
+    lib/panel-host.ts      # Keeps the React tree on screen through HA's panel lifecycle
     pages/                 # Home, Power, Climate, Water, Van, Cameras, System, etc.
     components/            # BatteryCard, SolarCard, WeatherCard, Chart, etc.
 ```
@@ -57,7 +59,30 @@ This builds via Vite and deploys `van-dashboard.js`, `van-dashboard.css`, and
 ### Cache Busting
 
 `panel-loader.js` uses `CACHE_VER = Date.now()` — automatic per page load.
-`configuration.yaml` `?v=N` only needs bumping when `panel-loader.js` itself changes.
+
+HA serves `/local/` with a 31-day cache, so browsers keep `panel-loader.js?v=16` for weeks.
+Leave `?v=N` alone (changing it needs an HA restart). When the loader changes, bump
+`window.__VAN_DASH_LOADER__` in `panel-loader.js` and `LOADER_VERSION` in `src/main.tsx`
+together. The bundle re-fetches an older loader past the cache, so the next page load
+gets the new one.
+
+## Panel Lifecycle (blank panel after returning to the tab)
+
+HA's frontend (checked on 2026.4) pulls the current panel out of the page after the tab has
+been hidden for 5 minutes (profile setting "Automatically close connection"). It puts the panel
+back when the tab is shown again. `<ha-panel-custom>` deletes its children when detached and
+doesn't rebuild on re-attach, so the dashboard used to stay blank until a reload.
+
+`src/lib/panel-host.ts` handles this:
+- one React tree per page, moved into whichever `<van-dashboard>` mounted last;
+- the tree stays alive while HA has the panel parked;
+- when the wrapper comes back empty, the element goes straight back in (no blank frame) and
+  `requestUpdate('panel', null)` makes HA build a wired element that takes over the tree;
+- after a navigation to another HA panel, the tree is unmounted if nothing takes it within 2 s.
+
+It also works with old loaders still in browser caches. Tests: `src/lib/panel-host.test.ts`.
+If this regresses after an HA update, check `ha-panel-custom` / `partial-panel-resolver` in the
+HA frontend first.
 
 ## CSS Scoping
 

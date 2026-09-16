@@ -12,12 +12,14 @@ interface State {
 }
 
 /** Auto-retry cadence and cap. After MAX_ATTEMPTS rapid crashes we stop
- *  auto-retrying: at that point retrying just burns CPU in a crash loop.
- *  (The panel-loader watchdog still hard-remounts the app as a last resort,
- *  and the user gets explicit "Try again" / "Reload page" buttons.) */
+ *  retrying quickly: at that point it just burns CPU in a crash loop. The
+ *  user gets explicit "Try again" / "Reload page" buttons, and as a last
+ *  resort we still try once every GAVE_UP_RETRY_MS, so a burst of transient
+ *  errors can't leave the panel stuck on the error screen. */
 const RETRY_DELAY_MS = 3000;
 const MAX_ATTEMPTS = 5;
 const EPISODE_RESET_MS = 30000;
+const GAVE_UP_RETRY_MS = 60000;
 
 /**
  * Top-level error boundary for the Van Dashboard.
@@ -57,14 +59,21 @@ export class ErrorBoundary extends Component<Props, State> {
 
     if (this._attempts > MAX_ATTEMPTS) {
       this.setState({ gaveUp: true });
+      this.scheduleRetry(GAVE_UP_RETRY_MS);
       return;
     }
 
+    this.scheduleRetry(RETRY_DELAY_MS);
+  }
+
+  private scheduleRetry(delayMs: number) {
     if (this._recoveryTimer) clearTimeout(this._recoveryTimer);
     this._recoveryTimer = setTimeout(() => {
       this._recoveryTimer = null;
-      this.setState({ hasError: false, error: null });
-    }, RETRY_DELAY_MS);
+      // A crash after the slow retry lands past EPISODE_RESET_MS, so it
+      // starts a fresh episode of quick retries.
+      this.setState({ hasError: false, error: null, gaveUp: false });
+    }, delayMs);
   }
 
   componentWillUnmount() {

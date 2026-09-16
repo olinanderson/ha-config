@@ -130,18 +130,52 @@ describe('HeaterCard — blower Auto / Manual', () => {
     expect(callService).toHaveBeenCalledWith('switch', 'turn_on', undefined, { entity_id: BLOWER_MODE });
   });
 
-  it('with the thermostat off the fan is manual and Auto is unavailable', () => {
-    entityRef.current = makeEntities({ climate: 'off', blowerMode: 'off', heater: 'on' });
+  it('with the thermostat off, Auto stops a fan left running by hand', () => {
+    entityRef.current = makeEntities({ climate: 'off', blowerMode: 'off', blowerBrightness: 128, heater: 'on' });
     render(<HeaterCard />);
 
     expect(isPressed(modeButton('Manual'))).toBe(true);
-    expect(isDisabled(modeButton('Auto'))).toBe(true);
+    expect(isDisabled(modeButton('Auto'))).toBe(false);
     expect(isDisabled(fanSlider())).toBe(false);
     expect(screen.getByText('Burner on')).toBeTruthy();
+    expect(screen.getByText('50%')).toBeTruthy();
 
-    // Already manual: nothing to send.
-    fireEvent.click(modeButton('Manual'));
-    expect(callService).not.toHaveBeenCalled();
+    // The a32_pro leaves the fan alone while the climate is OFF, so the card
+    // zeroes it as well — that is what the PID's output of 0 means.
+    fireEvent.click(modeButton('Auto'));
+    expect(callService).toHaveBeenCalledWith('switch', 'turn_on', undefined, { entity_id: BLOWER_MODE });
+    expect(callService).toHaveBeenCalledWith('light', 'turn_off', undefined, { entity_id: BLOWER });
+    expect(callService).toHaveBeenCalledTimes(2);
+    expect(screen.getByText('0%')).toBeTruthy();
+    expect(isPressed(modeButton('Auto'))).toBe(true);
+  });
+
+  it('a pending fan drag never restarts the fan after Auto', () => {
+    vi.useFakeTimers();
+    entityRef.current = makeEntities({ climate: 'off', blowerMode: 'off', blowerBrightness: 128 });
+    render(<HeaterCard />);
+
+    fireEvent.change(fanSlider(), { target: { value: '70' } });
+    fireEvent.click(modeButton('Auto'));
+    act(() => { vi.advanceTimersByTime(600); });
+
+    expect(callService).not.toHaveBeenCalledWith('light', 'turn_on', expect.anything(), expect.anything());
+    expect(callService).toHaveBeenCalledWith('light', 'turn_off', undefined, { entity_id: BLOWER });
+  });
+
+  it('with the thermostat off and the fan stopped, Auto is already the state', () => {
+    entityRef.current = makeEntities({ climate: 'off', blowerMode: 'off', heater: 'on' });
+    render(<HeaterCard />);
+
+    expect(isPressed(modeButton('Auto'))).toBe(true);
+    // Nothing is held by hand, so there is nothing to hand back: the slider is
+    // how you take the fan over.
+    expect(isDisabled(modeButton('Manual'))).toBe(true);
+    expect(isDisabled(fanSlider())).toBe(false);
+
+    fireEvent.click(modeButton('Auto'));
+    expect(callService).toHaveBeenCalledTimes(1);
+    expect(callService).toHaveBeenCalledWith('switch', 'turn_on', undefined, { entity_id: BLOWER_MODE });
   });
 
   it('does not claim Manual when the mode switch state is unknown', () => {

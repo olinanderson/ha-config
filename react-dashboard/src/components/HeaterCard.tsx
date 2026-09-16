@@ -148,16 +148,37 @@ export function HeaterCard() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(() => { setLocalBlower(null); }, [blowerPercent]);
 
+  // Which of the two buttons is lit. With the thermostat off the PID is idle
+  // and its output is 0, so "manual" only means something while the fan is
+  // still turning: at 0 there is nothing held by hand, and the thermostat takes
+  // the fan back the moment it is switched on.
+  const autoSelected = thermostatOn ? blowerAuto : displayBlower === 0;
+
+  // Auto hands the fan back to the PID. With the thermostat off the a32_pro
+  // only clears its manual hold and returns — it skips the "apply the PID's
+  // output now" step while the climate is OFF — so the fan would keep turning
+  // at whatever was set by hand. Stop it here, which is what a PID output of 0
+  // means, instead of making the user drag the slider down to 0.
+  const handleBlowerAuto = () => {
+    setBlowerAuto(true);
+    if (thermostatOn || displayBlower === 0) return;
+    if (blowerTimer.current) clearTimeout(blowerTimer.current);
+    setLocalBlower(0);
+    callService('light', 'turn_off', undefined, { entity_id: BLOWER_ID });
+  };
+
   // Color gradient based on target temp
   const tempRatio = Math.max(0, Math.min(1, (displayTarget - minTemp) / (maxTemp - minTemp)));
   const sliderColor = `hsl(${30 - tempRatio * 30}, ${70 + tempRatio * 30}%, ${55 - tempRatio * 10}%)`;
 
   const badge = thermostatOn ? 'Heating' : heaterOn ? (hotWaterOn ? 'Hot water' : 'Burner on') : 'Off';
-  const blowerHint = !thermostatOn
-    ? 'Thermostat is off, so the fan runs at whatever you set.'
-    : blowerAuto
+  const blowerHint = thermostatOn
+    ? blowerAuto
       ? 'The thermostat sets the fan speed.'
-      : 'The heater keeps running and you set the fan speed. Auto hands it back to the thermostat.';
+      : 'The heater keeps running and you set the fan speed. Auto hands it back to the thermostat.'
+    : autoSelected
+      ? 'Thermostat is off, so the fan is idle until you set a speed or turn the thermostat on.'
+      : 'Thermostat is off, so the fan runs at whatever you set. Auto stops it.';
 
   return (
     <Card>
@@ -269,14 +290,12 @@ export function HeaterCard() {
             <div className="flex items-center gap-2">
               <div className="flex gap-1">
                 <button
-                  aria-pressed={blowerAuto}
-                  onClick={() => setBlowerAuto(true)}
-                  disabled={!thermostatOn}
-                  title={thermostatOn ? undefined : 'Turn the thermostat on for automatic fan speed'}
+                  aria-pressed={autoSelected}
+                  onClick={handleBlowerAuto}
+                  title={thermostatOn ? undefined : 'Stop the fan and leave it to the thermostat'}
                   className={cn(
                     'px-2.5 py-0.5 rounded-md text-xs font-medium transition-colors',
-                    'disabled:cursor-not-allowed disabled:opacity-50',
-                    blowerAuto
+                    autoSelected
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:text-foreground',
                   )}
@@ -284,12 +303,16 @@ export function HeaterCard() {
                   Auto
                 </button>
                 <button
-                  aria-pressed={!blowerAuto}
-                  // With the thermostat off the fan is already manual.
+                  aria-pressed={!autoSelected}
+                  // With the thermostat off the fan is already manual, and at 0
+                  // there is nothing to take over — the slider is how you start it.
                   onClick={() => { if (blowerAuto) setBlowerAuto(false); }}
+                  disabled={!thermostatOn && autoSelected}
+                  title={thermostatOn || !autoSelected ? undefined : 'Set a fan speed to run it by hand'}
                   className={cn(
                     'px-2.5 py-0.5 rounded-md text-xs font-medium transition-colors',
-                    !blowerAuto
+                    'disabled:cursor-not-allowed disabled:opacity-50',
+                    !autoSelected
                       ? 'bg-primary text-primary-foreground'
                       : 'bg-muted text-muted-foreground hover:text-foreground',
                   )}

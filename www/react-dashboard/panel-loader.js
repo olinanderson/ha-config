@@ -4,19 +4,29 @@
  * Registers a single custom element "van-dashboard" that loads the
  * React bundle with built-in tab navigation (hash routing).
  *
+ * Keep this file thin. HA serves /local/ with a 31-day cache, so browsers can
+ * run an old copy of it for weeks. The recovery logic (HA parks and empties
+ * the panel after the tab has been hidden for a while) lives in the bundle,
+ * src/lib/panel-host.ts. The bundle is fetched fresh on every page load and
+ * re-fetches this file when __VAN_DASH_LOADER__ is older than it expects.
+ *
  * Usage in configuration.yaml:
  *   panel_custom:
  *     - name: van-dashboard
  *       url_path: dashboard
  *       sidebar_title: Dashboard
  *       sidebar_icon: mdi:view-dashboard
- *       module_url: /local/react-dashboard/panel-loader.js
+ *       module_url: /local/react-dashboard/panel-loader.js?v=16
  *       embed_iframe: false
  *       trust_external_script: true
  */
 
+// Bump together with LOADER_VERSION in src/main.tsx.
+window.__VAN_DASH_LOADER__ = 2;
+
 const BASE = '/local/react-dashboard';
 const CACHE_VER = Date.now(); // always fresh — no manual bumping needed
+const RETRY_MS = 5000;
 
 // ─── Global safety net ───────────────────────────────────────────────────
 // Chrome surfaces HA's WebSocket "message channel closed" as an unhandled
@@ -36,13 +46,15 @@ window.addEventListener('unhandledrejection', (evt) => {
 // ─────────────────────────────────────────────────────────────────────────
 
 // Load module fresh each page load.
-// A failed load must NOT stay cached — if the first attempt races an HA
-// restart, a cached rejection would brick the panel until a manual refresh
-// (the watchdog would retry _doMount forever against the same dead promise).
+// A failed load must NOT stay cached. Retries also use a new URL, because the
+// browser may remember a failed module fetch for the life of the page.
+let _moduleAttempts = 0;
 let _modulePromise = null;
 function getModule() {
   if (!_modulePromise) {
-    _modulePromise = import(`${BASE}/van-dashboard.js?${CACHE_VER}`)
+    _moduleAttempts++;
+    const ver = _moduleAttempts === 1 ? CACHE_VER : `${CACHE_VER}-${_moduleAttempts}`;
+    _modulePromise = import(`${BASE}/van-dashboard.js?${ver}`)
       .catch((err) => { _modulePromise = null; throw err; });
   }
   return _modulePromise;
@@ -65,207 +77,84 @@ function getCss() {
 class VanDashboard extends HTMLElement {
   constructor() {
     super();
-    this._unmount = null;
-    this._mounting = false; // true while async _doMount is in progress
-    this._mountGen = 0;
-    this._onVisibility = null;
-    this._onFocus = null;
-    this._onPageShow = null;
-    this._watchdog = null;
-    this._teardownTimer = null;
-  }
-
-  _dispatchHassUpdated() {
-    if (!window.__HASS__) return;
-    window.dispatchEvent(new Event('hass-updated'));
-    requestAnimationFrame(() => {
-      if (this.isConnected && window.__HASS__) {
-        window.dispatchEvent(new Event('hass-updated'));
-      }
-    });
-  }
-
-  _hasLiveDom() {
-    return !!this.querySelector('.van-dash-root');
-  }
-
-  _recover(reason = 'unknown') {
-    if (!this.isConnected) return;
-
-    if (!this._unmount && !this._mounting) {
-      console.debug('[VanDash] Recovering mount after', reason);
-      this._doMount();
-      return;
-    }
-
-    if (!this._hasLiveDom() && !this._mounting) {
-      console.debug('[VanDash] Recovering blank DOM after', reason);
-      if (this._unmount) {
-        try {
-          this._unmount();
-        } catch (_) {}
-        this._unmount = null;
-      }
-      this._doMount();
-      return;
-    }
-
-    this._dispatchHassUpdated();
+    this._style = null;
+    this._container = null; // what the bundle mounts into; kept for re-attaches
+    this._release = null; // from mod.mount(); set while mounted
+    this._loading = false;
+    this._failedAt = 0;
   }
 
   set hass(hass) {
     window.__HASS__ = hass;
-    this._dispatchHassUpdated();
-    // Recovery: if we're in the DOM but React isn't mounted, re-mount.
-    // This catches the case where HA's quick "reconnecting..." cycle
-    // disconnected/reconnected the element and the async mount failed or
-    // was aborted, leaving a blank screen.
-    this._recover('hass-setter');
+    window.dispatchEvent(new Event('hass-updated'));
+    // HA pushing state again is a good moment to retry a failed load.
+    if (this._failedAt && Date.now() - this._failedAt > RETRY_MS) this._mount();
   }
 
   set panel(panel) {
     this._panel = panel;
   }
 
-  connectedCallback() {
-    if (this._teardownTimer) {
-      clearTimeout(this._teardownTimer);
-      this._teardownTimer = null;
-    }
-    this._recover('connected');
+  get panel() {
+    return this._panel;
   }
 
-  async _doMount() {
-    // Already mounted or mount in progress — skip
-    if (this._unmount || this._mounting) return;
-    this._mounting = true;
-
-    // Capture the current generation. If disconnectedCallback fires while we
-    // are awaiting below, _mountGen is incremented and we abort early so we
-    // don't mount React into a stale / already-cleared container.
-    const gen = ++this._mountGen;
-
-    // Clear any stale children from a previous mount cycle
-    this.innerHTML = '';
-
-    try {
-      // Inject CSS inside this element so it works inside HA's shadow DOM
-      const cssText = await getCss();
-      if (this._mountGen !== gen) return; // disconnected mid-flight — abort
-
-      const style = document.createElement('style');
-      style.textContent = cssText;
-      this.appendChild(style);
-
-      const mountPoint = document.createElement('div');
-      mountPoint.style.height = '100%';
-      mountPoint.style.width = '100%';
-      this.appendChild(mountPoint);
-
-      const mod = await getModule();
-      if (this._mountGen !== gen) return; // disconnected mid-flight — abort
-
-      if (mod.mount) {
-        this._unmount = mod.mount(mountPoint);
-      }
-      // Dispatch hass-updated via requestAnimationFrame so React's
-      // useLayoutEffect listener is registered before the event fires.
-      // (useLayoutEffect runs synchronously after DOM commit, before RAF)
-      requestAnimationFrame(() => {
-        if (this._mountGen === gen && window.__HASS__) {
-          this._dispatchHassUpdated();
-        }
-      });
-
-      // When browser tab returns from background, force a hass refresh
-      if (this._onVisibility) {
-        document.removeEventListener('visibilitychange', this._onVisibility);
-      }
-      this._onVisibility = () => {
-        if (!document.hidden) {
-          this._recover('visibilitychange');
-        }
-      };
-      document.addEventListener('visibilitychange', this._onVisibility);
-
-      if (this._onFocus) {
-        window.removeEventListener('focus', this._onFocus);
-      }
-      this._onFocus = () => {
-        this._recover('focus');
-      };
-      window.addEventListener('focus', this._onFocus);
-
-      if (this._onPageShow) {
-        window.removeEventListener('pageshow', this._onPageShow);
-      }
-      this._onPageShow = () => {
-        this._recover('pageshow');
-      };
-      window.addEventListener('pageshow', this._onPageShow);
-
-      if (this._watchdog) {
-        clearInterval(this._watchdog);
-      }
-      this._watchdog = setInterval(() => {
-        if (!document.hidden) {
-          this._recover('watchdog');
-        }
-      }, 5000);
-    } catch (err) {
-      if (this._mountGen !== gen) return;
-      console.error('[VanDash] Failed to load:', err);
-      this.innerHTML = `
-        <div style="padding: 2rem; color: red;">
-          <h2>Failed to load dashboard</h2>
-          <pre>${err}</pre>
-        </div>
-      `;
-    } finally {
-      this._mounting = false;
-    }
+  connectedCallback() {
+    this._mount();
   }
 
   disconnectedCallback() {
-    if (this._teardownTimer) {
-      clearTimeout(this._teardownTimer);
+    // The bundle decides whether the React tree survives this: HA also
+    // detaches the panel when the tab has been hidden for a while.
+    const release = this._release;
+    this._release = null;
+    if (release) release();
+  }
+
+  async _mount() {
+    if (this._release || this._loading || !this.isConnected) return;
+    this._loading = true;
+    try {
+      const [cssText, mod] = await Promise.all([getCss(), getModule()]);
+      if (this._release || !this.isConnected) return; // detached mid-load; retried on connect
+
+      if (!this._style) {
+        // Inject CSS inside this element so it works inside HA's shadow DOM
+        this._style = document.createElement('style');
+        this._style.textContent = cssText;
+        this._container = document.createElement('div');
+        this._container.style.height = '100%';
+        this._container.style.width = '100%';
+      }
+      // Drop an error box from an earlier attempt, but leave our own nodes
+      // where they are: re-inserting them would restart video in the page.
+      for (const child of [...this.children]) {
+        if (child !== this._style && child !== this._container) child.remove();
+      }
+      if (this._style.parentNode !== this) this.prepend(this._style);
+      if (this._container.parentNode !== this) this.append(this._container);
+
+      this._failedAt = 0;
+      this._release = mod.mount(this._container);
+      // Dispatch hass-updated via requestAnimationFrame so React's
+      // useLayoutEffect listener is registered before the event fires.
+      requestAnimationFrame(() => {
+        if (window.__HASS__) window.dispatchEvent(new Event('hass-updated'));
+      });
+    } catch (err) {
+      this._failedAt = Date.now();
+      console.error('[VanDash] Failed to load:', err);
+      const box = document.createElement('div');
+      box.style.cssText = 'padding: 2rem; color: red;';
+      box.innerHTML = '<h2>Failed to load dashboard</h2><pre></pre><p>Retrying…</p>';
+      box.querySelector('pre').textContent = String(err);
+      this.replaceChildren(box);
+    } finally {
+      this._loading = false;
     }
-
-    // HA can temporarily disconnect the panel custom element during its own
-    // websocket reconnect cycle. Delay teardown so quick detach/reattach does
-    // not blank the panel and require a full reload.
-    this._teardownTimer = setTimeout(() => {
-      this._teardownTimer = null;
-      if (this.isConnected) return;
-
-      // Invalidate any in-flight _doMount awaits
-      this._mountGen++;
-      this._mounting = false;
-
-      if (this._watchdog) {
-        clearInterval(this._watchdog);
-        this._watchdog = null;
-      }
-      if (this._onVisibility) {
-        document.removeEventListener('visibilitychange', this._onVisibility);
-        this._onVisibility = null;
-      }
-      if (this._onFocus) {
-        window.removeEventListener('focus', this._onFocus);
-        this._onFocus = null;
-      }
-      if (this._onPageShow) {
-        window.removeEventListener('pageshow', this._onPageShow);
-        this._onPageShow = null;
-      }
-      if (this._unmount) {
-        this._unmount();
-        this._unmount = null;
-      }
-      // Clear DOM only after we've confirmed the element stayed detached.
-      this.innerHTML = '';
-    }, 2000);
   }
 }
 
-customElements.define('van-dashboard', VanDashboard);
+if (!customElements.get('van-dashboard')) {
+  customElements.define('van-dashboard', VanDashboard);
+}

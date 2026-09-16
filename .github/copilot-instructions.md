@@ -1036,6 +1036,13 @@ climate restore hands the blower back. Thermostat off = always manual (switch re
 Firmware before 2026-09-16 re-armed Auto within ~10 s, which is why `script.shoe_dryer_start`
 turns the climate off before flipping the switch.
 
+With the climate OFF the switch's `turn_on_action` clears the hold and returns *before* its
+"apply the PID's output now" step, so the blower keeps whatever speed it was given by hand.
+The Heater card covers that gap: Auto is clickable with the thermostat off and also sends
+`light.turn_off` to `light.a32_pro_a32_pro_dac_0` (the PID's output there is 0). Other
+clients that flip the switch directly — HA's own more-info dialog, automations — still leave
+the fan turning.
+
 ### Low Fuel Lockout
 
 - **Trigger**: Heater never warms up after all restarts AND `sensor.stable_fuel_level` < 25%
@@ -1227,7 +1234,7 @@ Registered via `panel_custom` as a single `<van-dashboard>` custom element with 
 |---|---|
 | **Build** | Vite 6 (library mode, ES format) → `dist/van-dashboard.{js,css}` |
 | **UI** | React 19, Tailwind CSS 3, shadcn/ui components, lucide-react icons |
-| **HA bridge** | `panel-loader.js` registers custom element, passes `hass` → `window.__HASS__` → React context |
+| **HA bridge** | `panel-loader.js` registers custom element, passes `hass` → `window.__HASS__` → React context; `src/lib/panel-host.ts` keeps the React tree alive when HA parks the panel |
 | **State** | `HassStore` class (per-entity subscriptions via `useSyncExternalStore`) |
 | **Routing** | Hash-based (`#home`, `#power`, `#climate`, `#water`, `#van`, `#system`) with bottom navbar |
 
@@ -1235,7 +1242,7 @@ Registered via `panel_custom` as a single `<van-dashboard>` custom element with 
 
 ```
 react-dashboard/
-  panel-loader.js          # Custom element registration + cache busting (CACHE_VER)
+  panel-loader.js          # Custom element registration + cache busting (CACHE_VER); keep it thin
   configuration.yaml       # panel_custom config snippet (module_url with ?v=N)
   vite.config.ts           # Library mode build config
   package.json             # Dependencies
@@ -1314,9 +1321,14 @@ const forecast = useWeatherForecast('weather.pirateweather', 'daily');
 ### Cache Busting
 
 `panel-loader.js` uses `CACHE_VER = Date.now()` — JS/CSS imports get a unique timestamp on
-every page load, so no manual version bumping is needed for the bundle. The `configuration.yaml`
-`module_url` still has `?v=N` to force HA to reload the loader itself — only bump this when
-`panel-loader.js` changes.
+every page load, so no manual version bumping is needed for the bundle.
+
+HA serves `/local/` with `Cache-Control: max-age=2678400` (31 days), so browsers keep
+`panel-loader.js?v=16` for weeks. Don't bump `?v=N` for loader changes (that needs an HA
+restart). Instead bump `window.__VAN_DASH_LOADER__` in `panel-loader.js` and `LOADER_VERSION`
+in `src/main.tsx` together: when the bundle finds an older loader running, it re-fetches the
+loader past the cache, so the next page load picks up the new one. Keep the loader thin and put
+lifecycle logic in the bundle (`src/lib/panel-host.ts`), which is always fresh.
 
 ### Prerequisites (Building the Dashboard)
 
@@ -1358,11 +1370,11 @@ cat dist/van-dashboard.js | ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 \
 cat dist/van-dashboard.css | ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 \
   "cat > /tmp/vd.css && sudo cp /tmp/vd.css /config/www/react-dashboard/van-dashboard.css"
 
-# 3. If panel-loader.js changed (CACHE_VER bump):
+# 3. If panel-loader.js changed (bump __VAN_DASH_LOADER__ / LOADER_VERSION, not ?v=N):
 cat panel-loader.js | ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 \
   "cat > /tmp/pl.js && sudo cp /tmp/pl.js /config/www/react-dashboard/panel-loader.js"
 
-# 4. If configuration.yaml changed (?v=N bump):
+# 4. If the panel_custom block in configuration.yaml changed:
 #    Wait for Syncthing (~10s), then restart HA via REST API:
 TOKEN=$(ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 "cat /config/.gps_filter_token")
 curl -X POST "http://100.80.15.86:8123/api/services/homeassistant/restart" \
@@ -1380,7 +1392,8 @@ curl -X POST "http://100.80.15.86:8123/api/services/homeassistant/restart" \
 | File | Version |
 |---|---|
 | `panel-loader.js` CACHE_VER | `Date.now()` (automatic) |
-| `configuration.yaml` ?v= | `9` |
+| `panel-loader.js` `__VAN_DASH_LOADER__` / `main.tsx` `LOADER_VERSION` | `2` |
+| `configuration.yaml` ?v= | `16` (leave it; see Cache Busting) |
 
 ### CSS Scoping
 
