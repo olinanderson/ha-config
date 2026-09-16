@@ -141,6 +141,14 @@
 #   • binary_sensor.starlink_sleep → scheduled sleep; entities stay AVAILABLE
 # Verified against 45 days of history: sleep never produces `unavailable`, so
 # this can't false-fire on the nightly 01:00–08:00 sleep window.
+# One false positive is known: HA 2026.4's Starlink integration reads an
+# `alert_roaming` field the dish firmware no longer sends. The KeyError in
+# the Roaming mode sensor aborts the update loop, so after one failed poll
+# every other Starlink entity stays `unavailable` while the dish is fine
+# (2026-09-15/16: two pointless power cycles). Workaround until HA is
+# updated past the fix: binary_sensor.starlink_roaming_mode is disabled
+# in the entity registry. Before trusting this sensor, check the dish from
+# the HA box: `nc -zvw4 192.168.100.1 9200`.
 #
 # Deliberately does NOT check the power-supply switch: when YOU cut the PSU the
 # link genuinely is down. The auto-recovery automation is what refuses to act on

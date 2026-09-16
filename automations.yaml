@@ -9,6 +9,13 @@
 # If the ESP32 BLE proxy hasn't reconnected yet, setup fails
 # or gets cancelled. This automation retries the reload
 # every 30s (up to 30 attempts = ~15 min window) until BMS comes online.
+# HA's own setup retry (every 80 s) covers most of this; the loops mainly
+# add log noise. What kept the BMS down for hours (09-06: 3 h, 09-16: 7 h)
+# was the HA box's Realtek USB Bluetooth dongle: it connects to the JBD
+# but never gets a reply, and HA preferred it for its stronger signal.
+# Its bluetooth config entry is disabled since 2026-09-16, so the BMS
+# goes through the a32-pro proxy (.github/copilot-instructions.md,
+# "Bluetooth").
 
 - id: bms_ble_reload_after_boot
   alias: "BMS BLE - reload integration after boot"

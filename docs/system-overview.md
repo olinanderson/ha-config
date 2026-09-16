@@ -19,11 +19,11 @@
 | **Simarine A32 Pro** (ESP32-S3) | Primary controller — switches, sensors, MPPT, tank levels, BME280s, S5140 current sensors, DAC outputs | ESPHome via WiFi |
 | **AG Pro** (ESPHome) | Roof fan (speed, direction, lid), additional controls | ESPHome via WiFi |
 | **WiCAN Pro** (v4.48) | Vehicle OBD2 data — speed, fuel, RPM, coolant, tire pressure, gear, trans temp | MQTT |
-| **Starlink** | Internet | Native integration + MQTT |
+| **Starlink** | Internet | Native integration + MQTT (Roaming mode sensor disabled on HA 2026.4, see template/binary_sensors.yaml) |
 | **u-blox USB GPS** | GPS location tracking (`device_tracker.ublox_gps`, filtered `device_tracker.ublox_gps_filtered`); drives the home zone | USB + MQTT |
 | **Apollo MSR-2** | mmWave radar presence/occupancy sensor | ESPHome |
 | **Shelly EM** | AC power monitoring (inverter output voltage, power) | Native integration (ping-based) |
-| **Olins Van BMS** | Battery management — SOC, voltage, current, temperature, cycles, stored energy | BLE via `bms_ble` |
+| **Olins Van BMS** | Battery management — SOC, voltage, current, temperature, cycles, stored energy | BLE via `bms_ble`, through the a32-pro Bluetooth proxy (the HA box's Realtek USB dongle is disabled in HA: it connects to the BMS but never gets a reply) |
 | **Victron MPPT** (×2) | Solar charge controllers — PV power, output voltage/current, yield | BLE via `victron_ble` ESPHome |
 | **Pro Check F317** | Propane tank ultrasonic level sensor | BLE |
 | **Lorex D231A41B** | 4-channel 1080p DVR (security cameras) — RTSP streams | go2rtc (MSE) via dvr_proxy |

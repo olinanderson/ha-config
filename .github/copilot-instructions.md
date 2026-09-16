@@ -52,10 +52,10 @@ entertainment, and safety subsystems for full-time van life.
 | **Simarine A32 Pro** (ESP32-S3) | Primary controller — switches, sensors, MPPT, tank levels, BME280s, S5140 current sensors, DAC outputs | ESPHome via WiFi |
 | **AG Pro** (ESPHome) | Roof fan (speed, direction, lid), additional controls | ESPHome via WiFi |
 | **WiCAN Pro** (v4.48) | Vehicle OBD2 data — speed, fuel, RPM, coolant, tire pressure, gear, trans temp, etc. | MQTT (native WiCAN MQTT mode → core-mosquitto, IP 192.168.10.90) |
-| **Starlink** | Internet + GPS location tracking | Native integration + MQTT filtered tracker |
+| **Starlink** | Internet + GPS location tracking | Native integration + MQTT filtered tracker. `binary_sensor.starlink_roaming_mode` is disabled (2026-09-16): on HA 2026.4 its missing `alert_roaming` field froze every other Starlink entity at `unavailable` — re-enable once HA has the `data.alert.get("alert_roaming")` fix |
 | **Apollo MSR-2** | mmWave radar presence/occupancy sensor | ESPHome |
 | **Shelly EM** | AC power monitoring (inverter output voltage, power) | Native integration (ping-based) |
-| **Olins Van BMS** | Battery management — SOC, voltage, current, temperature, cycles, stored energy | BLE via `bms_ble` custom component |
+| **Olins Van BMS** | Battery management — SOC, voltage, current, temperature, cycles, stored energy | BLE via `bms_ble` custom component (1.10.0) through the a32-pro Bluetooth proxy — see Bluetooth below |
 | **Victron MPPT** (×2) | Solar charge controllers (MPPT1 & MPPT2) — PV power, output voltage/current, yield | BLE via `victron_ble` ESPHome component |
 | **Pro Check F317** | Propane tank ultrasonic level sensor | BLE |
 | **Lorex D231A41B** | 4-channel 1080p DVR (security cameras) — RTSP streams, H.264 main / H.264 sub | go2rtc (MSE) via dvr_proxy |
@@ -69,6 +69,13 @@ entertainment, and safety subsystems for full-time van life.
 - Router: **MoFi** at `192.168.10.1` (OpenWrt/LuCI device tracking)
 - HA Host SSH: port `22222` on `172.30.32.1` (used for PulseAudio ducking & Scream audio)
 - Inverter monitoring: Shelly EM pinging at `192.168.10.174`
+- Bluetooth: the BMS is read through the **a32-pro's Bluetooth proxy**. The HA box also has a
+  Realtek RTL8761BU USB dongle (`hci1`, 28:F5:2B:3C:C8:00), but its `bluetooth` config entry is
+  **disabled** (2026-09-16): it connects to the JBD BMS and never gets a reply, and HA preferred
+  it for its stronger signal, which left the BMS `unavailable` for hours after restarts. Don't
+  re-enable it without re-testing: with `bleak_retry_connector` / `custom_components.bms_ble` on
+  debug, each attempt logs the scanner it used as `'source': '<mac>'`. HACS does not know
+  `bms_ble` is installed; 2.13.0 is the newest release that runs on HA 2026.4.
 - Remote access: **Tailscale** VPN — the config share is `\\homeassistant\config`
 
 ---
