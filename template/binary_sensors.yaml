@@ -59,6 +59,11 @@
 # hour. This holds "occupied" for 3 min after the last detection so presence
 # automations see a stable signal. `availability` keeps it from flipping to
 # "off" (and firing a false "left the van") while the sensor is offline.
+# delay_on stays short because it is the wait between the radar seeing you and
+# the lights coming back (it was 10 s). From 2026-08-17 to 09-16 only 9 of 180
+# detections in an empty van were shorter than 10 s, all of them on 08-17. The
+# radar's own 5 s timeout already stretches single-frame blips
+# (analyze_presence_latency.py).
 - binary_sensor:
     - name: "Van Occupied"
       unique_id: van_occupied_debounced
@@ -75,7 +80,7 @@
         {{ is_state('binary_sensor.apollo_msr_2_1731d8_radar_target', 'on')
            or is_state('binary_sensor.apollo_msr_2_1731d8_radar_moving_target', 'on')
            or is_state('binary_sensor.apollo_msr_2_1731d8_radar_still_target', 'on') }}
-      delay_on: "00:00:10"
+      delay_on: "00:00:02"
       delay_off: "00:03:00"
 
 # ─── Inverter reachability ───

@@ -569,6 +569,7 @@
 - id: auto_power_saving_when_away
   alias: "Auto Power Saving When Away from Van"
   mode: single
+  max_exceeded: silent # both monitor rockers pressed back to back
   trigger:
     - id: leave_van
       trigger: state
@@ -579,6 +580,17 @@
     - id: return_van
       trigger: state
       entity_id: binary_sensor.van_occupied # debounced radar (smooths flicker)
+      from: "off"
+      to: "on"
+    # A monitor rocker pressed by hand means someone is here, so don't wait
+    # for the radar (its 2 s debounce, or it missing someone sitting still).
+    # It also covers the radar losing power: from 2026-09-13 to 09-16 it was
+    # fed from the top monitor's relay, which power saving switches off.
+    - id: return_rocker
+      trigger: state
+      entity_id:
+        - switch.a32_pro_do8_switch06_top_monitor
+        - switch.a32_pro_do8_switch07_bottom_monitor
       from: "off"
       to: "on"
   condition:
@@ -597,9 +609,14 @@
                 level: info
                 logger: automation.power_saving
                 message: "Power saving mode enabled – away for ≥1 min"
-        # Disable when back (if not driving)
+        # Disable when back (if not driving). Only a physical rocker press
+        # counts: it has no user and no parent context. A dashboard toggle
+        # (maybe from away) or our own scene restore does not.
         - conditions: >
-            {{ trigger.id == 'return_van'
+            {{ (trigger.id == 'return_van'
+                or (trigger.id == 'return_rocker'
+                    and trigger.to_state.context.user_id is none
+                    and trigger.to_state.context.parent_id is none))
                and is_state('input_boolean.power_saving_mode','on')
                and is_state('binary_sensor.vehicle_is_moving','off') }}
           sequence:
@@ -608,7 +625,9 @@
               data:
                 level: info
                 logger: automation.power_saving
-                message: "Power saving mode disabled – presence detected"
+                message: >-
+                  Power saving mode disabled –
+                  {{ 'monitor rocker pressed' if trigger.id == 'return_rocker' else 'presence detected' }}
 
 # ────────────────────────────────────────────────────────────────
 # Power Saving Mode Automation - triggers scripts when toggle changes
@@ -1580,6 +1599,10 @@
   trigger:
     - trigger: state
       entity_id: binary_sensor.rtd_needs_attention
+      # A template reload flips the sensor on → unavailable → off → on within
+      # a second (seen 2026-09-14 and 09-16). Without `from`, that dismissed
+      # the warning while items were still out.
+      from: "on"
       to: "off"
   action:
     - action: persistent_notification.dismiss

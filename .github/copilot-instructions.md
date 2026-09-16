@@ -886,7 +886,7 @@ Used in `old_home.yaml`:
 | `indoor_lights_sundown_*` (×2) | Sundown dimming: step lights down at sundown / after dark, cap evening turn-ons, morning reset |
 | `shore_charger_*` | Manual enable sync + SOC-based power-cycle reset |
 | `iphone_home_arrival` | Welcome TTS when returning after 15+ min |
-| `auto_power_saving_when_away` | Radar presence → power saving on/off |
+| `auto_power_saving_when_away` | Radar presence (`van_occupied`: on after 2 s, off after 3 min) → power saving on/off; a physical monitor rocker press also ends power saving at once |
 | `auto_power_saving_when_driving` | Driving → power saving (30s on, 2min off) |
 | `bed_power_auto_off_30s` | Safety: bed motor auto-off |
 | `keep_home_zone_on_starlink` | Move HA home zone to Starlink GPS every 5 min |
