@@ -187,3 +187,24 @@ shoe_dryer_prev_setpoint:
   step: 0.5
   unit_of_measurement: "°C"
   mode: box
+
+# --- Sundown dimming ---
+# Brightness ceilings for the indoor lights (see sensor.indoor_light_phase).
+# No `initial:` so tuned values survive restarts. A fresh install starts at
+# `min` (5 %), so seed them once by hand (70 / 40) before enabling
+# input_boolean.indoor_light_sun_dimming.
+indoor_light_sundown_pct:
+  name: "Lights at Sundown"
+  icon: mdi:weather-sunset-down
+  min: 5
+  max: 100
+  step: 5
+  unit_of_measurement: "%"
+
+indoor_light_dark_pct:
+  name: "Lights After Dark"
+  icon: mdi:weather-night
+  min: 5
+  max: 100
+  step: 5
+  unit_of_measurement: "%"

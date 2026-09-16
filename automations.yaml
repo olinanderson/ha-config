@@ -279,6 +279,154 @@
         - light.shower_lighting_switch
         - light.led_controller_sc_1
 
+# ────────────────────────────────────────────────────────────────
+# Sundown dimming – indoor lights get a bit dimmer at sundown and a bit more
+# once it's dark. Phase comes from sensor.indoor_light_phase (day / twilight /
+# dark); the ceilings from input_number.indoor_light_sundown_pct / _dark_pct;
+# master enable input_boolean.indoor_light_sun_dimming.
+#   • Lights already on step down to the new ceiling over ~2 min.
+#   • Lights switched on during twilight/dark come on no brighter than it.
+#   • The first switch-on after sunrise of a light left at one of those
+#     ceilings goes back to full, so it isn't stuck at last night's level.
+# Hands off: Shower light while Shower Mode is on, Cabinet light while the LPG
+# valve is open (Cook Mode sets it to 100 %), and everything during Sleep
+# Mode's wind-down and the 2 min after Sleep Mode turns off (wake-up restore).
+# Only the LED controllers are commanded; the Inovelli switches follow via the
+# Linked Entities blueprint (commanding both cross-fires, see
+# sleep_mode_on_actions).
+# ────────────────────────────────────────────────────────────────
+- id: indoor_lights_sundown_dim
+  alias: "Indoor Lights – Sundown dim for lights already on"
+  # restart: a newer phase change supersedes an unfinished fade
+  mode: restart
+  trigger:
+    # Evening edges only. At dawn the phase goes dark → twilight, and lights
+    # must not dim then.
+    - trigger: state
+      entity_id: sensor.indoor_light_phase
+      from: "day"
+      to: "twilight"
+    - trigger: state
+      entity_id: sensor.indoor_light_phase
+      from: "twilight"
+      to: "dark"
+  condition:
+    - condition: state
+      entity_id: input_boolean.indoor_light_sun_dimming
+      state: "on"
+    - "{{ not (is_state('input_boolean.sleep_mode', 'on') and is_state('input_boolean.sleep_winddown_complete', 'off')) }}"
+  action:
+    - variables:
+        steps: 12
+        cap: >-
+          {{ ((state_attr('sensor.indoor_light_phase', 'max_brightness_pct') | float(100)) * 2.55) | round(0) | int }}
+        # [entity, starting brightness] for each light that is on, above the
+        # ceiling, and not being held bright by a mode.
+        start: >-
+          {% set ns = namespace(out=[]) %}
+          {% for id in ['light.led_controller_cct_1', 'light.led_controller_cct_2',
+                        'light.led_controller_sc_1', 'light.led_controller_sc_2'] %}
+            {% set b = state_attr(id, 'brightness') | int(0) %}
+            {% set held = (id == 'light.led_controller_sc_1' and is_state('input_boolean.shower_mode', 'on'))
+                       or (id == 'light.led_controller_cct_2' and is_state('switch.a32_pro_switch16_lpg_valve', 'on')) %}
+            {% if is_state(id, 'on') and b > cap + 2 and not held %}
+              {% set ns.out = ns.out + [[id, b]] %}
+            {% endif %}
+          {% endfor %}
+          {{ ns.out }}
+    # Small steps rather than one long transition: the main light's switch sync
+    # re-sends the level with no transition, which would cut a long fade short,
+    # and a ≤5 % jump every 10 s is invisible either way.
+    - if: "{{ start | count > 0 }}"
+      then:
+        - repeat:
+            count: "{{ steps }}"
+            sequence:
+              # This step's target vs the previous step's (what was last set).
+              # A light brighter than that was turned up by hand — leave it.
+              - variables:
+                  targets: >-
+                    {% set ns = namespace(out=[]) %}
+                    {% for id, b0 in start %}
+                      {% set prev = (b0 - (b0 - cap) * (repeat.index - 1) / steps) | round(0) | int %}
+                      {% set goal = (b0 - (b0 - cap) * repeat.index / steps) | round(0) | int %}
+                      {% set b = state_attr(id, 'brightness') | int(0) %}
+                      {% if is_state(id, 'on') and b > goal + 2 and b <= prev + 8 %}
+                        {% set ns.out = ns.out + [[id, goal]] %}
+                      {% endif %}
+                    {% endfor %}
+                    {{ ns.out }}
+              - repeat:
+                  for_each: "{{ targets }}"
+                  sequence:
+                    - action: light.turn_on
+                      target:
+                        entity_id: "{{ repeat.item[0] }}"
+                      data:
+                        brightness: "{{ repeat.item[1] }}"
+                        transition: 10
+              - delay: 10
+
+- id: indoor_lights_sundown_turn_on_level
+  alias: "Indoor Lights – Sundown turn-on level / morning reset"
+  # parallel: lights often come on together (voice, the Lights tile, Power
+  # Saving restore) and each needs its own check
+  mode: parallel
+  max: 10
+  trigger:
+    - trigger: state
+      entity_id:
+        - light.led_controller_cct_1
+        - light.led_controller_cct_2
+        - light.led_controller_sc_1
+        - light.led_controller_sc_2
+      from: "off"
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: input_boolean.indoor_light_sun_dimming
+      state: "on"
+    - "{{ not (is_state('input_boolean.sleep_mode', 'on') and is_state('input_boolean.sleep_winddown_complete', 'off')) }}"
+    - "{{ now() - states.input_boolean.sleep_mode.last_changed > timedelta(minutes=2) }}"
+    - "{{ not (trigger.entity_id == 'light.led_controller_sc_1' and is_state('input_boolean.shower_mode', 'on')) }}"
+    - "{{ not (trigger.entity_id == 'light.led_controller_cct_2' and is_state('switch.a32_pro_switch16_lpg_valve', 'on')) }}"
+  action:
+    - variables:
+        phase: "{{ states('sensor.indoor_light_phase') }}"
+        level: "{{ trigger.to_state.attributes.brightness | int(0) }}"
+        cap: >-
+          {{ ((state_attr('sensor.indoor_light_phase', 'max_brightness_pct') | float(100)) * 2.55) | round(0) | int }}
+        sundown_cap: >-
+          {{ ((states('input_number.indoor_light_sundown_pct') | float(0)) * 2.55) | round(0) | int }}
+        dark_cap: >-
+          {{ ((states('input_number.indoor_light_dark_pct') | float(0)) * 2.55) | round(0) | int }}
+        # Roughly today's sunrise: once the sun is up, next_rising is tomorrow's.
+        sunrise: >-
+          {% set r = state_attr('sun.sun', 'next_rising') %}
+          {{ (as_datetime(r) - timedelta(days=1)).isoformat() if r else '' }}
+    - choose:
+        - conditions: "{{ phase in ['twilight', 'dark'] and level > cap + 2 }}"
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id: "{{ trigger.entity_id }}"
+              data:
+                brightness: "{{ cap }}"
+                transition: 1
+        # Off since before sunrise and still sitting at a ceiling this set last
+        # night → back to full. A level you picked yourself is left alone.
+        - conditions: >-
+            {{ phase == 'day' and sunrise != ''
+               and trigger.from_state.last_changed < as_datetime(sunrise)
+               and ((level - sundown_cap) | abs <= 3 or (level - dark_cap) | abs <= 3) }}
+          sequence:
+            - action: light.turn_on
+              target:
+                entity_id: "{{ trigger.entity_id }}"
+              data:
+                brightness: 255
+                transition: 1
+
 - id: shore_charger_manual_enable_sync
   alias: Shore Charger – Manual Enable Sync
   mode: single

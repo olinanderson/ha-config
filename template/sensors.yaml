@@ -597,6 +597,74 @@
           {{ (pct / 100 * 94.6 / econ * 100) | round(0) }}
         {% endif %}
 
+    # ── Fuel cost (GasBuddy) ──────────────────────────────────────────────────
+    # Price = sensor.cheapest_regular_nearby_regular_gas: HACS ha-gasbuddy in
+    # "cheapest" mode around HA's home coordinates, which follow the van via the
+    # Keep-Home-zone automation; posted credit price, CAD/L, refreshed hourly.
+    # All emit unknown (never a fake 0) while the price or a fuel figure is missing.
+    - name: "Live Trip Fuel Cost"
+      unique_id: live_trip_fuel_cost
+      unit_of_measurement: CAD
+      icon: mdi:cash
+      state: >
+        {# Whole-trip fuel (moving + idle) × today's cheapest nearby regular. #}
+        {% set price = states('sensor.cheapest_regular_nearby_regular_gas') | float(none) %}
+        {% set mov   = states('sensor.live_trip_fuel') | float(none) %}
+        {% set idle  = states('sensor.live_trip_idle_fuel') | float(0) %}
+        {% if price is none or mov is none %}
+          {{ none }}
+        {% else %}
+          {{ ((mov + idle) * price) | round(2) }}
+        {% endif %}
+
+    - name: "Highway Fuel Cost per 100km"
+      unique_id: highway_fuel_cost_per_100km
+      unit_of_measurement: CAD
+      icon: mdi:highway
+      state: >
+        {# Lifetime highway economy (highway_fuel_total ÷ highway_distance_total)
+           × price: what 100 km of QEII costs today. Needs ≥ 50 highway km. #}
+        {% set price = states('sensor.cheapest_regular_nearby_regular_gas') | float(none) %}
+        {% set l  = states('sensor.highway_fuel_total') | float(none) %}
+        {% set km = states('sensor.highway_distance_total') | float(none) %}
+        {% if price is none or l is none or km is none or km < 50 %}
+          {{ none }}
+        {% else %}
+          {{ (l / km * 100 * price) | round(2) }}
+        {% endif %}
+
+    - name: "City Fuel Cost per 100km"
+      unique_id: city_fuel_cost_per_100km
+      unit_of_measurement: CAD
+      icon: mdi:city-variant-outline
+      state: >
+        {# Lifetime non-highway MOVING economy — (moving fuel − highway fuel) over
+           (odometer − highway distance), idle excluded — × price. #}
+        {% set price = states('sensor.cheapest_regular_nearby_regular_gas') | float(none) %}
+        {% set mf = states('sensor.moving_fuel_total') | float(none) %}
+        {% set hf = states('sensor.highway_fuel_total') | float(none) %}
+        {% set od = states('sensor.vehicle_distance_odometer') | float(none) %}
+        {% set hd = states('sensor.highway_distance_total') | float(none) %}
+        {% if price is none or mf is none or hf is none or od is none or hd is none or od - hd < 50 %}
+          {{ none }}
+        {% else %}
+          {{ ((mf - hf) / (od - hd) * 100 * price) | round(2) }}
+        {% endif %}
+
+    - name: "Fill Up Cost"
+      unique_id: fill_up_cost
+      unit_of_measurement: CAD
+      icon: mdi:gas-station-outline
+      state: >
+        {# Litres to fill the 94.6 L tank from stable_fuel_level × price. #}
+        {% set price = states('sensor.cheapest_regular_nearby_regular_gas') | float(none) %}
+        {% set pct = states('sensor.stable_fuel_level') | float(none) %}
+        {% if price is none or pct is none %}
+          {{ none }}
+        {% else %}
+          {{ ((100 - pct) / 100 * 94.6 * price) | round(2) }}
+        {% endif %}
+
     # ── City / Highway split (this trip) ──────────────────────────────────────
     # Highway side reads the highway-only accumulators (minus their trip
     # baseline); CITY is derived by subtraction (trip total − highway) so the two

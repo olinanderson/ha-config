@@ -1,0 +1,35 @@
+# ================================
+# template/lighting.yaml
+# ================================
+# Sundown dimming — which part of the day the indoor lights should behave for.
+# Drives the "Indoor Lights – Sundown …" automations in automations.yaml.
+
+- sensor:
+    # day       sun above the horizon                      → no ceiling
+    # twilight  sun below the horizon but above -6°         → Lights at Sundown
+    #           (sundown → civil dusk, and the same stretch before sunrise)
+    # dark      sun below -6° (past civil dusk)             → Lights After Dark
+    # sun.sun follows the home zone, which keep_home_zone_on_starlink moves to the
+    # van's GPS every 5 min, so "sundown" is local wherever the van is parked.
+    - name: "Indoor Light Phase"
+      unique_id: indoor_light_phase
+      icon: mdi:weather-sunset-down
+      state: >-
+        {%- if not has_value('sun.sun') or is_state('sun.sun', 'above_horizon') -%}
+          day
+        {%- elif state_attr('sun.sun', 'elevation') | float(0) > -6 -%}
+          twilight
+        {%- else -%}
+          dark
+        {%- endif -%}
+      attributes:
+        # Brightness ceiling for this phase, in percent. Recomputed here rather
+        # than read from this.state, which would lag one update behind.
+        max_brightness_pct: >-
+          {%- if not has_value('sun.sun') or is_state('sun.sun', 'above_horizon') -%}
+            100
+          {%- elif state_attr('sun.sun', 'elevation') | float(0) > -6 -%}
+            {{ states('input_number.indoor_light_sundown_pct') | int(100) }}
+          {%- else -%}
+            {{ states('input_number.indoor_light_dark_pct') | int(100) }}
+          {%- endif -%}

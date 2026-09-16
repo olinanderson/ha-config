@@ -113,6 +113,23 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor, plus `sensor.mppt1_
 | `binary_sensor.a32_pro_di33_40_expander_fault` | ON while the DI33–40 rocker expander (PCF8574 @ I²C 0x23) reads "all rockers pressed" — an I²C fault, not presses; the firmware ignores them, re-inits the chip and restarts if it stays faulted |
 | `sensor.a32_pro_di33_40_expander_faults` | Count of those faults since flash (kept across reboots) |
 
+## Fuel Prices (GasBuddy)
+HACS `firstof9/ha-gasbuddy` 1.5.0, hub "GasBuddy Hub" with one station subentry in
+*cheapest* mode: regular, posted credit price, no postal code — so it searches around
+HA's home coordinates, which the "Keep Home zone on GPS" automation moves with the van.
+Refreshes hourly. Add more stations under Settings → Integrations → GasBuddy → Add station.
+
+| Entity | Description |
+|---|---|
+| `sensor.cheapest_regular_nearby_regular_gas` | Cheapest regular near the van, CAD/L (attributes: station_id, address, formatted_price, last_updated) |
+| `sensor.cheapest_regular_nearby_premium_gas` | Premium at that same station |
+| `sensor.cheapest_regular_nearby_last_updated` | When GasBuddy last saw a price there |
+| `sensor.live_trip_fuel_cost` | This trip's fuel (moving + idle) × that price, CAD |
+| `sensor.highway_fuel_cost_per_100km` | Lifetime highway economy × price — what 100 km of QEII costs today |
+| `sensor.city_fuel_cost_per_100km` | Lifetime non-highway moving economy × price |
+| `sensor.fill_up_cost` | Cost to fill the 94.6 L tank from `sensor.stable_fuel_level` |
+| `update.gasbuddy_update` | HACS update entity for the integration |
+
 ## Roof Fan
 | Entity | Description |
 |---|---|
@@ -127,6 +144,10 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor, plus `sensor.mppt1_
 | `light.led_controller_cct_2` | Under-cabinet (CCT, dimmable) |
 | `light.led_controller_sc_1` | Shower (single color, dimmable) |
 | `light.led_controller_sc_2` | Accent / other (single color, dimmable) |
+| `sensor.indoor_light_phase` | Sundown dimming phase: `day` / `twilight` / `dark`; attr `max_brightness_pct` |
+| `input_boolean.indoor_light_sun_dimming` | Sundown dimming master enable |
+| `input_number.indoor_light_sundown_pct` | Indoor light ceiling during twilight (%) |
+| `input_number.indoor_light_dark_pct` | Indoor light ceiling after dark (%) |
 
 ## Switches / Controls
 | Entity | Description |

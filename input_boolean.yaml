@@ -126,3 +126,11 @@ shoe_dryer_active:
 shoe_dryer_resume_heat:
   name: "Shoe Dryer Resume Heat"
   icon: mdi:radiator
+
+# ─── Sundown dimming ───
+# Master enable for the indoor lights dimming at sundown and again after dark
+# (sensor.indoor_light_phase + the "Indoor Lights – Sundown …" automations).
+# No `initial:` so switching it off for a late-night project survives a restart.
+indoor_light_sun_dimming:
+  name: "Sundown Dimming"
+  icon: mdi:weather-sunset-down

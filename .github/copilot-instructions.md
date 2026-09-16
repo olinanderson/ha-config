@@ -434,6 +434,21 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 | `light.under_cabinet_lighting_switch` | Physical switch → linked to `cct_2` |
 | `light.shower_lighting_switch` | Physical switch → linked to `sc_1` |
 
+### Sundown dimming (indoor lights)
+Indoor lights get a bit dimmer at sundown and a bit more once it's dark, then reset in the morning.
+
+| Entity | Description |
+|---|---|
+| `sensor.indoor_light_phase` | Template (`template/lighting.yaml`): `day` (sun up) / `twilight` (sun below the horizon, above −6°) / `dark` (below −6°). Attr `max_brightness_pct` = the ceiling in force. `sun.sun` follows the Starlink-tracked home zone, so this is local wherever the van is |
+| `input_boolean.indoor_light_sun_dimming` | Master enable (no `initial:`, restores across restarts) |
+| `input_number.indoor_light_sundown_pct` | Ceiling during twilight (seeded 70 %) |
+| `input_number.indoor_light_dark_pct` | Ceiling after dark (seeded 40 %) |
+
+- `indoor_lights_sundown_dim` — at the evening edges (day→twilight, twilight→dark), lights already on step down to the new ceiling in 12 × 10 s steps. Small steps instead of one long transition because "Main Lighting: Sync" re-sends the switch level with no transition, which cuts a long fade short. A light turned up by hand mid-fade is left alone. Nothing brightens at dawn.
+- `indoor_lights_sundown_turn_on_level` — a light switched on (off→on, any source) during twilight/dark is capped at the ceiling. The first switch-on after sunrise of a light still sitting at one of the ceilings goes back to 100 %; a level picked by hand is left alone.
+- Hands off: shower light while Shower Mode is on, cabinet light while the LPG valve is open (Cook Mode), all lights during Sleep Mode's wind-down and for 2 min after Sleep Mode turns off (wake-up restore).
+- Only the LED controllers are commanded; the Inovelli switches follow via the Linked Entities blueprint.
+
 ### Switches / Controls
 | Entity | Description |
 |---|---|
@@ -459,6 +474,17 @@ after 2 s (what a reboot's setup does) and restarts the board after 10 s — nev
 10 min of boot. `binary_sensor.a32_pro_di33_40_expander_fault` and
 `sensor.a32_pro_di33_40_expander_faults` show it in HA. If the counter keeps climbing,
 next knobs are the I²C clock (400 kHz in `i2c:`) and the chip's address jumpers.
+
+### Fuel prices (GasBuddy, HACS `firstof9/ha-gasbuddy`)
+One hub + one *cheapest* station subentry (regular, credit price, no postal code → HA's
+home coordinates, which follow the van). Sensors are CAD/L; cost templates in
+`template/sensors.yaml` multiply them by the trip tracker's litres.
+| Entity | Description |
+|---|---|
+| `sensor.cheapest_regular_nearby_regular_gas` | Cheapest regular near the van (CAD/L; station_id/address attrs) |
+| `sensor.live_trip_fuel_cost` | This trip's fuel (moving + idle) × price |
+| `sensor.highway_fuel_cost_per_100km` / `sensor.city_fuel_cost_per_100km` | Lifetime economy × price |
+| `sensor.fill_up_cost` | Fill the 94.6 L tank from `sensor.stable_fuel_level` |
 
 ### Vehicle / OBD — WiCAN Pro via MQTT
 
@@ -857,6 +883,7 @@ Used in `old_home.yaml`:
 | Main Lighting Sync | Physical switch ↔ LED dimmer brightness sync |
 | Main Lighting Warmth | Warmth slider → LED CCT |
 | Linked Entities (×3) | Blueprint: switch ↔ LED controller pairs |
+| `indoor_lights_sundown_*` (×2) | Sundown dimming: step lights down at sundown / after dark, cap evening turn-ons, morning reset |
 | `shore_charger_*` | Manual enable sync + SOC-based power-cycle reset |
 | `iphone_home_arrival` | Welcome TTS when returning after 15+ min |
 | `auto_power_saving_when_away` | Radar presence → power saving on/off |
