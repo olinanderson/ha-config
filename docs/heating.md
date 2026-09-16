@@ -73,13 +73,32 @@ the run, so the failed start was never retried.
 
 In Auto (PID) mode the blower DAC is held at 0 until the coolant reaches
 **Hydronic Blower Start Temp** (`number.a32_pro_hydronic_blower_start_temp`,
-default 55 °C), and keeps running until it drops 10 °C below that so residual
+default 60 °C), and keeps running until it drops 10 °C below that so residual
 heat is still blown into the van. With 40 °C coolant the duct air was only
 ~27 °C; a lit burner takes the sensor from 45 to 60 °C in about a minute, so
 the wait costs little. The gate re-evaluates on every coolant sample, so the
 fan starts within a second of the threshold, and
 `binary_sensor.a32_pro_hydronic_blower_coolant_ready` shows its state. Manual
 blower control and the shoe dryer bypass it.
+
+Why 60 °C (`analyze_blower_gate.py`, 60 days to 2026-09-16): with the fan at full the
+duct air is about 41 / 44 / 47 °C when the coolant passes 55 / 60 / 65 °C, and it keeps
+climbing as the coolant rises. Cold starts reach 60 °C in a median 6.5 min (65 °C:
+7.5 min, p75 13.5, because the first slug of hot coolant is followed by a dip). The stop
+point matters more: with the fan at full, burner pauses pull the sensor down to 58.8 °C
+(p5) and once to 53.6 °C. A 50 °C stop point never tripped in 60 days, while 55 °C (a
+65 °C start) would have cut the fan in the middle of a run.
+
+## Blower Auto / Manual
+
+`switch.a32_pro_coolant_blower_mode_auto_manual`: on = Auto (the thermostat's PID
+sets the blower speed), off = Manual (the blower keeps whatever speed it is given).
+Manual is a hold: the thermostat stays in `heat` and keeps the burner lit, and the
+PID's `on_state`, which fires on every cabin temperature sample, no longer puts the
+blower back on Auto. The hold ends the next time the thermostat is switched on, so
+every heat session starts on Auto. That is also how the shoe dryer's climate restore
+hands the blower back. With the thermostat off the blower is always manual, and the
+switch reads off. The dashboard's Heater card has the Auto / Manual buttons.
 
 ## Low Fuel Lockout
 
@@ -95,7 +114,7 @@ blower control and the shoe dryer bypass it.
 | 0 | "Idle." (hidden) |
 | 1 | "Starting heater -> waiting for coolant to warm up (NN °C)..." |
 | 2 | "Coolant not warming -> heater restart N of M..." |
-| 3 | "Heater running -> coolant NN °C." or, while the blower is gated, "Heater running -> blower waits for coolant to reach 55 °C (now NN °C)." |
+| 3 | "Heater running -> coolant NN °C." or, while the blower is gated, "Heater running -> blower waits for coolant to reach 60 °C (now NN °C)." |
 | 4 | "Heater never warmed up after N restarts -> turned off. Toggle climate or heater to try again." |
 | 5 | "Low fuel lockout (XX%) -> Refuel or override from dashboard." |
 

@@ -672,6 +672,10 @@ switch:
 
 
     # Coolant Blower
+    # ON = Auto: the thermostat's PID drives the blower. OFF = Manual: the
+    # blower keeps whatever speed it is given and the heater keeps running.
+    # Manual holds until the thermostat is next switched on (see the climate's
+    # on_state); with the thermostat off the blower is always manual.
   - platform: template
     name: "Coolant Blower Mode (Auto-Manual)"
     id: blower_mode_switch
@@ -681,11 +685,27 @@ switch:
     # Enable PID
     turn_on_action:
       - lambda: |-
-          id(blower_active) = true;  
+          id(blower_manual_hold) = false;
+          if (id(coolant_blower_heating).mode == climate::CLIMATE_MODE_OFF) {
+            ESP_LOGI("BLOWER_MODE", "Auto requested but the thermostat is off -> blower stays manual");
+            return;
+          }
+          id(blower_active) = true;
           ESP_LOGI("BLOWER_MODE", "Blower set to Auto mode (PID on)");
+          // Apply the PID's output now instead of on its next tick, behind the
+          // same coolant gate as pid_coolant_blower_output's write_action.
+          float v = id(coolant_blower_heating).get_output_value();
+          if (id(blower_coolant_ready) && v > 0.0f) {
+            auto call = id(blower).turn_on();
+            call.set_brightness(v > 1.0f ? 1.0f : v);
+            call.perform();
+          } else if (id(blower).remote_values.is_on()) {
+            id(blower).turn_off().perform();
+          }
     # Disable PID
     turn_off_action:
       - lambda: |-
+          id(blower_manual_hold) = true;
           id(blower_active) = false;
           ESP_LOGI("BLOWER_MODE", "Blower set to Manual mode (PID off)");
 
@@ -1550,6 +1570,21 @@ globals:
     type: bool
     initial_value: "false"  # Default to Manual mode (PID off)
 
+  # Manual blower while the thermostat heats (Coolant Blower Mode switched
+  # off). Cleared when the thermostat is next switched on, so every heat
+  # session starts on Auto; that is also how the shoe dryer's climate restore
+  # hands the blower back to the PID.
+  - id: blower_manual_hold
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
+  # Thermostat on/off at the previous on_state, to catch the off -> heat edge.
+  - id: climate_was_on
+    type: bool
+    restore_value: no
+    initial_value: "false"
+
   # Global: store last-off time using absolute time.
   - id: hydronic_heater_last_off_timestamp
     type: float
@@ -1660,7 +1695,10 @@ number:
   # Hydronic heater / blower tuning. Restored across reboots. Defaults come
   # from the 2026-09 history: a lit burner lifts the HX#1 sensor ~12 °C/min,
   # failed starts drift < 2.5 °C in 5 min, and blower air is only ~27 °C with
-  # 40 °C coolant.
+  # 40 °C coolant. Blower start is 60 °C since 2026-09-16 (analyze_blower_gate.py,
+  # 60 days): duct air is ~44 °C when the fan starts, and the 50 °C stop point
+  # sits below every burner-pause trough seen with the fan at full (lowest
+  # 53.6 °C). A 65 °C start would have stopped the fan in one of those troughs.
   - platform: template
     name: "Hydronic Blower Start Temp"
     id: blower_start_temp
@@ -1672,7 +1710,7 @@ number:
     min_value: 30
     max_value: 80
     step: 1
-    initial_value: 55
+    initial_value: 60
     restore_value: true
     optimistic: true
   # Coolant at/above this = heater healthy, whatever heated it (the engine
@@ -2033,13 +2071,24 @@ climate:
       deadband_output_averaging_samples: 15  # Extra smoothing while in deadband
 
     on_state:
+      # Runs on every PID publish (each cabin temperature sample), not only on
+      # mode changes, so a manual blower hold must survive it. Switching the
+      # thermostat on is what hands the blower back to the PID.
+      - lambda: |-
+          bool on = x.mode != climate::CLIMATE_MODE_OFF;
+          if (on && !id(climate_was_on) && id(blower_manual_hold)) {
+            id(blower_manual_hold) = false;
+            ESP_LOGI("CLIMATE", "Thermostat switched on -> blower back on Auto.");
+          }
+          id(climate_was_on) = on;
       - if:
           condition:
             lambda: 'return x.mode != climate::CLIMATE_MODE_OFF;'
           then:
             - lambda: |-
-                id(blower_active) = true;
-                ESP_LOGI("CLIMATE", "Climate is ON. PID enabled.");
+                id(blower_active) = !id(blower_manual_hold);
+                ESP_LOGI("CLIMATE", "Climate is ON. PID %s.",
+                         id(blower_manual_hold) ? "enabled, blower on manual" : "enabled");
             # Light the heater if nothing has it on yet. The relay's on_turn_on
             # arms the warm-up monitor (interval:), which restarts the heater
             # itself if the coolant never warms. State 4 (all restarts used

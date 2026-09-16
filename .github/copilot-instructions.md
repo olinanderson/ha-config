@@ -1020,11 +1020,21 @@ stopped watching for the rest of the run.
 ### Blower Coolant Gate
 
 In Auto (PID) mode the blower DAC stays at 0 until the coolant reaches **Hydronic Blower
-Start Temp** (`number.a32_pro_hydronic_blower_start_temp`, default 55 °C) and runs until
+Start Temp** (`number.a32_pro_hydronic_blower_start_temp`, default 60 °C) and runs until
 it falls 10 °C below that (residual heat still gets blown out). The gate is re-evaluated
 on every coolant sample; `binary_sensor.a32_pro_hydronic_blower_coolant_ready` shows it
 and the status text says "blower waits for coolant…" meanwhile. Manual blower control and
 the shoe dryer bypass the gate.
+
+### Blower Auto / Manual
+
+`switch.a32_pro_coolant_blower_mode_auto_manual` (on = Auto/PID, off = Manual) is a hold
+while the thermostat heats: the burner stays lit and the climate's `on_state` (which fires
+on every cabin temperature sample) no longer re-arms Auto. The hold clears when the
+thermostat is next switched on, so each heat session starts on Auto and the shoe dryer's
+climate restore hands the blower back. Thermostat off = always manual (switch reads off).
+Firmware before 2026-09-16 re-armed Auto within ~10 s, which is why `script.shoe_dryer_start`
+turns the climate off before flipping the switch.
 
 ### Low Fuel Lockout
 
@@ -1042,7 +1052,7 @@ the shoe dryer bypass the gate.
 | 0 (idle, heater off) | "Idle." (hidden on dashboard) |
 | 1 (starting) | "Starting heater -> waiting for coolant to warm up (NN °C)..." |
 | 2 (restarting) | "Coolant not warming -> heater restart N of M..." |
-| 3 (running, blower gated) | "Heater running -> blower waits for coolant to reach 55 °C (now NN °C)." |
+| 3 (running, blower gated) | "Heater running -> blower waits for coolant to reach 60 °C (now NN °C)." |
 | 3 (running) | "Heater running -> coolant NN °C." |
 | 4 (failed) | "Heater never warmed up after N restarts -> turned off. Toggle climate or heater to try again." |
 | 5 (fuel lockout) | "Low fuel lockout (XX%) -> Refuel or override from dashboard." |
