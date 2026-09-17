@@ -426,6 +426,30 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 | `input_boolean.hot_water_mode` | Hot water mode — keeps heater running when climate is OFF |
 | `input_boolean.heater_low_fuel_lockout` | Low fuel lockout — blocks heater when fuel < 25% after failed retry |
 
+### Roof fan IR protocol (decoded 2026-09-17)
+
+Every remote press sends one 16-byte packet: 1200-baud serial, 8 data bits LSB first, one stop bit plus
+one idle bit, on a 38 kHz carrier with carrier ON = logic 0.
+
+```
+5A A5 80 7F 40 BF 20 DF 10 CC | flags | speed % | set point °F | FF 23 | XOR of bytes 0..12
+flags: bit0 power, bit1 ceiling-fan mode, bit2 air out (exhaust), bit3 lid open, bit4 thermostat (auto)
+```
+
+The Pronto scripts in `esphome/a8-pro.yaml` are exactly these packets (speed 10–100 %, whatever set point
+the remote held when they were captured). `roof_fan_send_frame` builds any packet on the AG Pro, which is
+how the thermostat set point (29–99 °F, the fan's own unit) is sent without capturing 142 frames. Entities:
+`switch.ag_pro_roof_fan_thermostat`, `number.ag_pro_roof_fan_thermostat_set_point`; action
+`esphome.ag_pro_roof_fan_thermostat` (`temp_f`, `exhaust`, `speed_pct`) does lid + direction + speed + set
+point in one frame. Verified 2026-09-17: bit2 clear showed "air in" on the fan; an auto frame does not start
+a stopped motor, but a running fan stays on under one and then cycles by itself (stopped within 15 s of a
+90 °F set point, restarted within 15 s of 60 °F), so the switch's turn-on sends a manual start frame first
+when the fan is off (lid frame if shut, manual frame, 3 s, auto frame). Any manual fan command, and the
+lid-closed frame, end thermostat mode (their packets have the auto bit clear), and the firmware publishes
+the switch off when it sends them. Capture: stream
+`esphome logs esphome/a8-pro.yaml --device 192.168.10.61` (the receiver on GPIO23 dumps Pronto) and decode
+with the 1200-baud rule above.
+
 ### Roof Fan
 | Entity | Description |
 |---|---|
@@ -742,8 +766,9 @@ integration for backward compatibility). The old `ha-wican` HACS integration has
 
 Anything but **Off** in `input_select.night_climate_mode` runs until `input_datetime.night_climate_wake_time`
 (07:30). **Program** holds `sensor.night_climate_target` (night target 15 °C, wake target 23 °C from *wake −
-warm-up*): heater below target − 1 °C, A/C above target + 2 °C on shore power only with a 30-min dwell; the
-roof fan branch waits on the remote's Auto-temp IR frames (`input_boolean.night_climate_use_fan` reserved).
+warm-up*): heater below target − 1 °C; above target + 2 °C the roof fan on its own thermostat
+(`esphome.ag_pro_roof_fan_thermostat`, set point = target in °F) while outside is cooler, else the A/C on
+shore power only with a 30-min dwell. `input_boolean.night_climate_use_heater/_use_ac/_use_fan` allow each.
 **Fan all night** / **A/C all night** / **Heater** run one appliance. Sleep Mode on starts the Program, the
 wake time ends it (fan + A/C off, heater left as the warm-up set it) and Sleep Mode. Room reading =
 `sensor.living_space_temperature` (gated median, `template/night_climate.yaml`). Scripts

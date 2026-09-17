@@ -18,7 +18,7 @@
 
 | Mode | What it does |
 |---|---|
-| **Program** | Holds `sensor.night_climate_target`: the night target (`input_number.night_climate_night_target`, 15 °C) until *wake time − warm-up* (`input_number.night_climate_warmup_minutes`, 45), the wake target (`input_number.night_climate_wake_target`, 23 °C) from then on. Heater when the room is below target − 1 °C, off again above target + 2 °C; A/C above target + 2 °C, only on shore power (`sensor.shore_power_charger_power_24v` > 50 W), 30-min dwell between on/off, off below target − 0.5 °C; between the bands whatever runs holds its own thermostat. `input_boolean.night_climate_use_heater` / `_use_ac` allow each. Roof fan: `_use_fan` is reserved until the remote's Auto-temp IR frames are captured |
+| **Program** | Holds `sensor.night_climate_target`: the night target (`input_number.night_climate_night_target`, 15 °C) until *wake time − warm-up* (`input_number.night_climate_warmup_minutes`, 45), the wake target (`input_number.night_climate_wake_target`, 23 °C) from then on. Heater when the room is below target − 1 °C, off again above target + 2 °C. Above target + 2 °C: the roof fan on its own thermostat (set point = target in °F, lid open, direction and speed from the Tonight card) while the underneath-van sensor reads at least 1 °C cooler than the room; the fan then cycles itself and only the set point gets re-sent when the target changes. If the fan has been on for 30 min and the room is still 3 °C over, or outside is not cooler, the A/C takes over: only on shore power (`sensor.shore_power_charger_power_24v` > 50 W), 30-min dwell between on/off, off below target − 0.5 °C. Between the bands whatever runs holds its own thermostat. `input_boolean.night_climate_use_heater` / `_use_ac` / `_use_fan` allow each |
 | **Fan all night** | Roof fan at `input_number.night_climate_fan_speed` (30 %) in `input_select.night_climate_fan_direction` (Intake), lid open (ceiling-fan mode left first); A/C off; heater untouched |
 | **A/C all night** | A/C on its own thermostat at the target (clamped to the unit's 16–32 °C), fan level 1; shore power only, switched off if shore drops; roof fan off; heater untouched |
 | **Heater** | Thermostat at the target; fan and A/C off |
@@ -35,15 +35,36 @@ Room temperature: `sensor.living_space_temperature` = median of BME280_1 (only w
 updated within 15 min), BME280_1 as the fallback; attribute `sources` says which counted.
 `sensor.night_climate_status` is the one-line summary the Tonight card shows.
 
-Files: `template/night_climate.yaml`; `scripts.yaml` (`night_climate_heater_to` / `_fan_on` / `_ac_on` /
-`_actuators_off`, each checks before it sends, since the fan and the A/C beep on every IR frame);
+Files: `template/night_climate.yaml`; `scripts.yaml` (`night_climate_heater_to` / `_fan_on` / `_fan_auto` /
+`_fan_off` / `_ac_on` / `_actuators_off`, each checks before it sends, since the fan and the A/C beep on every
+IR frame; `_fan_off` closes the lid, which is also what ends thermostat mode);
 `automations.yaml` (`night_climate_controller` every 5 min and on any setting change,
 `night_climate_start_on_sleep`, `night_climate_stop_on_sleep_off`, `night_climate_mode_off`,
 `night_climate_wake`); `react-dashboard/src/components/TonightCard.tsx`.
 
-Still to do: capture the fan remote's Auto-temp frames on the AG Pro (`remote_receiver` GPIO23, `dump: all`;
-stream `esphome logs esphome/a8-pro.yaml` while the remote is pointed at the AG Pro), add them as scripts on
-the AG Pro, then give the Program a fan branch that uses the fan's own thermostat.
+### Roof fan IR protocol (decoded 2026-09-17)
+
+Every remote press sends one 16-byte packet: 1200-baud serial, 8 data bits LSB first, one stop bit plus
+one idle bit, on a 38 kHz carrier with carrier ON = logic 0.
+
+```
+5A A5 80 7F 40 BF 20 DF 10 CC | flags | speed % | set point °F | FF 23 | XOR of bytes 0..12
+flags: bit0 power, bit1 ceiling-fan mode, bit2 air out (exhaust), bit3 lid open, bit4 thermostat (auto)
+```
+
+The Pronto scripts in `esphome/a8-pro.yaml` are exactly these packets (speed 10–100 %, whatever set point
+the remote held when they were captured). `roof_fan_send_frame` builds any packet on the AG Pro, which is
+how the thermostat set point (29–99 °F, the fan's own unit) is sent without capturing 142 frames. Entities:
+`switch.ag_pro_roof_fan_thermostat`, `number.ag_pro_roof_fan_thermostat_set_point`; action
+`esphome.ag_pro_roof_fan_thermostat` (`temp_f`, `exhaust`, `speed_pct`) does lid + direction + speed + set
+point in one frame. Verified 2026-09-17: bit2 clear showed "air in" on the fan; an auto frame does not start
+a stopped motor, but a running fan stays on under one and then cycles by itself (stopped within 15 s of a
+90 °F set point, restarted within 15 s of 60 °F), so the switch's turn-on sends a manual start frame first
+when the fan is off (lid frame if shut, manual frame, 3 s, auto frame). Any manual fan command, and the
+lid-closed frame, end thermostat mode (their packets have the auto bit clear), and the firmware publishes
+the switch off when it sends them. Capture: stream
+`esphome logs esphome/a8-pro.yaml --device 192.168.10.61` (the receiver on GPIO23 dumps Pronto) and decode
+with the 1200-baud rule above.
 
 ### Dynamic Scenes (runtime via `scene.create`)
 - `scene.last_active_state` — rolling 1Hz snapshot

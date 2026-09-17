@@ -221,11 +221,13 @@ export function TonightCard() {
               />
               A/C
             </label>
-            <label
-              className="flex items-center gap-2 text-sm text-muted-foreground"
-              title="Waits on the fan remote's Auto-temp IR frames"
-            >
-              <Switch aria-label="Program may use roof fan" checked={useFan?.state === 'on'} disabled />
+            <label className="flex items-center gap-2 text-sm" title="Roof fan on its own thermostat while it is cooler outside">
+              <Switch
+                aria-label="Program may use roof fan"
+                checked={useFan?.state === 'on'}
+                disabled={!useFan}
+                onCheckedChange={(v) => setAllowed(USE_FAN_ID, v)}
+              />
               Fan
             </label>
           </div>

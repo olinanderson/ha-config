@@ -92,16 +92,17 @@ describe('TonightCard', () => {
     expect(wakeTimeValue('unknown')).toBe('07:30');
   });
 
-  it('toggles what the Program may use; the fan waits on its IR frames', () => {
+  it('toggles what the Program may use', () => {
     render(<TonightCard />);
     fireEvent.click(screen.getByRole('switch', { name: 'Program may use heater' }));
     expect(callService).toHaveBeenCalledWith('input_boolean', 'turn_off', undefined, { entity_id: USE_HEATER_ID });
+    fireEvent.click(screen.getByRole('switch', { name: 'Program may use roof fan' }));
+    expect(callService).toHaveBeenCalledWith('input_boolean', 'turn_on', undefined, { entity_id: USE_FAN_ID });
     cleanup();
     entityRef.current = makeEntities({ useAc: 'off' });
     render(<TonightCard />);
     fireEvent.click(screen.getByRole('switch', { name: 'Program may use A/C' }));
     expect(callService).toHaveBeenCalledWith('input_boolean', 'turn_on', undefined, { entity_id: USE_AC_ID });
-    expect((screen.getByRole('switch', { name: 'Program may use roof fan' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('sets the fan direction and speed for Fan all night', () => {

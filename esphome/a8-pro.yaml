@@ -41,6 +41,27 @@ logger:
 api:
   encryption:
     key: !secret ag_pro_api_key
+  actions:
+    # esphome.ag_pro_roof_fan_thermostat: lid open, direction, speed and the
+    # fan's own thermostat at temp_f (29–99 °F). One IR frame = one beep.
+    - action: roof_fan_thermostat
+      variables:
+        temp_f: int
+        exhaust: bool
+        speed_pct: int
+      then:
+        - lambda: |-
+            int s = speed_pct / 10;
+            if (s < 1) s = 1;
+            if (s > 10) s = 10;
+            id(roof_fan).direction = exhaust ? FanDirection::FORWARD : FanDirection::REVERSE;
+            id(roof_fan).speed = s;
+            id(roof_fan).publish_state();          // no control() call, so no manual frame
+            int t = temp_f;
+            if (t < 29) t = 29;
+            if (t > 99) t = 99;
+            id(roof_fan_set_point_f).publish_state(t);
+        - switch.turn_on: roof_fan_thermostat
 ota:
   - platform: esphome
     password: !secret ag_pro_ota_password
@@ -283,6 +304,10 @@ cover:
                       transmitter_id: transmitter_main
                       carrier_frequency: 38kHz
                       code: [1815,-743,893,-1527,846,-787,895,-1526,845,-789,894,-716,1717,-716,849,-2402,6515,-2403,893,-5584,851,-1593,5715,-785,888,-1533,847,-4812,913,-2342,4954,-724,1711,-1533,847,-4007,912,-3154,4159,-725,2468,-1593,2511,-1536,1708,-3154,2472,-1594,3332,-1536,1706,-728,846,-785,3267,-1596,1646,-786,1644,-789,850,-762,844,-1579,869,-8061,845,-1577,2494,-763,1670,-1572,3265,-794,2491]
+                  # that frame has the auto bit clear
+                  - switch.template.publish:
+                      id: roof_fan_thermostat
+                      state: OFF
             - if:
                 condition:
                   and:
@@ -311,6 +336,10 @@ cover:
                 transmitter_id: transmitter_main
                 carrier_frequency: 38kHz
                 code: [1604,-834,778,-1646,800,-835,779,-1645,802,-834,780,-836,1601,-834,800,-2455,6474,-2457,802,-5710,805,-1620,5651,-858,779,-1645,803,-4899,779,-2458,4875,-834,1604,-1645,780,-4083,804,-3265,4025,-835,2397,-1670,2401,-1647,1602,-3294,7270,-1646,1604,-3270,2398,-1671,3228,-859,1577,-833,803,-1644,778,-8145,800,-1646,2402,-836,1626,-1623,1599,-835,774,-861,2400]
+            # that frame has the auto bit clear
+            - switch.template.publish:
+                id: roof_fan_thermostat
+                state: OFF
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Misc switches
@@ -344,6 +373,53 @@ switch:
                 id: roof_fan_lid
                 state: OPEN
 
+  # Roof fan thermostat (the remote's Auto mode): the fan runs by itself while
+  # the room is above roof_fan_set_point_f, lid open. Any manual fan command
+  # (roof_fan_dispatch) ends it, as on the remote. Frames decoded 2026-09-17,
+  # see the roof_fan_send_frame script.
+  - platform: template
+    id: roof_fan_thermostat
+    name: "Roof Fan Thermostat"
+    icon: mdi:thermostat-auto
+    optimistic: true
+    restore_mode: RESTORE_DEFAULT_OFF
+    turn_on_action:
+      - switch.template.publish:
+          id: ceiling_fan_mode
+          state: OFF
+      # Lid first if it is shut (its own frame); the auto frame follows.
+      - if:
+          condition:
+            lambda: 'return id(roof_fan_lid).position <= 0.5f;'
+          then:
+            - cover.template.publish:
+                id: roof_fan_lid
+                state: OPEN
+            - delay: 500ms
+      # An auto frame does not start a stopped motor (2026-09-17 test: nothing
+      # for 2 min), but a running fan stays on under one and then cycles by
+      # itself. So start it manually at the chosen speed/direction first.
+      - if:
+          condition:
+            lambda: 'return !id(roof_fan).state;'
+          then:
+            - script.execute:
+                id: roof_fan_send_frame
+                flags: !lambda 'return 0x09 | (id(roof_fan).direction == FanDirection::FORWARD ? 0x04 : 0x00);'
+                speed_pct: !lambda 'return std::max(1, std::min(10, id(roof_fan).speed)) * 10;'
+                temp_f: !lambda 'return (int) id(roof_fan_set_point_f).state;'
+            - delay: 3s
+      - switch.template.publish:
+          id: roof_fan_thermostat
+          state: ON
+      - script.execute: roof_fan_send_thermostat
+    turn_off_action:
+      - switch.template.publish:
+          id: roof_fan_thermostat
+          state: OFF
+      # Back to the manual state (fan off → off frame, which clears the auto bit).
+      - script.execute: roof_fan_dispatch
+
 # ─────────────────────────────────────────────────────────────────────────────
 # Climate entity – 24V Mini-Split AC (IR-controlled)
 #
@@ -372,6 +448,28 @@ switch:
 # the target and walks the fan via the existing ac_sync_fan (when the AC is on).
 # ─────────────────────────────────────────────────────────────────────────────
 number:
+  # Roof fan thermostat set point. The fan thinks in whole °F (29–99).
+  - platform: template
+    name: "Roof Fan Thermostat Set Point"
+    id: roof_fan_set_point_f
+    icon: mdi:thermometer-auto
+    unit_of_measurement: "°F"
+    min_value: 29
+    max_value: 99
+    step: 1
+    mode: box
+    optimistic: true
+    restore_value: true
+    initial_value: 65
+    set_action:
+      # Publish first: the optimistic publish only happens after this action.
+      - lambda: 'id(roof_fan_set_point_f).publish_state(x);'
+      - if:
+          condition:
+            switch.is_on: roof_fan_thermostat
+          then:
+            - script.execute: roof_fan_send_thermostat
+
   - platform: template
     name: "24V AC - Fan Level"
     id: ac_fan_level_number
@@ -488,6 +586,59 @@ climate:
 
 script:
   # ───────────────────────────────────────────────────────────────────────────
+  # Roof fan frame builder (decoded from the remote, 2026-09-17)
+  #   One 16-byte packet per press, 1200 baud 8N2 LSB-first serial on a 38 kHz
+  #   carrier, carrier ON = logic 0:
+  #     5A A5 80 7F 40 BF 20 DF 10 CC | flags | speed % | set °F | FF 23 | XOR(bytes 0..12)
+  #   flags: bit0 power, bit1 ceiling-fan mode, bit2 air out (exhaust),
+  #          bit3 lid open, bit4 thermostat (auto) mode.
+  #   The captured Pronto scripts below are the same packets; this builds any
+  #   of them, which is how the thermostat set point gets sent.
+  # ───────────────────────────────────────────────────────────────────────────
+  - id: roof_fan_send_frame
+    mode: queued
+    parameters:
+      flags: int
+      speed_pct: int
+      temp_f: int
+    then:
+      - remote_transmitter.transmit_raw:
+          transmitter_id: transmitter_main
+          carrier_frequency: 38kHz
+          code: !lambda |-
+            uint8_t b[16] = {0x5A, 0xA5, 0x80, 0x7F, 0x40, 0xBF, 0x20, 0xDF, 0x10, 0xCC,
+                             (uint8_t) flags, (uint8_t) speed_pct, (uint8_t) temp_f, 0xFF, 0x23, 0x00};
+            uint8_t x = 0;
+            for (int i = 0; i < 13; i++) x ^= b[i];
+            b[15] = x;
+            const int32_t BIT = 833;               // µs, 1200 baud
+            std::vector<int32_t> code;
+            int cur = -1;                          // 0 = carrier on (mark), 1 = off (space)
+            int32_t run = 0;
+            auto push = [&](int lv) {
+              if (lv == cur) { run++; return; }
+              if (cur >= 0) code.push_back(cur == 0 ? run * BIT : -(run * BIT));
+              cur = lv; run = 1;
+            };
+            for (int i = 0; i < 16; i++) {
+              push(0);                             // start bit
+              for (int n = 0; n < 8; n++) push((b[i] >> n) & 1);
+              push(1); push(1);                    // stop bit + the idle bit the remote leaves
+            }
+            code.push_back(cur == 0 ? run * BIT : -(run * BIT));
+            return code;
+
+  # Auto frame from the current fan direction/speed and the set point number.
+  - id: roof_fan_send_thermostat
+    mode: restart
+    then:
+      - script.execute:
+          id: roof_fan_send_frame
+          flags: !lambda 'return 0x18 | (id(roof_fan).direction == FanDirection::FORWARD ? 0x04 : 0x00);'
+          speed_pct: !lambda 'return std::max(1, std::min(10, id(roof_fan).speed)) * 10;'
+          temp_f: !lambda 'return (int) id(roof_fan_set_point_f).state;'
+
+  # ───────────────────────────────────────────────────────────────────────────
   # Dispatcher script – chooses the correct IR command
   #   (references specific IR scripts that appear later in the file)
   # ───────────────────────────────────────────────────────────────────────────
@@ -501,6 +652,9 @@ script:
           const bool lidOpen = id(roof_fan_lid).position > 0.5f;
           const bool exhaust = id(roof_fan).direction == FanDirection::FORWARD;
           const int  step    = std::max(1, std::min(10, id(roof_fan).speed)) - 1;
+
+          // A manual frame has the auto bit clear, so it ends thermostat mode.
+          if (id(roof_fan_thermostat).state) id(roof_fan_thermostat).publish_state(false);
 
           /* -----  OFF  --------------------------------------------------- */
           if (!pwr) {

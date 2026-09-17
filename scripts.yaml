@@ -1109,8 +1109,56 @@ night_climate_ac_on:
           data:
             value: 1
 
-night_climate_actuators_off:
-  alias: "Night Climate – roof fan and A/C off"
+# Roof fan on its own thermostat (the remote's Auto mode): the AG Pro builds the
+# frame (esphome/a8-pro.yaml, roof_fan_send_frame). The fan then runs by itself
+# while the room is above the set point, lid open. One frame only when
+# something differs, since every frame beeps.
+night_climate_fan_auto:
+  alias: "Night Climate – roof fan thermostat"
+  mode: queued
+  fields:
+    target_c:
+      description: "Room target (°C); the fan runs above it"
+      example: 15
+    direction:
+      description: "Intake or Exhaust"
+      example: Intake
+    speed:
+      description: "Percent, steps of 10"
+      example: 30
+  sequence:
+    - variables:
+        temp_f: "{{ [29, [99, ((target_c | float) * 9 / 5 + 32) | round(0) | int] | min] | max }}"
+        exhaust: "{{ direction == 'Exhaust' }}"
+        want_dir: "{{ 'forward' if direction == 'Exhaust' else 'reverse' }}"
+        same_fan: >-
+          {{ state_attr('fan.ag_pro_roof_fan', 'direction') == want_dir
+             and state_attr('fan.ag_pro_roof_fan', 'percentage') | int(0) == speed | int }}
+    - choose:
+        # Already on its thermostat with this direction/speed: only the set point
+        - conditions: >-
+            {{ is_state('switch.ag_pro_roof_fan_thermostat', 'on') and same_fan
+               and states('number.ag_pro_roof_fan_thermostat_set_point') | int(-1) != temp_f }}
+          sequence:
+            - action: number.set_value
+              target:
+                entity_id: number.ag_pro_roof_fan_thermostat_set_point
+              data:
+                value: "{{ temp_f }}"
+        # Otherwise the full start (lid, manual start, thermostat)
+        - conditions: "{{ not is_state('switch.ag_pro_roof_fan_thermostat', 'on') or not same_fan }}"
+          sequence:
+            - action: esphome.ag_pro_roof_fan_thermostat
+              data:
+                temp_f: "{{ temp_f }}"
+                exhaust: "{{ exhaust }}"
+                speed_pct: "{{ speed | int }}"
+
+# Fan off and lid shut, whether it was running manually or on its thermostat.
+# The lid-closed frame carries "fan off, auto off", so closing the lid is what
+# ends thermostat mode; the firmware publishes the switch off when it sends it.
+night_climate_fan_off:
+  alias: "Night Climate – roof fan off, lid closed"
   mode: queued
   sequence:
     - if:
@@ -1119,6 +1167,21 @@ night_climate_actuators_off:
         - action: fan.turn_off
           target:
             entity_id: fan.ag_pro_roof_fan
+        - delay: "00:00:01"
+    - if:
+        - >
+          {{ is_state('cover.ag_pro_roof_fan_lid', 'open')
+             or is_state('switch.ag_pro_roof_fan_thermostat', 'on') }}
+      then:
+        - action: cover.close_cover
+          target:
+            entity_id: cover.ag_pro_roof_fan_lid
+
+night_climate_actuators_off:
+  alias: "Night Climate – roof fan and A/C off"
+  mode: queued
+  sequence:
+    - action: script.night_climate_fan_off
     - if:
         - "{{ states('climate.ag_pro_24v_air_conditioner') not in ['off', 'unavailable', 'unknown'] }}"
       then:

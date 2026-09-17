@@ -2300,6 +2300,7 @@
         - input_number.night_climate_fan_speed
         - input_boolean.night_climate_use_heater
         - input_boolean.night_climate_use_ac
+        - input_boolean.night_climate_use_fan
         - sensor.night_climate_target
       to:
   condition:
@@ -2317,6 +2318,18 @@
              or (now() - states.climate.ag_pro_24v_air_conditioner.last_changed).total_seconds() > 1800 }}
         use_heater: "{{ is_state('input_boolean.night_climate_use_heater', 'on') }}"
         use_ac: "{{ is_state('input_boolean.night_climate_use_ac', 'on') }}"
+        use_fan: "{{ is_state('input_boolean.night_climate_use_fan', 'on') }}"
+        fan_thermo: "{{ is_state('switch.ag_pro_roof_fan_thermostat', 'on') }}"
+        # Underneath-van sensor reads ~3.5 °C warm, so this is conservative.
+        outdoor: "{{ states('sensor.a32_pro_bme280_4_temperature') | float(none) }}"
+        fan_ok: "{{ room is not none and outdoor is not none and outdoor < room - 1 }}"
+        # 30 min on its thermostat and still 3 °C over: the fan is not enough.
+        fan_struggling: >-
+          {{ fan_thermo and room is not none and room > target + 3
+             and (now() - states.switch.ag_pro_roof_fan_thermostat.last_changed).total_seconds() > 1800 }}
+        fan_settings:
+          direction: "{{ states('input_select.night_climate_fan_direction') }}"
+          speed: "{{ states('input_number.night_climate_fan_speed') | int(30) }}"
     - choose:
         # ── Heater: just the thermostat at the target ──
         - conditions: "{{ mode == 'Heater' }}"
@@ -2367,11 +2380,9 @@
                       data:
                         hvac_mode: "off"
 
-        # ── Program: heater below target−1, A/C above target+2 (shore only) ──
+        # ── Program: heater below target−1; above target+2 the roof fan on its
+        #    own thermostat while it is cooler outside, else the A/C (shore only).
         #    Between the bands whatever is running holds its own target.
-        #    Roof fan: waits on the remote's Auto-temp IR frames (see
-        #    docs/automations-modes.md); input_boolean.night_climate_use_fan is
-        #    reserved for it.
         - conditions: "{{ mode == 'Program' }}"
           sequence:
             - choose:
@@ -2382,7 +2393,7 @@
                     - action: script.night_climate_heater_to
                       data:
                         target: "{{ target }}"
-                # Too warm: heater off; A/C to target when allowed, on shore and settled
+                # Too warm: heater off; roof fan first, A/C when the fan can't
                 - conditions: "{{ room is not none and room > target + 2 }}"
                   sequence:
                     - if:
@@ -2393,12 +2404,43 @@
                             entity_id: climate.a32_pro_van_hydronic_heating_pid
                           data:
                             hvac_mode: "off"
+                    - choose:
+                        # Fan has had its chance: hand over to the A/C
+                        - conditions: "{{ fan_struggling and use_ac and shore and (ac_on or ac_settled) }}"
+                          sequence:
+                            - action: script.night_climate_fan_off
+                            - action: script.night_climate_ac_on
+                              data:
+                                target: "{{ target }}"
+                        - conditions: "{{ use_fan and fan_ok }}"
+                          sequence:
+                            - action: script.night_climate_fan_auto
+                              data:
+                                target_c: "{{ target }}"
+                                direction: "{{ fan_settings.direction }}"
+                                speed: "{{ fan_settings.speed }}"
+                        - conditions: "{{ use_ac and shore and (ac_on or ac_settled) }}"
+                          sequence:
+                            - if:
+                                - "{{ fan_thermo or is_state('fan.ag_pro_roof_fan', 'on') }}"
+                              then:
+                                - action: script.night_climate_fan_off
+                            - action: script.night_climate_ac_on
+                              data:
+                                target: "{{ target }}"
+                # Fan on its thermostat in band: keep it in step; off when outside stops helping
+                - conditions: "{{ fan_thermo }}"
+                  sequence:
                     - if:
-                        - "{{ use_ac and shore and (ac_on or ac_settled) }}"
+                        - "{{ use_fan and fan_ok }}"
                       then:
-                        - action: script.night_climate_ac_on
+                        - action: script.night_climate_fan_auto
                           data:
-                            target: "{{ target }}"
+                            target_c: "{{ target }}"
+                            direction: "{{ fan_settings.direction }}"
+                            speed: "{{ fan_settings.speed }}"
+                      else:
+                        - action: script.night_climate_fan_off
                 # A/C running: off once the room is back under target or shore is gone
                 - conditions: >
                     {{ ac_on and (not shore or not use_ac

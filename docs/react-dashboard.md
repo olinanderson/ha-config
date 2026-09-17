@@ -102,8 +102,8 @@ everything else. The payload is only what the component's schema takes (`weekday
 program (`docs/automations-modes.md` → Night Climate). It only edits helpers: the mode buttons
 (`input_select.night_climate_mode`; **A/C** is disabled without shore power), night and wake targets,
 the wake time (`input_datetime.set_datetime` with `time: HH:MM:00`), the warm-up, which appliances the
-Program may use (the roof-fan switch stays disabled until its IR frames exist) and the fan speed and
-direction for Fan all night. The status line is `sensor.night_climate_status`, built by the template so
+Program may use and the fan speed and direction (used by Fan all night and by the Program's fan
+thermostat). The status line is `sensor.night_climate_status`, built by the template so
 the card and HA say the same thing. Tests: `src/components/TonightCard.test.tsx`.
 
 ## CSS Scoping

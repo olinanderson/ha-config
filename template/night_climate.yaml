@@ -112,6 +112,7 @@
           {% if is_state('climate.a32_pro_van_hydronic_heating_pid', 'heat') %}{% set on = on + ['heater'] %}{% endif %}
           {% if is_state('climate.ag_pro_24v_air_conditioner', 'cool') %}{% set on = on + ['A/C'] %}{% endif %}
           {% if is_state('fan.ag_pro_roof_fan', 'on') %}{% set on = on + ['fan ' ~ state_attr('fan.ag_pro_roof_fan', 'percentage') ~ '%'] %}{% endif %}
+          {% if is_state('switch.ag_pro_roof_fan_thermostat', 'on') %}{% set on = on + ['fan auto above ' ~ states('number.ag_pro_roof_fan_thermostat_set_point') ~ ' °F'] %}{% endif %}
           {% set parts = parts + [(on | join(' + ')) if on else 'nothing running'] %}
           {% if mode in ['Program', 'A/C all night'] and states('sensor.shore_power_charger_power_24v') | float(0) <= 50 %}
             {% set parts = parts + ['A/C needs shore power'] %}
