@@ -84,6 +84,18 @@ It also works with old loaders still in browser caches. Tests: `src/lib/panel-ho
 If this regresses after an HA update, check `ha-panel-custom` / `partial-panel-resolver` in the
 HA frontend first.
 
+## Schedule Page
+
+`src/pages/Schedule.tsx` is a front end for the HACS scheduler component (`/api/scheduler/list|add|edit|remove`,
+`scheduler.run_action`). A new schedule opens on the **Heater** preset: "Heat to N °C" (default 26 °C at
+07:30, daily) sends `climate.set_temperature` with `hvac_mode: heat` to
+`climate.a32_pro_van_hydronic_heating_pid`, so one schedule both switches the thermostat on and sets
+its target; "Turn off" is `climate.turn_off`. **Other** is the domain → entity → action walk for
+everything else. The payload is only what the component's schema takes (`weekdays`, `timeslots:
+[{start, actions}]`, `repeat_type`, `name`): it rejects `stop: null`, an empty `conditions` list and
+`condition_type: null` with a 500, which is what every add did before 2026-09-16. Tests:
+`src/pages/Schedule.test.tsx`.
+
 ## CSS Scoping
 
 No shadow DOM. Root `.van-dash-root` has `position: relative`.

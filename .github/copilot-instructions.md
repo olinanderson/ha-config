@@ -1278,6 +1278,7 @@ react-dashboard/
       Water.tsx            # Tank levels, propane, water controls
       Van.tsx              # Fuel, tire pressure, OBD data, GPS
       Cameras.tsx          # 4-camera MSE grid (always mounted, see note below)
+      Schedule.tsx         # Scheduler-component front end. Heater preset = thermostat to N °C / off at a time; Other = any entity
       System.tsx           # Connectivity, device status, system info
     components/
       BatteryCard.tsx      # SOC gauge, power flow, charge estimate

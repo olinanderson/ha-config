@@ -31,11 +31,11 @@ interface SchedulerAction {
 
 interface Timeslot {
   start: string; // "HH:MM:SS"
-  stop: string | null;
+  stop?: string | null;
   actions: SchedulerAction[];
-  conditions: any[];
-  condition_type: string | null;
-  track_conditions: boolean;
+  conditions?: any[];
+  condition_type?: string | null;
+  track_conditions?: boolean;
 }
 
 interface ScheduleEntry {
@@ -65,7 +65,12 @@ interface ActionDef {
   };
 }
 
+// "heater" pins the editor to the van thermostat; "custom" is the free
+// domain / entity / action walk for everything else.
+type EditorPreset = 'heater' | 'custom';
+
 interface EditorState {
+  preset: EditorPreset;
   name: string;
   time: string;
   daily: boolean;
@@ -128,16 +133,31 @@ const DOMAIN_ACTIONS: Record<string, ActionDef[]> = {
 
 const SUPPORTED_DOMAINS = Object.keys(DOMAIN_ACTIONS);
 
-const DEFAULT_EDITOR: EditorState = {
+// The van thermostat (the PID climate the Heater card drives). With seven
+// climate entities on the a32 (tank heaters, air fryer vent...) picking it out
+// of a dropdown is the slow part of "heat to 26 °C at 7:30", so the Heater
+// preset fixes the entity and asks only for a temperature and a time.
+export const HEATER_CLIMATE_ID = 'climate.a32_pro_van_hydronic_heating_pid';
+const HEATER_DEFAULT_TEMP = 26;
+const HEATER_SERVICES = ['climate.set_temperature', 'climate.turn_off'];
+const ENTITY_LABELS: Record<string, string> = { [HEATER_CLIMATE_ID]: 'Heater' };
+
+const HEATER_FIELDS = {
+  domain: 'climate',
+  entityId: HEATER_CLIMATE_ID,
+  service: 'climate.set_temperature',
+  serviceDataValue: String(HEATER_DEFAULT_TEMP),
+};
+const CUSTOM_FIELDS = { domain: 'switch', entityId: '', service: 'switch.turn_on', serviceDataValue: '' };
+
+export const DEFAULT_EDITOR: EditorState = {
+  preset: 'heater',
   name: '',
-  time: '08:00',
+  time: '07:30',
   daily: true,
   selectedDays: [],
   repeatType: 'repeat',
-  domain: 'switch',
-  entityId: '',
-  service: 'switch.turn_on',
-  serviceDataValue: '',
+  ...HEATER_FIELDS,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -169,8 +189,20 @@ function formatRepeatType(type: string): { label: string; Icon: typeof Clock } {
   }
 }
 
-function summarizeAction(action: SchedulerAction): string {
-  const name = (action.entity_id || '').split('.').pop()?.replace(/_/g, ' ') ?? '?';
+function defaultEntityLabel(entityId: string): string {
+  return ENTITY_LABELS[entityId] ?? entityId.split('.').pop()?.replace(/_/g, ' ') ?? '?';
+}
+
+export function summarizeAction(
+  action: SchedulerAction,
+  entityLabel: (id: string) => string = defaultEntityLabel,
+): string {
+  const name = entityLabel(action.entity_id || '');
+  if (action.entity_id === HEATER_CLIMATE_ID) {
+    if (action.service === 'climate.set_temperature')
+      return `Heater to ${action.service_data?.temperature ?? '?'} °C`;
+    if (action.service === 'climate.turn_off') return 'Heater off';
+  }
   if (action.service.endsWith('turn_on'))  return `Turn on • ${name}`;
   if (action.service.endsWith('turn_off')) return `Turn off • ${name}`;
   if (action.service === 'fan.set_percentage')
@@ -215,12 +247,21 @@ function formatNextAbsolute(date: Date | null): string | null {
   });
 }
 
-function editorFromSchedule(s: ScheduleEntry): EditorState {
+/** Card heading: the name if there is one, otherwise what the schedule does. */
+export function scheduleTitle(s: ScheduleEntry, entityLabel?: (id: string) => string): string {
+  if (s.name) return s.name;
+  const action = s.timeslots[0]?.actions[0];
+  return action ? summarizeAction(action, entityLabel) : `Schedule #${s.schedule_id}`;
+}
+
+export function editorFromSchedule(s: ScheduleEntry): EditorState {
   const ts = s.timeslots[0];
   const action = ts?.actions[0];
   const domain = action?.service?.split('.')?.[0] ?? 'switch';
   const def = DOMAIN_ACTIONS[domain]?.find((a) => a.service === action?.service);
+  const heater = action?.entity_id === HEATER_CLIMATE_ID && HEATER_SERVICES.includes(action.service);
   return {
+    preset: heater ? 'heater' : 'custom',
     name: s.name ?? '',
     time: ts?.start?.substring(0, 5) ?? '08:00',
     daily: s.weekdays.includes('daily'),
@@ -235,7 +276,7 @@ function editorFromSchedule(s: ScheduleEntry): EditorState {
   };
 }
 
-function editorToPayload(e: EditorState) {
+export function editorToPayload(e: EditorState) {
   const def = DOMAIN_ACTIONS[e.domain]?.find((a) => a.service === e.service);
   const serviceData: Record<string, any> = {};
   if (def?.dataField && e.serviceDataValue !== '') {
@@ -243,16 +284,15 @@ function editorToPayload(e: EditorState) {
       def.dataField.type === 'number' ? Number(e.serviceDataValue) : e.serviceDataValue;
   }
   if (e.service === 'climate.set_temperature') serviceData.hvac_mode = 'heat';
+  // Only the keys the scheduler component accepts: its schema rejects
+  // `stop: null`, an empty `conditions` list and `condition_type: null`
+  // (every add used to fail with a 500 on those).
   return {
     weekdays: e.daily ? ['daily'] : e.selectedDays,
     timeslots: [
       {
         start: e.time + ':00',
-        stop: null,
         actions: [{ service: e.service, entity_id: e.entityId, service_data: serviceData }],
-        conditions: [],
-        condition_type: null,
-        track_conditions: false,
       },
     ],
     repeat_type: e.repeatType,
@@ -376,6 +416,23 @@ function ScheduleEditor({
   const setService = (service: string) =>
     setForm((f) => ({ ...f, service, serviceDataValue: '' }));
 
+  const setPreset = (preset: EditorPreset) =>
+    setForm((f) => ({ ...f, preset, ...(preset === 'heater' ? HEATER_FIELDS : CUSTOM_FIELDS) }));
+
+  // Heater preset: "Heat to" sets the target and switches the thermostat to
+  // heat in one call (editorToPayload adds hvac_mode); "Turn off" is the
+  // evening counterpart.
+  const heaterHeats = form.service === 'climate.set_temperature';
+  const setHeaterMode = (heat: boolean) =>
+    setForm((f) => ({
+      ...f,
+      service: heat ? 'climate.set_temperature' : 'climate.turn_off',
+      serviceDataValue: heat ? (f.serviceDataValue || String(HEATER_DEFAULT_TEMP)) : '',
+    }));
+  const heaterAttrs = store.hass?.states[HEATER_CLIMATE_ID]?.attributes ?? {};
+  const heaterMin: number = heaterAttrs.min_temp ?? 10;
+  const heaterMax: number = heaterAttrs.max_temp ?? 30;
+
   const toggleDay = (day: string) =>
     setForm((f) => ({
       ...f,
@@ -385,6 +442,13 @@ function ScheduleEditor({
     }));
 
   const handleSave = async () => {
+    if (form.preset === 'heater' && heaterHeats) {
+      const t = Number(form.serviceDataValue);
+      if (form.serviceDataValue === '' || !Number.isFinite(t) || t < heaterMin || t > heaterMax) {
+        setError(`Set a temperature between ${heaterMin} and ${heaterMax} °C`);
+        return;
+      }
+    }
     if (!form.entityId) { setError('Select an entity'); return; }
     if (!form.daily && form.selectedDays.length === 0) { setError('Select at least one day'); return; }
     setSaving(true);
@@ -450,6 +514,7 @@ function ScheduleEditor({
             </label>
             <input
               type="time"
+              aria-label="Time"
               value={form.time}
               onChange={(e) => setForm((f) => ({ ...f, time: e.target.value }))}
               className="w-full rounded-md border bg-muted/50 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
@@ -532,6 +597,67 @@ function ScheduleEditor({
               Action
             </label>
 
+            <div className="flex gap-2">
+              {(['heater', 'custom'] as const).map((p) => (
+                <button
+                  key={p}
+                  aria-pressed={form.preset === p}
+                  onClick={() => setPreset(p)}
+                  className={cn(
+                    'flex-1 rounded-md py-1.5 text-sm font-medium border transition-colors',
+                    form.preset === p
+                      ? 'bg-primary text-primary-foreground border-primary'
+                      : 'border-border hover:bg-muted',
+                  )}
+                >
+                  {p === 'heater' ? 'Heater' : 'Other'}
+                </button>
+              ))}
+            </div>
+
+            {form.preset === 'heater' && (
+              <div className="space-y-2">
+                <div className="flex gap-2">
+                  {([true, false] as const).map((heat) => (
+                    <button
+                      key={String(heat)}
+                      aria-pressed={heaterHeats === heat}
+                      onClick={() => setHeaterMode(heat)}
+                      className={cn(
+                        'flex-1 rounded-md py-1.5 text-xs font-medium border transition-colors',
+                        heaterHeats === heat
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'border-border hover:bg-muted',
+                      )}
+                    >
+                      {heat ? 'Heat to' : 'Turn off'}
+                    </button>
+                  ))}
+                </div>
+                {heaterHeats && (
+                  <div className="flex items-center gap-2">
+                    <input
+                      type="number"
+                      aria-label="Heater temperature"
+                      value={form.serviceDataValue}
+                      onChange={(e) => setForm((f) => ({ ...f, serviceDataValue: e.target.value }))}
+                      min={heaterMin}
+                      max={heaterMax}
+                      step={0.5}
+                      className="w-24 rounded-md border bg-muted/50 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                    <span className="text-sm text-muted-foreground">°C</span>
+                  </div>
+                )}
+                <p className="text-[11px] text-muted-foreground">
+                  {heaterHeats
+                    ? 'Turns the thermostat on at this target. It stays on until you turn it off — add a Turn off schedule for that.'
+                    : 'Switches the thermostat off.'}
+                </p>
+              </div>
+            )}
+
+            {form.preset === 'custom' && (<>
             {/* Domain */}
             <div>
               <p className="text-[11px] text-muted-foreground mb-1">Domain</p>
@@ -603,6 +729,7 @@ function ScheduleEditor({
                 />
               </div>
             )}
+            </>)}
           </div>
 
           {error && <p className="text-xs text-destructive">{error}</p>}
@@ -637,12 +764,14 @@ function ScheduleCard({
   onEdit,
   onDelete,
   onRun,
+  entityLabel,
 }: {
   schedule: ScheduleEntry;
   onToggle: (enabled: boolean) => void;
   onEdit: () => void;
   onDelete: () => void;
   onRun: () => void;
+  entityLabel: (id: string) => string;
 }) {
   const [confirmDelete, setConfirmDelete] = useState(false);
   const action = schedule.timeslots[0]?.actions[0];
@@ -653,7 +782,9 @@ function ScheduleCard({
   const diffMs = nextDate ? nextDate.getTime() - Date.now() : null;
   const isSoon = schedule.enabled && diffMs !== null && diffMs >= 0 && diffMs <= 2 * 60 * 60 * 1000;
   const { label: repeatLabel, Icon: RepeatIcon } = formatRepeatType(schedule.repeat_type);
-  const title = schedule.name ?? `Schedule #${schedule.schedule_id}`;
+  const title = scheduleTitle(schedule, entityLabel);
+  // A nameless schedule is already titled by its action; don't say it twice.
+  const summary = action ? summarizeAction(action, entityLabel) : null;
 
   return (
     <div
@@ -743,9 +874,9 @@ function ScheduleCard({
             </div>
           </div>
 
-          {action && (
+          {summary && summary !== title && (
             <p className="mt-2.5 rounded-md bg-muted/40 px-2 py-1.5 text-[11px] text-muted-foreground">
-              {summarizeAction(action)}
+              {summary}
             </p>
           )}
         </div>
@@ -835,6 +966,12 @@ export default function Schedule() {
   } | null>(null);
 
   const api = useSchedulerApi();
+  const store = useHassStore();
+  const entityLabel = useCallback(
+    (id: string) =>
+      ENTITY_LABELS[id] ?? store.hass?.states[id]?.attributes?.friendly_name ?? defaultEntityLabel(id),
+    [store],
+  );
 
   const loadSchedules = useCallback(async () => {
     try {
@@ -992,6 +1129,7 @@ export default function Schedule() {
                       onEdit={() => setEditor({ initial: editorFromSchedule(s), scheduleId: s.schedule_id })}
                       onDelete={() => handleDelete(s)}
                       onRun={() => api.runNow(s.entity_id)}
+                      entityLabel={entityLabel}
                     />
                   ))}
                 </div>
@@ -1015,6 +1153,7 @@ export default function Schedule() {
                       onEdit={() => setEditor({ initial: editorFromSchedule(s), scheduleId: s.schedule_id })}
                       onDelete={() => handleDelete(s)}
                       onRun={() => api.runNow(s.entity_id)}
+                      entityLabel={entityLabel}
                     />
                   ))}
                 </div>
@@ -1038,6 +1177,7 @@ export default function Schedule() {
                       onEdit={() => setEditor({ initial: editorFromSchedule(s), scheduleId: s.schedule_id })}
                       onDelete={() => handleDelete(s)}
                       onRun={() => api.runNow(s.entity_id)}
+                      entityLabel={entityLabel}
                     />
                   ))}
                 </div>
