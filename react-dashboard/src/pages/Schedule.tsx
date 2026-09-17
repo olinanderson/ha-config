@@ -4,6 +4,12 @@ import { Card, CardContent } from '@/components/ui/card';
 import { useHassStore } from '@/context/HomeAssistantContext';
 import { cn } from '@/lib/utils';
 import {
+  MODE_ID as NIGHT_MODE_ID,
+  NIGHT_TARGET_ID,
+  WAKE_TARGET_ID,
+  WAKE_TIME_ID,
+} from '@/components/TonightCard';
+import {
   Clock,
   Plus,
   Trash2,
@@ -65,9 +71,13 @@ interface ActionDef {
   };
 }
 
-// "heater" pins the editor to the van thermostat; "custom" is the free
-// domain / entity / action walk for everything else.
-type EditorPreset = 'heater' | 'custom';
+// "heater" pins the editor to the van thermostat; "night" starts the Night
+// Climate program with its targets; "custom" is the free domain / entity /
+// action walk for everything else.
+type EditorPreset = 'heater' | 'night' | 'custom';
+
+export const NIGHT_MODES = ['Program', 'Fan all night', 'A/C all night', 'Heater'] as const;
+type NightMode = (typeof NIGHT_MODES)[number];
 
 interface EditorState {
   preset: EditorPreset;
@@ -80,6 +90,11 @@ interface EditorState {
   entityId: string;
   service: string;
   serviceDataValue: string;
+  // Night preset
+  nightMode: NightMode;
+  nightTarget: string; // °C
+  wakeTarget: string; // °C
+  wakeTime: string; // "HH:MM"
 }
 
 // ─── Constants ────────────────────────────────────────────────────────────
@@ -150,6 +165,21 @@ const HEATER_FIELDS = {
 };
 const CUSTOM_FIELDS = { domain: 'switch', entityId: '', service: 'switch.turn_on', serviceDataValue: '' };
 
+// Night preset: one scheduler entry sets the Night Climate targets and wake
+// time, then picks the mode, which starts the program (automations
+// night_climate_*). Its enable switch is the "on/off" for the whole thing.
+const NIGHT_FIELDS = {
+  domain: 'input_select',
+  entityId: NIGHT_MODE_ID,
+  service: 'input_select.select_option',
+  serviceDataValue: '',
+  nightMode: 'Program' as NightMode,
+  nightTarget: '15',
+  wakeTarget: '23',
+  wakeTime: '07:30',
+};
+const NIGHT_DEFAULT_TIME = '00:30';
+
 export const DEFAULT_EDITOR: EditorState = {
   preset: 'heater',
   name: '',
@@ -158,6 +188,10 @@ export const DEFAULT_EDITOR: EditorState = {
   selectedDays: [],
   repeatType: 'repeat',
   ...HEATER_FIELDS,
+  nightMode: 'Program',
+  nightTarget: '15',
+  wakeTarget: '23',
+  wakeTime: '07:30',
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -193,6 +227,24 @@ function defaultEntityLabel(entityId: string): string {
   return ENTITY_LABELS[entityId] ?? entityId.split('.').pop()?.replace(/_/g, ' ') ?? '?';
 }
 
+/** The Night preset's settings if this timeslot is one, else null. */
+export function nightFromTimeslot(ts: Timeslot | undefined): {
+  mode: NightMode; nightTarget: string; wakeTarget: string; wakeTime: string;
+} | null {
+  const modeAction = ts?.actions.find(
+    (a) => a.entity_id === NIGHT_MODE_ID && a.service === 'input_select.select_option',
+  );
+  if (!modeAction) return null;
+  const find = (id: string) => ts?.actions.find((a) => a.entity_id === id)?.service_data ?? {};
+  const option = String(modeAction.service_data?.option ?? 'Program');
+  return {
+    mode: (NIGHT_MODES as readonly string[]).includes(option) ? (option as NightMode) : 'Program',
+    nightTarget: String(find(NIGHT_TARGET_ID).value ?? '15'),
+    wakeTarget: String(find(WAKE_TARGET_ID).value ?? '23'),
+    wakeTime: String(find(WAKE_TIME_ID).time ?? '07:30:00').substring(0, 5),
+  };
+}
+
 export function summarizeAction(
   action: SchedulerAction,
   entityLabel: (id: string) => string = defaultEntityLabel,
@@ -203,6 +255,10 @@ export function summarizeAction(
       return `Heater to ${action.service_data?.temperature ?? '?'} °C`;
     if (action.service === 'climate.turn_off') return 'Heater off';
   }
+  if (action.entity_id === NIGHT_MODE_ID) return `Night: ${action.service_data?.option ?? 'Program'}`;
+  if (action.entity_id === NIGHT_TARGET_ID) return `Night target ${action.service_data?.value ?? '?'} °C`;
+  if (action.entity_id === WAKE_TARGET_ID) return `Wake target ${action.service_data?.value ?? '?'} °C`;
+  if (action.entity_id === WAKE_TIME_ID) return `Wake time ${String(action.service_data?.time ?? '').substring(0, 5)}`;
   if (action.service.endsWith('turn_on'))  return `Turn on • ${name}`;
   if (action.service.endsWith('turn_off')) return `Turn off • ${name}`;
   if (action.service === 'fan.set_percentage')
@@ -250,18 +306,36 @@ function formatNextAbsolute(date: Date | null): string | null {
 /** Card heading: the name if there is one, otherwise what the schedule does. */
 export function scheduleTitle(s: ScheduleEntry, entityLabel?: (id: string) => string): string {
   if (s.name) return s.name;
+  const night = nightFromTimeslot(s.timeslots[0]);
+  if (night) return `Night: ${night.mode}`;
   const action = s.timeslots[0]?.actions[0];
   return action ? summarizeAction(action, entityLabel) : `Schedule #${s.schedule_id}`;
 }
 
+/** Second line on the card. Null when it would only repeat the title. */
+export function scheduleSummary(s: ScheduleEntry, entityLabel?: (id: string) => string): string | null {
+  const night = nightFromTimeslot(s.timeslots[0]);
+  if (night) {
+    const holds = night.mode === 'Program' || night.mode === 'Heater';
+    return holds
+      ? `${night.nightTarget} °C overnight, ${night.wakeTarget} °C for ${formatTime(night.wakeTime)}`
+      : `Until ${formatTime(night.wakeTime)}`;
+  }
+  const action = s.timeslots[0]?.actions[0];
+  if (!action) return null;
+  const summary = summarizeAction(action, entityLabel);
+  return summary === scheduleTitle(s, entityLabel) ? null : summary;
+}
+
 export function editorFromSchedule(s: ScheduleEntry): EditorState {
   const ts = s.timeslots[0];
+  const night = nightFromTimeslot(ts);
   const action = ts?.actions[0];
   const domain = action?.service?.split('.')?.[0] ?? 'switch';
   const def = DOMAIN_ACTIONS[domain]?.find((a) => a.service === action?.service);
   const heater = action?.entity_id === HEATER_CLIMATE_ID && HEATER_SERVICES.includes(action.service);
   return {
-    preset: heater ? 'heater' : 'custom',
+    preset: night ? 'night' : heater ? 'heater' : 'custom',
     name: s.name ?? '',
     time: ts?.start?.substring(0, 5) ?? '08:00',
     daily: s.weekdays.includes('daily'),
@@ -273,10 +347,34 @@ export function editorFromSchedule(s: ScheduleEntry): EditorState {
     serviceDataValue: def?.dataField
       ? String(action?.service_data?.[def.dataField.key] ?? '')
       : '',
+    nightMode: night?.mode ?? 'Program',
+    nightTarget: night?.nightTarget ?? '15',
+    wakeTarget: night?.wakeTarget ?? '23',
+    wakeTime: night?.wakeTime ?? '07:30',
   };
 }
 
 export function editorToPayload(e: EditorState) {
+  if (e.preset === 'night') {
+    return {
+      weekdays: e.daily ? ['daily'] : e.selectedDays,
+      timeslots: [
+        {
+          start: e.time + ':00',
+          // Targets and wake time first, the mode last: picking the mode is
+          // what starts the program.
+          actions: [
+            { service: 'input_number.set_value', entity_id: NIGHT_TARGET_ID, service_data: { value: Number(e.nightTarget) } },
+            { service: 'input_number.set_value', entity_id: WAKE_TARGET_ID, service_data: { value: Number(e.wakeTarget) } },
+            { service: 'input_datetime.set_datetime', entity_id: WAKE_TIME_ID, service_data: { time: e.wakeTime + ':00' } },
+            { service: 'input_select.select_option', entity_id: NIGHT_MODE_ID, service_data: { option: e.nightMode } },
+          ],
+        },
+      ],
+      repeat_type: e.repeatType,
+      name: e.name.trim() || null,
+    };
+  }
   const def = DOMAIN_ACTIONS[e.domain]?.find((a) => a.service === e.service);
   const serviceData: Record<string, any> = {};
   if (def?.dataField && e.serviceDataValue !== '') {
@@ -417,7 +515,20 @@ function ScheduleEditor({
     setForm((f) => ({ ...f, service, serviceDataValue: '' }));
 
   const setPreset = (preset: EditorPreset) =>
-    setForm((f) => ({ ...f, preset, ...(preset === 'heater' ? HEATER_FIELDS : CUSTOM_FIELDS) }));
+    setForm((f) => ({
+      ...f,
+      preset,
+      ...(preset === 'heater' ? HEATER_FIELDS : preset === 'night' ? NIGHT_FIELDS : CUSTOM_FIELDS),
+      // A new schedule gets the preset's usual time; an existing one keeps its own.
+      ...(scheduleId ? {} : { time: preset === 'night' ? NIGHT_DEFAULT_TIME : preset === 'heater' ? '07:30' : f.time }),
+    }));
+
+  const nightTargetAttrs = store.hass?.states[NIGHT_TARGET_ID]?.attributes ?? {};
+  const wakeTargetAttrs = store.hass?.states[WAKE_TARGET_ID]?.attributes ?? {};
+  const nightMin: number = nightTargetAttrs.min ?? 5;
+  const nightMax: number = nightTargetAttrs.max ?? 25;
+  const wakeMin: number = wakeTargetAttrs.min ?? 10;
+  const wakeMax: number = wakeTargetAttrs.max ?? 30;
 
   // Heater preset: "Heat to" sets the target and switches the thermostat to
   // heat in one call (editorToPayload adds hvac_mode); "Turn off" is the
@@ -448,6 +559,19 @@ function ScheduleEditor({
         setError(`Set a temperature between ${heaterMin} and ${heaterMax} °C`);
         return;
       }
+    }
+    if (form.preset === 'night') {
+      const n = Number(form.nightTarget);
+      const w = Number(form.wakeTarget);
+      if (form.nightTarget === '' || !Number.isFinite(n) || n < nightMin || n > nightMax) {
+        setError(`Set a night target between ${nightMin} and ${nightMax} °C`);
+        return;
+      }
+      if (form.wakeTarget === '' || !Number.isFinite(w) || w < wakeMin || w > wakeMax) {
+        setError(`Set a wake target between ${wakeMin} and ${wakeMax} °C`);
+        return;
+      }
+      if (!/^\d{2}:\d{2}$/.test(form.wakeTime)) { setError('Set a wake time'); return; }
     }
     if (!form.entityId) { setError('Select an entity'); return; }
     if (!form.daily && form.selectedDays.length === 0) { setError('Select at least one day'); return; }
@@ -598,7 +722,7 @@ function ScheduleEditor({
             </label>
 
             <div className="flex gap-2">
-              {(['heater', 'custom'] as const).map((p) => (
+              {(['heater', 'night', 'custom'] as const).map((p) => (
                 <button
                   key={p}
                   aria-pressed={form.preset === p}
@@ -610,10 +734,75 @@ function ScheduleEditor({
                       : 'border-border hover:bg-muted',
                   )}
                 >
-                  {p === 'heater' ? 'Heater' : 'Other'}
+                  {p === 'heater' ? 'Heater' : p === 'night' ? 'Night' : 'Other'}
                 </button>
               ))}
             </div>
+
+            {form.preset === 'night' && (
+              <div className="space-y-3">
+                <div className="grid grid-cols-2 gap-2">
+                  {NIGHT_MODES.map((m) => (
+                    <button
+                      key={m}
+                      aria-pressed={form.nightMode === m}
+                      onClick={() => setForm((f) => ({ ...f, nightMode: m }))}
+                      className={cn(
+                        'rounded-md py-1.5 text-xs font-medium border transition-colors',
+                        form.nightMode === m
+                          ? 'bg-primary text-primary-foreground border-primary'
+                          : 'border-border hover:bg-muted',
+                      )}
+                    >
+                      {m}
+                    </button>
+                  ))}
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <label className="space-y-1">
+                    <span className="text-[11px] text-muted-foreground">Night target (°C)</span>
+                    <input
+                      type="number"
+                      aria-label="Night target"
+                      value={form.nightTarget}
+                      onChange={(e) => setForm((f) => ({ ...f, nightTarget: e.target.value }))}
+                      min={nightMin}
+                      max={nightMax}
+                      step={0.5}
+                      className="w-full rounded-md border bg-muted/50 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </label>
+                  <label className="space-y-1">
+                    <span className="text-[11px] text-muted-foreground">Wake target (°C)</span>
+                    <input
+                      type="number"
+                      aria-label="Wake target"
+                      value={form.wakeTarget}
+                      onChange={(e) => setForm((f) => ({ ...f, wakeTarget: e.target.value }))}
+                      min={wakeMin}
+                      max={wakeMax}
+                      step={0.5}
+                      className="w-full rounded-md border bg-muted/50 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                    />
+                  </label>
+                </div>
+                <label className="block space-y-1">
+                  <span className="text-[11px] text-muted-foreground">Wake time</span>
+                  <input
+                    type="time"
+                    aria-label="Wake time"
+                    value={form.wakeTime}
+                    onChange={(e) => setForm((f) => ({ ...f, wakeTime: e.target.value }))}
+                    className="w-full rounded-md border bg-muted/50 px-3 py-2 text-sm focus:outline-none focus:ring-1 focus:ring-primary"
+                  />
+                </label>
+                <p className="text-[11px] text-muted-foreground">
+                  {form.nightMode === 'Program'
+                    ? 'At the time above: hold the night target with the heater, roof fan or A/C (whatever the Tonight card allows), warm to the wake target before the wake time, then stop. Sleep Mode starts it earlier.'
+                    : `At the time above: ${form.nightMode} until the wake time.`}
+                </p>
+              </div>
+            )}
 
             {form.preset === 'heater' && (
               <div className="space-y-2">
@@ -784,7 +973,7 @@ function ScheduleCard({
   const { label: repeatLabel, Icon: RepeatIcon } = formatRepeatType(schedule.repeat_type);
   const title = scheduleTitle(schedule, entityLabel);
   // A nameless schedule is already titled by its action; don't say it twice.
-  const summary = action ? summarizeAction(action, entityLabel) : null;
+  const summary = scheduleSummary(schedule, entityLabel);
 
   return (
     <div

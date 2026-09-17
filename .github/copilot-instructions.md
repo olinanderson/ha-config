@@ -769,7 +769,8 @@ Anything but **Off** in `input_select.night_climate_mode` runs until `input_date
 warm-up*): heater below target − 1 °C; above target + 2 °C the roof fan on its own thermostat
 (`esphome.ag_pro_roof_fan_thermostat`, set point = target in °F) while outside is cooler, else the A/C on
 shore power only with a 30-min dwell. `input_boolean.night_climate_use_heater/_use_ac/_use_fan` allow each.
-**Fan all night** / **A/C all night** / **Heater** run one appliance. Sleep Mode on starts the Program, the
+**Fan all night** / **A/C all night** / **Heater** run one appliance. The Schedule page's Night preset (a
+scheduler entry, 00:30 daily: targets + wake time, then the mode) or Sleep Mode starts the Program, the
 wake time ends it (fan + A/C off, heater left as the warm-up set it) and Sleep Mode. Room reading =
 `sensor.living_space_temperature` (gated median, `template/night_climate.yaml`). Scripts
 `night_climate_heater_to/_fan_on/_ac_on/_actuators_off` only send when something has to change (IR beeps).
@@ -1322,7 +1323,7 @@ react-dashboard/
       Water.tsx            # Tank levels, propane, water controls
       Van.tsx              # Fuel, tire pressure, OBD data, GPS
       Cameras.tsx          # 4-camera MSE grid (always mounted, see note below)
-      Schedule.tsx         # Scheduler-component front end. Heater preset = thermostat to N °C / off at a time; Other = any entity
+      Schedule.tsx         # Scheduler-component front end. Heater preset = thermostat to N °C / off at a time; Night = the Night Climate program with its targets; Other = any entity
       System.tsx           # Connectivity, device status, system info
     components/
       BatteryCard.tsx      # SOC gauge, power flow, charge estimate

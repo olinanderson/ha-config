@@ -178,7 +178,7 @@ export function TonightCard() {
             ? statusText
             : sleep?.state === 'on'
               ? 'Sleep Mode is on. Pick a mode to run tonight.'
-              : 'Sleep Mode starts the Program. Pick a mode to start it now.'}
+              : 'The Night schedule or Sleep Mode starts the Program. Pick a mode to start it now.'}
         </p>
 
         {/* Targets */}

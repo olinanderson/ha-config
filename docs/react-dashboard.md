@@ -90,8 +90,12 @@ HA frontend first.
 `scheduler.run_action`). A new schedule opens on the **Heater** preset: "Heat to N °C" (default 26 °C at
 07:30, daily) sends `climate.set_temperature` with `hvac_mode: heat` to
 `climate.a32_pro_van_hydronic_heating_pid`, so one schedule both switches the thermostat on and sets
-its target; "Turn off" is `climate.turn_off`. **Other** is the domain → entity → action walk for
-everything else. The payload is only what the component's schema takes (`weekdays`, `timeslots:
+its target; "Turn off" is `climate.turn_off`. **Night** is the Night Climate program as a schedule
+(default 00:30 daily): one entry whose actions set `input_number.night_climate_night_target`,
+`input_number.night_climate_wake_target` and `input_datetime.night_climate_wake_time`, then pick
+`input_select.night_climate_mode` (Program / Fan all night / A/C all night / Heater), which starts it;
+the entry's enable switch is the on/off, and several entries can hold different set points on different
+days. **Other** is the domain → entity → action walk for everything else. The payload is only what the component's schema takes (`weekdays`, `timeslots:
 [{start, actions}]`, `repeat_type`, `name`): it rejects `stop: null`, an empty `conditions` list and
 `condition_type: null` with a 500, which is what every add did before 2026-09-16. Tests:
 `src/pages/Schedule.test.tsx`.

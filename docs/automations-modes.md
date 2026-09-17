@@ -23,7 +23,9 @@
 | **A/C all night** | A/C on its own thermostat at the target (clamped to the unit's 16–32 °C), fan level 1; shore power only, switched off if shore drops; roof fan off; heater untouched |
 | **Heater** | Thermostat at the target; fan and A/C off |
 
-Hooks: Sleep Mode on → Program (only if the mode was Off); Sleep Mode off → Off. The wake time sets the
+Hooks: the Schedule page's **Night** preset (a scheduler entry, 00:30 daily by default) sets the targets and
+the wake time and picks the mode, which starts the program; Sleep Mode on → Program (only if the mode was
+Off); Sleep Mode off → Off. The wake time sets the
 mode to Off (fan and A/C off; the heater is left where the warm-up put it) and runs
 `script.wake_up_routine`. The daily 07:30 scheduler entry (`switch.schedule_55e88d`, heater to 26 °C) is
 the morning set point and runs whether or not the program ran, so the wake automation does not touch the

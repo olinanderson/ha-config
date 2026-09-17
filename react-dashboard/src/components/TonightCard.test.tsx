@@ -116,7 +116,7 @@ describe('TonightCard', () => {
 
   it('explains how the Program starts while nothing runs', () => {
     render(<TonightCard />);
-    expect(screen.getByTestId('tonight-status').textContent).toContain('Sleep Mode starts the Program');
+    expect(screen.getByTestId('tonight-status').textContent).toContain('Night schedule or Sleep Mode starts the Program');
     cleanup();
     entityRef.current = makeEntities({ sleep: 'on' });
     render(<TonightCard />);

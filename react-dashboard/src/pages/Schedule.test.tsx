@@ -10,6 +10,7 @@ import Schedule, {
   HEATER_CLIMATE_ID,
   editorFromSchedule,
   editorToPayload,
+  scheduleSummary,
   scheduleTitle,
 } from './Schedule';
 
@@ -121,5 +122,55 @@ describe('Schedule — editor', () => {
     render(<Schedule />);
     await screen.findByText('Heater to 26 °C');
     expect(screen.getByText('7:30 AM')).toBeTruthy();
+  });
+});
+
+describe('Schedule — night preset', () => {
+  const nightActions = [
+    { service: 'input_number.set_value', entity_id: 'input_number.night_climate_night_target', service_data: { value: 15 } },
+    { service: 'input_number.set_value', entity_id: 'input_number.night_climate_wake_target', service_data: { value: 23 } },
+    { service: 'input_datetime.set_datetime', entity_id: 'input_datetime.night_climate_wake_time', service_data: { time: '07:30:00' } },
+    { service: 'input_select.select_option', entity_id: 'input_select.night_climate_mode', service_data: { option: 'Program' } },
+  ];
+  const nightSchedule = (over: Record<string, any> = {}) =>
+    schedule({ timeslots: [{ start: '00:30:00', actions: nightActions }], ...over });
+
+  it('turns the editor into the four actions, mode last', () => {
+    const p = editorToPayload({ ...DEFAULT_EDITOR, preset: 'night', time: '00:30', nightMode: 'Program', nightTarget: '15', wakeTarget: '23', wakeTime: '07:30' });
+    expect(p.timeslots[0].start).toBe('00:30:00');
+    expect(p.timeslots[0].actions).toEqual(nightActions);
+  });
+
+  it('opens a night schedule in the preset with its values', () => {
+    const e = editorFromSchedule(nightSchedule() as any);
+    expect(e.preset).toBe('night');
+    expect(e.time).toBe('00:30');
+    expect(e.nightMode).toBe('Program');
+    expect(e.nightTarget).toBe('15');
+    expect(e.wakeTarget).toBe('23');
+    expect(e.wakeTime).toBe('07:30');
+  });
+
+  it('titles and summarizes a night schedule', () => {
+    expect(scheduleTitle(nightSchedule() as any)).toBe('Night: Program');
+    expect(scheduleSummary(nightSchedule() as any)).toBe('15 °C overnight, 23 °C for 7:30 AM');
+    const fan = nightSchedule({ timeslots: [{ start: '00:30:00', actions: [...nightActions.slice(0, 3), { ...nightActions[3], service_data: { option: 'Fan all night' } }] }] });
+    expect(scheduleTitle(fan as any)).toBe('Night: Fan all night');
+    expect(scheduleSummary(fan as any)).toBe('Until 7:30 AM');
+  });
+
+  it('Add → Night → Save posts the program at 00:30 with the targets', async () => {
+    render(<Schedule />);
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/list'))).toBe(true));
+    fireEvent.click(screen.getByRole('button', { name: /add/i }));
+    fireEvent.click(screen.getByRole('button', { name: 'Night' }));
+    expect((screen.getByLabelText('Time') as HTMLInputElement).value).toBe('00:30');
+    fireEvent.change(screen.getByLabelText('Night target'), { target: { value: '16' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }));
+    await waitFor(() => expect(calls.some((c) => c.url.endsWith('/add'))).toBe(true));
+    const body = calls.find((c) => c.url.endsWith('/add'))!.body;
+    expect(body.timeslots[0].start).toBe('00:30:00');
+    expect(body.timeslots[0].actions[0]).toEqual({ ...nightActions[0], service_data: { value: 16 } });
+    expect(body.timeslots[0].actions[3]).toEqual(nightActions[3]);
   });
 });
