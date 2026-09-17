@@ -208,3 +208,34 @@ indoor_light_dark_pct:
   max: 100
   step: 5
   unit_of_measurement: "%"
+
+# ─── Night Climate ───
+# No `initial:` so the values survive restarts (seeded 15 / 23 / 45 / 30).
+night_climate_night_target:
+  name: "Night Climate Night Target"
+  min: 5
+  max: 25
+  step: 0.5
+  unit_of_measurement: "°C"
+  icon: mdi:thermometer-low
+night_climate_wake_target:
+  name: "Night Climate Wake Target"
+  min: 10
+  max: 30
+  step: 0.5
+  unit_of_measurement: "°C"
+  icon: mdi:thermometer
+night_climate_warmup_minutes:
+  name: "Night Climate Warm-up Minutes"
+  min: 0
+  max: 180
+  step: 5
+  unit_of_measurement: "min"
+  icon: mdi:timer-sand
+night_climate_fan_speed:
+  name: "Night Climate Fan Speed"
+  min: 10
+  max: 100
+  step: 10
+  unit_of_measurement: "%"
+  icon: mdi:fan

@@ -707,6 +707,11 @@ integration for backward compatibility). The old `ha-wican` HACS integration has
 | `input_boolean.inverter_toggle_pending` | Inverter toggle in progress |
 | `input_boolean.hot_water_mode` | Hot water mode — keeps hydronic heater on when climate turns off |
 | `input_boolean.heater_low_fuel_lockout` | Low fuel heater lockout — auto-set when fuel < 25% after failed retry, auto-cleared when fuel > 30% |
+| `input_select.night_climate_mode` | Night Climate: Off / Program / Fan all night / A/C all night / Heater |
+| `input_select.night_climate_fan_direction` | Night Climate fan: Intake / Exhaust |
+| `input_number.night_climate_night_target` / `_wake_target` / `_warmup_minutes` / `_fan_speed` | Night Climate targets (15 / 23 °C), warm-up (45 min), fan speed (30 %) |
+| `input_boolean.night_climate_use_heater` / `_use_ac` / `_use_fan` | What the Night Climate Program may run (fan reserved) |
+| `input_datetime.night_climate_wake_time` | Night Climate wake time (07:30, time only; `input_datetime.yaml`) |
 | `input_number.main_light_warmth` | Main light CCT (250–500 mireds) |
 | `input_number.shore_charge_reset_threshold` | Shore charger reset SOC % |
 | `input_number.acceleration_stability_threshold` | Accel threshold (km/h/s) |
@@ -731,6 +736,20 @@ integration for backward compatibility). The old `ha-wican` HACS integration has
 | **Shower Mode** | `script.shower_mode_on` | `script.shower_mode_off` | Lights 100%, water recirc, roof fan exhaust 60% |
 | **Cook Mode** | `script.cook_mode` | `script.cook_mode_off` | LPG valve open, lights 100%, roof fan exhaust 60% |
 | **Bedtime** | `script.bedtime_routine` | — | Progressive 10-min shutdown |
+| **Night Climate** | `input_select.night_climate_mode` (Tonight card) | wake time / Sleep Mode off | What runs tonight: **Program** (15 °C night hold, warm-up to 23 °C for the wake time; heater below target − 1, A/C above target + 2 on shore power), **Fan all night**, **A/C all night**, **Heater**. Sleep Mode on starts the Program; the wake time ends it and Sleep Mode. See *Night Climate* below |
+
+### Night Climate (Tonight card on the Climate page)
+
+Anything but **Off** in `input_select.night_climate_mode` runs until `input_datetime.night_climate_wake_time`
+(07:30). **Program** holds `sensor.night_climate_target` (night target 15 °C, wake target 23 °C from *wake −
+warm-up*): heater below target − 1 °C, A/C above target + 2 °C on shore power only with a 30-min dwell; the
+roof fan branch waits on the remote's Auto-temp IR frames (`input_boolean.night_climate_use_fan` reserved).
+**Fan all night** / **A/C all night** / **Heater** run one appliance. Sleep Mode on starts the Program, the
+wake time ends it (fan + A/C off, heater left as the warm-up set it) and Sleep Mode. Room reading =
+`sensor.living_space_temperature` (gated median, `template/night_climate.yaml`). Scripts
+`night_climate_heater_to/_fan_on/_ac_on/_actuators_off` only send when something has to change (IR beeps).
+The daily 07:30 scheduler entry `switch.schedule_55e88d` (26 °C) is the morning set point and stays on
+whether or not the program ran. Details: `docs/automations-modes.md`.
 
 ### Dynamic Scenes (created at runtime via `scene.create`)
 - `scene.last_active_state` — rolling 1Hz snapshot (lights + monitors + water)
@@ -1288,6 +1307,7 @@ react-dashboard/
       TankLevel.tsx        # Reusable tank bar (fresh/grey water)
       HeaterCard.tsx       # Hydronic heater: thermostat, blower Auto/Manual, one Hot Water / Hydronic Heater switch, status
       FanControl.tsx       # Roof fan speed/direction/lid
+      TonightCard.tsx      # Night Climate: mode, targets, wake time, what the Program may use, fan speed/direction
       PowerBreakdown.tsx   # Per-circuit power consumption
       ToggleButton.tsx     # Animated toggle with glow/pulse when active
       PresenceBar.tsx      # Occupancy indicator

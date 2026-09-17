@@ -981,3 +981,149 @@ shoe_dryer_stop:
       target:
         entity_id: light.a32_pro_a32_pro_dac_0
       continue_on_error: true
+
+########################################################################
+#  Night Climate – actuator helpers (automations night_climate_*)      #
+#  Every call is idempotent: nothing is sent when the device already  #
+#  is where it should be. The roof fan and the A/C are driven by IR   #
+#  and beep on every command, so that matters.                         #
+########################################################################
+night_climate_heater_to:
+  alias: "Night Climate – heater to target"
+  mode: queued
+  fields:
+    target:
+      description: "Thermostat target (°C)"
+      example: 15
+  sequence:
+    # Same guards as the Heater card: the a32 refuses to light the burner
+    # without its supply, Shop Mode re-shuts it, the lockout blocks it.
+    - condition: state
+      entity_id: switch.a32_pro_switch32_hydronic_heater_power_supply
+      state: "on"
+    - condition: state
+      entity_id: input_boolean.shop_mode
+      state: "off"
+    - condition: state
+      entity_id: input_boolean.heater_low_fuel_lockout
+      state: "off"
+    - if:
+        - "{{ not is_state('climate.a32_pro_van_hydronic_heating_pid', 'heat') }}"
+      then:
+        - action: climate.set_hvac_mode
+          target:
+            entity_id: climate.a32_pro_van_hydronic_heating_pid
+          data:
+            hvac_mode: heat
+    - if:
+        - >
+          {{ (state_attr('climate.a32_pro_van_hydronic_heating_pid', 'temperature') | float(-99)
+              - target | float) | abs >= 0.3 }}
+      then:
+        - action: climate.set_temperature
+          target:
+            entity_id: climate.a32_pro_van_hydronic_heating_pid
+          data:
+            temperature: "{{ target | float }}"
+
+night_climate_fan_on:
+  alias: "Night Climate – roof fan on"
+  mode: queued
+  fields:
+    speed:
+      description: "Percent, steps of 10"
+      example: 30
+    direction:
+      description: "Intake or Exhaust"
+      example: Intake
+  sequence:
+    - variables:
+        want_dir: "{{ 'forward' if direction == 'Exhaust' else 'reverse' }}"
+    # Ceiling-fan mode keeps the lid shut; the night fan is there to move
+    # outside air, so leave that mode first (the firmware then opens the lid).
+    - if:
+        - "{{ is_state('switch.ag_pro_ceiling_fan_mode', 'on') }}"
+      then:
+        - action: switch.turn_off
+          target:
+            entity_id: switch.ag_pro_ceiling_fan_mode
+    - if:
+        - "{{ state_attr('fan.ag_pro_roof_fan', 'direction') != want_dir }}"
+      then:
+        - action: fan.set_direction
+          target:
+            entity_id: fan.ag_pro_roof_fan
+          data:
+            direction: "{{ want_dir }}"
+    - if:
+        - >
+          {{ not is_state('fan.ag_pro_roof_fan', 'on')
+             or state_attr('fan.ag_pro_roof_fan', 'percentage') | int(0) != speed | int }}
+      then:
+        - action: fan.turn_on
+          target:
+            entity_id: fan.ag_pro_roof_fan
+          data:
+            percentage: "{{ speed | int }}"
+
+night_climate_ac_on:
+  alias: "Night Climate – A/C on"
+  mode: queued
+  fields:
+    target:
+      description: "Cooling target (°C), clamped to the unit's 16–32"
+      example: 22
+  sequence:
+    - variables:
+        want: "{{ [16, [32, target | float | round(0) | int] | min] | max }}"
+    - choose:
+        # Off: one call sets cool + target; HA applies the mode first. The
+        # firmware then walks the unit's own target one IR step at a time,
+        # so give it a moment before asking for the quiet fan level.
+        - conditions: "{{ not is_state('climate.ag_pro_24v_air_conditioner', 'cool') }}"
+          sequence:
+            - action: climate.set_temperature
+              target:
+                entity_id: climate.ag_pro_24v_air_conditioner
+              data:
+                hvac_mode: cool
+                temperature: "{{ want }}"
+            - delay: "00:00:20"
+        # Already cooling: only nudge the target when it differs.
+        - conditions: >
+            {{ (state_attr('climate.ag_pro_24v_air_conditioner', 'temperature') | float(-99)
+                - want) | abs >= 0.5 }}
+          sequence:
+            - action: climate.set_temperature
+              target:
+                entity_id: climate.ag_pro_24v_air_conditioner
+              data:
+                temperature: "{{ want }}"
+            - delay: "00:00:10"
+    - if:
+        - "{{ states('number.ag_pro_24v_ac_fan_level') | float(1) != 1 }}"
+      then:
+        - action: number.set_value
+          target:
+            entity_id: number.ag_pro_24v_ac_fan_level
+          data:
+            value: 1
+
+night_climate_actuators_off:
+  alias: "Night Climate – roof fan and A/C off"
+  mode: queued
+  sequence:
+    - if:
+        - "{{ is_state('fan.ag_pro_roof_fan', 'on') }}"
+      then:
+        - action: fan.turn_off
+          target:
+            entity_id: fan.ag_pro_roof_fan
+    - if:
+        - "{{ states('climate.ag_pro_24v_air_conditioner') not in ['off', 'unavailable', 'unknown'] }}"
+      then:
+        - action: climate.set_hvac_mode
+          target:
+            entity_id: climate.ag_pro_24v_air_conditioner
+          data:
+            hvac_mode: "off"

@@ -1,0 +1,130 @@
+# ================================
+# template/night_climate.yaml
+# ================================
+# Night Climate program: sensors for the night_climate_* automations and the
+# dashboard's Tonight card.
+
+# ─── Living-space temperature ───
+# One room reading the night controller can trust. Each sensor counts only
+# while nothing is fooling it (2026-09-10 audit): BME280_1 sits under the
+# cabinet and reads 3–5 °C high while the inverter is loaded, BME280_3 heat-
+# soaks +7–11 °C while the coolant blower runs, and the Kidde is the honest
+# one but its cloud poll stops 01:00–08:15 (Starlink sleep). Median of what
+# passes; BME280_1 as the last resort.
+- sensor:
+    - name: "Living Space Temperature"
+      unique_id: living_space_temperature
+      unit_of_measurement: "°C"
+      device_class: temperature
+      state_class: measurement
+      availability: >
+        {{ has_value('sensor.a32_pro_bme280_1_temperature')
+           or has_value('sensor.a32_pro_bme280_3_temperature')
+           or has_value('sensor.smoke_co_and_iac_detector_indoor_temperature') }}
+      state: >
+        {% set ns = namespace(v=[]) %}
+        {% set b1 = states('sensor.a32_pro_bme280_1_temperature') | float(none) %}
+        {% if b1 is not none and states('sensor.inverter_power_24v') | float(999) < 60 %}
+          {% set ns.v = ns.v + [b1] %}
+        {% endif %}
+        {% set b3 = states('sensor.a32_pro_bme280_3_temperature') | float(none) %}
+        {% if b3 is not none
+              and states('sensor.a32_pro_s5140_channel_35_temperature_blower_air') | float(999) < 40 %}
+          {% set ns.v = ns.v + [b3] %}
+        {% endif %}
+        {% set k = states.sensor.smoke_co_and_iac_detector_indoor_temperature %}
+        {% if k is not none and k.state not in ['unknown', 'unavailable']
+              and (now() - k.last_updated).total_seconds() < 900 %}
+          {% set ns.v = ns.v + [k.state | float] %}
+        {% endif %}
+        {% if ns.v | count > 0 %}{{ ns.v | median | round(1) }}
+        {% elif b1 is not none %}{{ b1 | round(1) }}
+        {% else %}unknown{% endif %}
+      attributes:
+        sources: >
+          {% set ns = namespace(s=[]) %}
+          {% if has_value('sensor.a32_pro_bme280_1_temperature')
+                and states('sensor.inverter_power_24v') | float(999) < 60 %}
+            {% set ns.s = ns.s + ['living'] %}
+          {% endif %}
+          {% if has_value('sensor.a32_pro_bme280_3_temperature')
+                and states('sensor.a32_pro_s5140_channel_35_temperature_blower_air') | float(999) < 40 %}
+            {% set ns.s = ns.s + ['shower'] %}
+          {% endif %}
+          {% set k = states.sensor.smoke_co_and_iac_detector_indoor_temperature %}
+          {% if k is not none and k.state not in ['unknown', 'unavailable']
+                and (now() - k.last_updated).total_seconds() < 900 %}
+            {% set ns.s = ns.s + ['kidde'] %}
+          {% endif %}
+          {{ ns.s if ns.s | count > 0 else ['living (fallback)'] }}
+
+    # ─── The target the program is holding right now ───
+    # Night target until the warm-up starts, the wake target from then on.
+    # The wake time is "next": before 07:30 today's, after it tomorrow's.
+    - name: "Night Climate Target"
+      unique_id: night_climate_target
+      unit_of_measurement: "°C"
+      icon: mdi:target
+      state: >
+        {% set wake = states('input_datetime.night_climate_wake_time') %}
+        {% set wake = wake if wake not in ['unknown', 'unavailable'] else '07:30:00' %}
+        {% set warm = states('input_number.night_climate_warmup_minutes') | int(45) %}
+        {% set t = today_at(wake) %}
+        {% set t = t if t > now() else t + timedelta(days=1) %}
+        {% if now() >= t - timedelta(minutes=warm) %}
+          {{ states('input_number.night_climate_wake_target') | float(23) }}
+        {% else %}
+          {{ states('input_number.night_climate_night_target') | float(15) }}
+        {% endif %}
+      attributes:
+        phase: >
+          {% set wake = states('input_datetime.night_climate_wake_time') %}
+          {% set wake = wake if wake not in ['unknown', 'unavailable'] else '07:30:00' %}
+          {% set warm = states('input_number.night_climate_warmup_minutes') | int(45) %}
+          {% set t = today_at(wake) %}
+          {% set t = t if t > now() else t + timedelta(days=1) %}
+          {{ 'warmup' if now() >= t - timedelta(minutes=warm) else 'night' }}
+        next_wake: >
+          {% set wake = states('input_datetime.night_climate_wake_time') %}
+          {% set wake = wake if wake not in ['unknown', 'unavailable'] else '07:30:00' %}
+          {% set t = today_at(wake) %}
+          {{ (t if t > now() else t + timedelta(days=1)).isoformat() }}
+
+    # ─── One line for the dashboard ───
+    - name: "Night Climate Status"
+      unique_id: night_climate_status
+      icon: mdi:weather-night
+      state: >
+        {% set mode = states('input_select.night_climate_mode') %}
+        {% if mode in ['Off', 'unknown', 'unavailable'] %}
+          Off
+        {% else %}
+          {% set tgt = states('sensor.night_climate_target') %}
+          {% set ph = state_attr('sensor.night_climate_target', 'phase') %}
+          {% set room = states('sensor.living_space_temperature') %}
+          {% set wake = state_attr('sensor.night_climate_target', 'next_wake') %}
+          {% set parts = [mode] %}
+          {% if mode in ['Program', 'Heater'] %}
+            {% set parts = parts + [('warming to ' if ph == 'warmup' else 'holding ') ~ tgt ~ ' °C'] %}
+          {% endif %}
+          {% if room not in ['unknown', 'unavailable'] %}{% set parts = parts + ['room ' ~ room ~ ' °C'] %}{% endif %}
+          {% set on = [] %}
+          {% if is_state('climate.a32_pro_van_hydronic_heating_pid', 'heat') %}{% set on = on + ['heater'] %}{% endif %}
+          {% if is_state('climate.ag_pro_24v_air_conditioner', 'cool') %}{% set on = on + ['A/C'] %}{% endif %}
+          {% if is_state('fan.ag_pro_roof_fan', 'on') %}{% set on = on + ['fan ' ~ state_attr('fan.ag_pro_roof_fan', 'percentage') ~ '%'] %}{% endif %}
+          {% set parts = parts + [(on | join(' + ')) if on else 'nothing running'] %}
+          {% if mode in ['Program', 'A/C all night'] and states('sensor.shore_power_charger_power_24v') | float(0) <= 50 %}
+            {% set parts = parts + ['A/C needs shore power'] %}
+          {% endif %}
+          {% if mode in ['Program', 'Heater'] %}
+            {% if is_state('switch.a32_pro_switch32_hydronic_heater_power_supply', 'off') %}
+              {% set parts = parts + ['heater supply is off'] %}
+            {% elif is_state('input_boolean.heater_low_fuel_lockout', 'on') %}
+              {% set parts = parts + ['heater fuel lockout'] %}
+            {% elif is_state('input_boolean.shop_mode', 'on') %}
+              {% set parts = parts + ['Shop Mode blocks the heater'] %}
+            {% endif %}
+          {% endif %}
+          {% if wake %}{% set parts = parts + ['until ' ~ as_datetime(wake).strftime('%H:%M')] %}{% endif %}
+          {{ parts | join(' · ') }}
+        {% endif %}

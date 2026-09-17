@@ -16,3 +16,21 @@ vanlife_stop_category:
     - trailhead
     - other
   initial: other
+
+# ─── Night Climate (Tonight card, automations night_climate_*) ───
+# Anything but "Off" means the program is running now, until the wake time.
+night_climate_mode:
+  name: "Night Climate Mode"
+  icon: mdi:weather-night
+  options:
+    - "Off"
+    - Program
+    - Fan all night
+    - A/C all night
+    - Heater
+night_climate_fan_direction:
+  name: "Night Climate Fan Direction"
+  icon: mdi:fan
+  options:
+    - Intake
+    - Exhaust

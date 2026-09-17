@@ -1,0 +1,9 @@
+# ================================
+# input_datetime.yaml
+# ================================
+# Night Climate (template/night_climate.yaml, automations night_climate_*)
+night_climate_wake_time:
+  name: "Night Climate Wake Time"
+  has_date: false
+  has_time: true
+  icon: mdi:alarm

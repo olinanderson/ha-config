@@ -1,6 +1,7 @@
 import { PageContainer } from '@/components/layout/PageContainer';
 import { HeaterCard } from '@/components/HeaterCard';
 import { AirConditionerCard } from '@/components/AirConditionerCard';
+import { TonightCard } from '@/components/TonightCard';
 import { TemperatureCard } from '@/components/TemperatureCard';
 import { FanControl } from '@/components/FanControl';
 import { BangBangControl } from '@/components/BangBangControl';
@@ -34,10 +35,11 @@ export default function Climate() {
   return (
     <PageContainer title="Climate & Heating">
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-        {/* Column 1: Heater + AC */}
+        {/* Column 1: Heater + AC + tonight's program */}
         <div className="space-y-4">
           <HeaterCard />
           <AirConditionerCard />
+          <TonightCard />
         </div>
 
         {/* Column 2: Temperatures + Freeze Protection */}

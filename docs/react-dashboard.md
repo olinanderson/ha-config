@@ -96,6 +96,16 @@ everything else. The payload is only what the component's schema takes (`weekday
 `condition_type: null` with a 500, which is what every add did before 2026-09-16. Tests:
 `src/pages/Schedule.test.tsx`.
 
+## Tonight Card
+
+`src/components/TonightCard.tsx` (Climate page, under the A/C card) is the front end for the Night Climate
+program (`docs/automations-modes.md` → Night Climate). It only edits helpers: the mode buttons
+(`input_select.night_climate_mode`; **A/C** is disabled without shore power), night and wake targets,
+the wake time (`input_datetime.set_datetime` with `time: HH:MM:00`), the warm-up, which appliances the
+Program may use (the roof-fan switch stays disabled until its IR frames exist) and the fan speed and
+direction for Fan all night. The status line is `sensor.night_climate_status`, built by the template so
+the card and HA say the same thing. Tests: `src/components/TonightCard.test.tsx`.
+
 ## CSS Scoping
 
 No shadow DOM. Root `.van-dash-root` has `position: relative`.

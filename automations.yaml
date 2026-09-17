@@ -2194,3 +2194,230 @@
     - action: timer.cancel
       target:
         entity_id: timer.shoe_dryer
+
+# ────────────────────────────────────────────────────────────────
+# Night Climate – hold a night target, warm up for the wake time
+#   Mode (input_select.night_climate_mode) is what runs tonight:
+#     Program       heater when cold, A/C when warm and on shore power,
+#                   roof fan once its Auto-temp IR frames exist
+#     Fan all night / A/C all night / Heater
+#                   one appliance until the wake time
+#   Sleep Mode ON starts the Program; the wake time ends everything and
+#   turns Sleep Mode off (wake_up_routine). The heater is left where the
+#   warm-up put it; the morning set point is the daily 07:30 scheduler
+#   entry (switch.schedule_55e88d, 26 °C), which runs whether or not the
+#   program did. Sensors in template/night_climate.yaml.
+# ────────────────────────────────────────────────────────────────
+- id: night_climate_start_on_sleep
+  alias: "Night Climate – start with Sleep Mode"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: input_boolean.sleep_mode
+      from: "off"
+      to: "on"
+  condition:
+    - condition: state
+      entity_id: input_select.night_climate_mode
+      state: "Off"
+  action:
+    - action: input_select.select_option
+      target:
+        entity_id: input_select.night_climate_mode
+      data:
+        option: Program
+
+- id: night_climate_stop_on_sleep_off
+  alias: "Night Climate – stop when Sleep Mode ends"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: input_boolean.sleep_mode
+      from: "on"
+      to: "off"
+  condition:
+    - "{{ not is_state('input_select.night_climate_mode', 'Off') }}"
+  action:
+    - action: input_select.select_option
+      target:
+        entity_id: input_select.night_climate_mode
+      data:
+        option: "Off"
+
+# Ending the program stops the fan and the A/C; the heater is deliberately
+# left where it is.
+- id: night_climate_mode_off
+  alias: "Night Climate – fan and A/C off when the program ends"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: input_select.night_climate_mode
+      to: "Off"
+  action:
+    - action: script.night_climate_actuators_off
+
+- id: night_climate_wake
+  alias: "Night Climate – wake time"
+  mode: single
+  trigger:
+    - trigger: time
+      at: input_datetime.night_climate_wake_time
+  condition:
+    - "{{ not is_state('input_select.night_climate_mode', 'Off') }}"
+  action:
+    # No heater call here on purpose: the 07:30 scheduler entry sets the
+    # morning target at the same minute, and two writers would race.
+    - action: input_select.select_option
+      target:
+        entity_id: input_select.night_climate_mode
+      data:
+        option: "Off"
+    - if:
+        - condition: state
+          entity_id: input_boolean.sleep_mode
+          state: "on"
+      then:
+        - action: script.wake_up_routine
+
+# The loop. Every 5 min (and on any setting change) hold sensor.night_climate_
+# target with what the mode allows. The scripts only send a command when the
+# appliance is not already where it should be; the fan and the A/C beep on
+# every IR frame, so that is deliberate. The A/C keeps a 30-min dwell between
+# on and off (compressor and the beeps); the heater has its own PID.
+- id: night_climate_controller
+  alias: "Night Climate – controller"
+  mode: single
+  max_exceeded: silent
+  trigger:
+    - trigger: time_pattern
+      minutes: "/5"
+    # Setting changes act at once. `to:` empty = state changes only, not the
+    # attribute churn on the target sensor.
+    - trigger: state
+      entity_id:
+        - input_select.night_climate_mode
+        - input_select.night_climate_fan_direction
+        - input_number.night_climate_fan_speed
+        - input_boolean.night_climate_use_heater
+        - input_boolean.night_climate_use_ac
+        - sensor.night_climate_target
+      to:
+  condition:
+    - "{{ states('input_select.night_climate_mode') not in ['Off', 'unknown', 'unavailable'] }}"
+  action:
+    - variables:
+        mode: "{{ states('input_select.night_climate_mode') }}"
+        target: "{{ states('sensor.night_climate_target') | float(15) }}"
+        room: "{{ states('sensor.living_space_temperature') | float(none) }}"
+        shore: "{{ states('sensor.shore_power_charger_power_24v') | float(0) > 50 }}"
+        heater_on: "{{ is_state('climate.a32_pro_van_hydronic_heating_pid', 'heat') }}"
+        ac_on: "{{ is_state('climate.ag_pro_24v_air_conditioner', 'cool') }}"
+        ac_settled: >-
+          {{ states.climate.ag_pro_24v_air_conditioner is none
+             or (now() - states.climate.ag_pro_24v_air_conditioner.last_changed).total_seconds() > 1800 }}
+        use_heater: "{{ is_state('input_boolean.night_climate_use_heater', 'on') }}"
+        use_ac: "{{ is_state('input_boolean.night_climate_use_ac', 'on') }}"
+    - choose:
+        # ── Heater: just the thermostat at the target ──
+        - conditions: "{{ mode == 'Heater' }}"
+          sequence:
+            - action: script.night_climate_actuators_off
+            - action: script.night_climate_heater_to
+              data:
+                target: "{{ target }}"
+
+        # ── Fan all night: fixed speed and direction; the heater is left alone ──
+        - conditions: "{{ mode == 'Fan all night' }}"
+          sequence:
+            - if:
+                - "{{ ac_on }}"
+              then:
+                - action: climate.set_hvac_mode
+                  target:
+                    entity_id: climate.ag_pro_24v_air_conditioner
+                  data:
+                    hvac_mode: "off"
+            - action: script.night_climate_fan_on
+              data:
+                speed: "{{ states('input_number.night_climate_fan_speed') | int(30) }}"
+                direction: "{{ states('input_select.night_climate_fan_direction') }}"
+
+        # ── A/C all night: the unit's own thermostat at the target, shore power only ──
+        - conditions: "{{ mode == 'A/C all night' }}"
+          sequence:
+            - if:
+                - "{{ is_state('fan.ag_pro_roof_fan', 'on') }}"
+              then:
+                - action: fan.turn_off
+                  target:
+                    entity_id: fan.ag_pro_roof_fan
+            - if:
+                - "{{ shore }}"
+              then:
+                - action: script.night_climate_ac_on
+                  data:
+                    target: "{{ target }}"
+              else:
+                - if:
+                    - "{{ ac_on }}"
+                  then:
+                    - action: climate.set_hvac_mode
+                      target:
+                        entity_id: climate.ag_pro_24v_air_conditioner
+                      data:
+                        hvac_mode: "off"
+
+        # ── Program: heater below target−1, A/C above target+2 (shore only) ──
+        #    Between the bands whatever is running holds its own target.
+        #    Roof fan: waits on the remote's Auto-temp IR frames (see
+        #    docs/automations-modes.md); input_boolean.night_climate_use_fan is
+        #    reserved for it.
+        - conditions: "{{ mode == 'Program' }}"
+          sequence:
+            - choose:
+                # Too cold: fan and A/C off, heater to target
+                - conditions: "{{ room is not none and use_heater and room < target - 1 }}"
+                  sequence:
+                    - action: script.night_climate_actuators_off
+                    - action: script.night_climate_heater_to
+                      data:
+                        target: "{{ target }}"
+                # Too warm: heater off; A/C to target when allowed, on shore and settled
+                - conditions: "{{ room is not none and room > target + 2 }}"
+                  sequence:
+                    - if:
+                        - "{{ heater_on }}"
+                      then:
+                        - action: climate.set_hvac_mode
+                          target:
+                            entity_id: climate.a32_pro_van_hydronic_heating_pid
+                          data:
+                            hvac_mode: "off"
+                    - if:
+                        - "{{ use_ac and shore and (ac_on or ac_settled) }}"
+                      then:
+                        - action: script.night_climate_ac_on
+                          data:
+                            target: "{{ target }}"
+                # A/C running: off once the room is back under target or shore is gone
+                - conditions: >
+                    {{ ac_on and (not shore or not use_ac
+                                  or (room is not none and room < target - 0.5 and ac_settled)) }}
+                  sequence:
+                    - action: climate.set_hvac_mode
+                      target:
+                        entity_id: climate.ag_pro_24v_air_conditioner
+                      data:
+                        hvac_mode: "off"
+                # A/C running in band: keep its target in step (the warm-up raises it)
+                - conditions: "{{ ac_on }}"
+                  sequence:
+                    - action: script.night_climate_ac_on
+                      data:
+                        target: "{{ target }}"
+                # Heater running in band: keep its target in step
+                - conditions: "{{ heater_on and use_heater }}"
+                  sequence:
+                    - action: script.night_climate_heater_to
+                      data:
+                        target: "{{ target }}"
