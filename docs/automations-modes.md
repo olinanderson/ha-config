@@ -62,7 +62,7 @@ a stopped motor, but a running fan stays on under one and then cycles by itself 
 90 °F set point, restarted within 15 s of 60 °F), so the switch's turn-on sends a manual start frame first
 when the fan is off (lid frame if shut, manual frame, 3 s, auto frame). Any manual fan command, and the
 lid-closed frame, end thermostat mode (their packets have the auto bit clear), and the firmware publishes
-the switch off when it sends them. Capture: stream
+the switch off when it sends them. Measured 2026-09-17 by stepping the set point: the fan's own sensor read 69–70 °F (20.8 °C) while the living-space blend and the Kidde read 22.1 °C and the remote's handheld sensor 71 °F, i.e. about 1 °C under the room with the lid open on a 10 °C morning. In thermostat mode the fan also modulates its speed with the margin above the set point (22 W at 10 °F over, 15 W at 3 °F, 7 W at 1 °F). Capture: stream
 `esphome logs esphome/a8-pro.yaml --device 192.168.10.61` (the receiver on GPIO23 dumps Pronto) and decode
 with the 1200-baud rule above.
 
