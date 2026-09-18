@@ -12,20 +12,22 @@ vi.mock('@/hooks/useEntity', () => ({
 
 import {
   TonightCard,
-  MODE_ID, FAN_DIRECTION_ID, NIGHT_TARGET_ID, WAKE_TARGET_ID, WARMUP_ID, FAN_SPEED_ID,
-  USE_HEATER_ID, USE_AC_ID, USE_FAN_ID, WAKE_TIME_ID, STATUS_ID, ROOM_ID, SHORE_POWER_ID, SLEEP_MODE_ID,
+  MODE_ID, FAN_DIRECTION_ID, NIGHT_TARGET_ID, HOLD_TARGET_ID, WAKE_TARGET_ID, WARMUP_ID, COOL_ABOVE_ID, FAN_SPEED_ID,
+  USE_HEATER_ID, USE_AC_ID, USE_FAN_ID, WAKE_TIME_ID, STATUS_ID, ROOM_ID, SHORE_ID, SLEEP_MODE_ID,
   wakeTimeValue,
 } from './TonightCard';
 
 const simple = (id: string, state: string, attributes: Record<string, any> = {}) => ({ entity_id: id, state, attributes });
 
-function makeEntities({ mode = 'Off', shore = 800, status = 'Off', sleep = 'off', useAc = 'on' } = {}) {
+function makeEntities({ mode = 'Off', shore = true, status = 'Off', sleep = 'off', useAc = 'on' } = {}) {
   return {
-    [MODE_ID]: simple(MODE_ID, mode, { options: ['Off', 'Program', 'Fan all night', 'A/C all night', 'Heater'] }),
+    [MODE_ID]: simple(MODE_ID, mode, { options: ['Off', 'Hold', 'Program', 'Fan all night', 'A/C all night', 'Heater'] }),
     [FAN_DIRECTION_ID]: simple(FAN_DIRECTION_ID, 'Intake', { options: ['Intake', 'Exhaust'] }),
     [NIGHT_TARGET_ID]: simple(NIGHT_TARGET_ID, '15.0', { min: 5, max: 25, step: 0.5 }),
+    [HOLD_TARGET_ID]: simple(HOLD_TARGET_ID, '22.0', { min: 10, max: 30, step: 0.5 }),
     [WAKE_TARGET_ID]: simple(WAKE_TARGET_ID, '23.0', { min: 10, max: 30, step: 0.5 }),
     [WARMUP_ID]: simple(WARMUP_ID, '45.0', { min: 0, max: 180, step: 5 }),
+    [COOL_ABOVE_ID]: simple(COOL_ABOVE_ID, '24.0', { min: 18, max: 35, step: 0.5 }),
     [FAN_SPEED_ID]: simple(FAN_SPEED_ID, '30.0', { min: 10, max: 100, step: 10 }),
     [USE_HEATER_ID]: simple(USE_HEATER_ID, 'on'),
     [USE_AC_ID]: simple(USE_AC_ID, useAc),
@@ -33,7 +35,7 @@ function makeEntities({ mode = 'Off', shore = 800, status = 'Off', sleep = 'off'
     [WAKE_TIME_ID]: simple(WAKE_TIME_ID, '07:30:00', { has_time: true, has_date: false }),
     [STATUS_ID]: simple(STATUS_ID, status),
     [ROOM_ID]: simple(ROOM_ID, '22.5'),
-    [SHORE_POWER_ID]: simple(SHORE_POWER_ID, String(shore)),
+    [SHORE_ID]: simple(SHORE_ID, shore ? 'on' : 'off'),
     [SLEEP_MODE_ID]: simple(SLEEP_MODE_ID, sleep),
   };
 }
@@ -53,19 +55,28 @@ describe('TonightCard', () => {
       status: 'Program · holding 15 °C · room 22.5 °C · nothing running · until 07:30',
     });
     render(<TonightCard />);
-    expect(pressed(screen.getByRole('button', { name: 'Program' }))).toBe(true);
+    expect(pressed(screen.getByRole('button', { name: 'Night' }))).toBe(true);
     expect(screen.getByTestId('tonight-status').textContent).toContain('holding 15 °C');
     fireEvent.click(screen.getByRole('button', { name: 'Heater' }));
     expect(callService).toHaveBeenCalledWith('input_select', 'select_option', { option: 'Heater' }, { entity_id: MODE_ID });
   });
 
+  it('Hold keeps the hold target now', () => {
+    render(<TonightCard />);
+    fireEvent.click(screen.getByRole('button', { name: 'Hold' }));
+    expect(callService).toHaveBeenCalledWith('input_select', 'select_option', { option: 'Hold' }, { entity_id: MODE_ID });
+    fireEvent.click(screen.getByRole('button', { name: 'Increase hold target (now)' }));
+    expect(callService).toHaveBeenCalledWith('input_number', 'set_value', { value: 22.5 }, { entity_id: HOLD_TARGET_ID });
+    expect(screen.getByTestId('tonight-status').textContent).toContain('Hold keeps the hold target now');
+  });
+
   it('A/C all night needs shore power', () => {
-    entityRef.current = makeEntities({ shore: 0 });
+    entityRef.current = makeEntities({ shore: false });
     render(<TonightCard />);
     expect((screen.getByRole('button', { name: 'A/C' }) as HTMLButtonElement).disabled).toBe(true);
     expect(screen.getByText('A/C only runs on shore power.')).toBeTruthy();
     cleanup();
-    entityRef.current = makeEntities({ shore: 800 });
+    entityRef.current = makeEntities({ shore: true });
     render(<TonightCard />);
     expect((screen.getByRole('button', { name: 'A/C' }) as HTMLButtonElement).disabled).toBe(false);
   });
@@ -105,6 +116,12 @@ describe('TonightCard', () => {
     expect(callService).toHaveBeenCalledWith('input_boolean', 'turn_on', undefined, { entity_id: USE_AC_ID });
   });
 
+  it('sets the temperature above which the A/C joins', () => {
+    render(<TonightCard />);
+    fireEvent.click(screen.getByRole('button', { name: 'Decrease a/c above' }));
+    expect(callService).toHaveBeenCalledWith('input_number', 'set_value', { value: 23.5 }, { entity_id: COOL_ABOVE_ID });
+  });
+
   it('sets the fan direction and speed for Fan all night', () => {
     render(<TonightCard />);
     expect(pressed(screen.getByRole('button', { name: 'Intake' }))).toBe(true);
@@ -116,7 +133,7 @@ describe('TonightCard', () => {
 
   it('explains how the Program starts while nothing runs', () => {
     render(<TonightCard />);
-    expect(screen.getByTestId('tonight-status').textContent).toContain('Night schedule or Sleep Mode starts the Program');
+    expect(screen.getByTestId('tonight-status').textContent).toContain('Night schedule or Sleep Mode starts the night program');
     cleanup();
     entityRef.current = makeEntities({ sleep: 'on' });
     render(<TonightCard />);

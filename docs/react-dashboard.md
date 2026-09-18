@@ -102,13 +102,30 @@ days. **Other** is the domain → entity → action walk for everything else. Th
 
 ## Tonight Card
 
-`src/components/TonightCard.tsx` (Climate page, under the A/C card) is the front end for the Night Climate
-program (`docs/automations-modes.md` → Night Climate). It only edits helpers: the mode buttons
-(`input_select.night_climate_mode`; **A/C** is disabled without shore power), night and wake targets,
+`src/components/TonightCard.tsx` (the "Climate Program" card on the Climate page, under the A/C card) is the
+front end for the Night Climate program (`docs/automations-modes.md` → Night Climate). It only edits
+helpers: the mode buttons (`input_select.night_climate_mode`: Off / Hold / Night / Fan / A/C / Heater;
+**A/C** is disabled without shore power), the hold target (Hold = the same logic right now, no end), night and wake targets,
 the wake time (`input_datetime.set_datetime` with `time: HH:MM:00`), the warm-up, which appliances the
-Program may use and the fan speed and direction (used by Fan all night and by the Program's fan
-thermostat). The status line is `sensor.night_climate_status`, built by the template so
-the card and HA say the same thing. Tests: `src/components/TonightCard.test.tsx`.
+Program may use, "A/C above" (`input_number.night_climate_cool_above`: the A/C only joins above it) and the
+fan speed and direction (used by Fan all night and by the Program's fan). Shore power for the A/C button and
+hint is `binary_sensor.shore_power_present`, not the charger's live draw, which reads 0 W on a full battery. The status line is `sensor.night_climate_status`, built by the template so
+the card and HA say the same thing. Tests: `src/components/TonightCard.test.tsx`. The Roof Fan card
+(`FanControl.tsx`, Home and Climate pages) follows the Air Conditioner card: room temperature
+(`sensor.living_space_temperature`) beside what the fan is holding, an Off / Manual / Auto
+segmented control, one − / slider / + row for the mode (speed in Manual, set point in Auto) and
+Direction / Lid segmented rows. Manual is `fan.ag_pro_roof_fan` at a speed, Auto is the fan's own
+thermostat (`switch.ag_pro_roof_fan_thermostat`) with the set point in whole °F
+(`number.ag_pro_roof_fan_thermostat_set_point`, shown in °C, slider 50–90 °F), Off ends whichever
+runs and shuts the lid. Every frame the fan receives is a beep, so speed and set point changes are
+shown at once and sent 1.2 s after the last tap or drag (`APPLY_DELAY_MS`); a set point still
+waiting goes before Auto starts and after any other mode change, so it never adds a frame, and a
+waiting speed is dropped by Off. In Auto a direction change calls `esphome.ag_pro_roof_fan_thermostat`
+(a plain `fan.set_direction` sends nothing while the fan entity is off under the thermostat). The
+badge reads Off / On / Auto · running / Auto · idle from `sensor.roof_fan_power_12v`. Tapping Off while it
+already shows Off presses `button.ag_pro_roof_fan_force_off`, which always sends "off, lid closed": the link
+is one-way IR, so when the fan misses a frame HA still shows Off and this is the way to send it again.
+Tests: `src/components/FanControl.test.tsx`.
 
 ## CSS Scoping
 

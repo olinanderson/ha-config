@@ -4,7 +4,7 @@ import { Switch } from '@/components/ui/switch';
 import { useEntity } from '@/hooks/useEntity';
 import { useService } from '@/hooks/useService';
 import { cn } from '@/lib/utils';
-import { Moon, Fan, Snowflake, Flame, Power, Minus, Plus } from 'lucide-react';
+import { Moon, Fan, Snowflake, Flame, Power, Minus, Plus, Thermometer } from 'lucide-react';
 
 // Night Climate: what runs tonight and the targets it holds. The logic lives in
 // HA (automations night_climate_*, template/night_climate.yaml); this card only
@@ -12,8 +12,10 @@ import { Moon, Fan, Snowflake, Flame, Power, Minus, Plus } from 'lucide-react';
 export const MODE_ID = 'input_select.night_climate_mode';
 export const FAN_DIRECTION_ID = 'input_select.night_climate_fan_direction';
 export const NIGHT_TARGET_ID = 'input_number.night_climate_night_target';
+export const HOLD_TARGET_ID = 'input_number.night_climate_hold_target';
 export const WAKE_TARGET_ID = 'input_number.night_climate_wake_target';
 export const WARMUP_ID = 'input_number.night_climate_warmup_minutes';
+export const COOL_ABOVE_ID = 'input_number.night_climate_cool_above';
 export const FAN_SPEED_ID = 'input_number.night_climate_fan_speed';
 export const USE_HEATER_ID = 'input_boolean.night_climate_use_heater';
 export const USE_AC_ID = 'input_boolean.night_climate_use_ac';
@@ -21,16 +23,15 @@ export const USE_FAN_ID = 'input_boolean.night_climate_use_fan';
 export const WAKE_TIME_ID = 'input_datetime.night_climate_wake_time';
 export const STATUS_ID = 'sensor.night_climate_status';
 export const ROOM_ID = 'sensor.living_space_temperature';
-export const SHORE_POWER_ID = 'sensor.shore_power_charger_power_24v';
+// The charger drew power within the last 3 h (template/night_climate.yaml). Its
+// live draw is no use here: it reads 0 W whenever the battery is full.
+export const SHORE_ID = 'binary_sensor.shore_power_present';
 export const SLEEP_MODE_ID = 'input_boolean.sleep_mode';
-
-// Shore present = the charger is actually pulling from the pedestal (same
-// threshold as the automations).
-const SHORE_MIN_W = 50;
 
 const MODES = [
   { key: 'Off', label: 'Off', icon: Power },
-  { key: 'Program', label: 'Program', icon: Moon },
+  { key: 'Hold', label: 'Hold', icon: Thermometer },
+  { key: 'Program', label: 'Night', icon: Moon },
   { key: 'Fan all night', label: 'Fan', icon: Fan },
   { key: 'A/C all night', label: 'A/C', icon: Snowflake },
   { key: 'Heater', label: 'Heater', icon: Flame },
@@ -100,14 +101,14 @@ export function TonightCard() {
   const wakeTime = useEntity(WAKE_TIME_ID);
   const status = useEntity(STATUS_ID);
   const room = useEntity(ROOM_ID);
-  const shore = useEntity(SHORE_POWER_ID);
+  const shore = useEntity(SHORE_ID);
   const sleep = useEntity(SLEEP_MODE_ID);
 
   if (!modeEnt) return null;
 
   const mode = modeEnt.state;
   const active = mode !== 'Off' && mode !== 'unknown' && mode !== 'unavailable';
-  const onShore = num(shore?.state, 0) > SHORE_MIN_W;
+  const onShore = shore?.state === 'on';
   const roomTemp = num(room?.state, NaN);
   const fanDirection = fanDirEnt?.state ?? 'Intake';
   const statusText =
@@ -129,7 +130,7 @@ export function TonightCard() {
       <CardHeader className="pb-2">
         <CardTitle className="flex items-center gap-2 text-base">
           <Moon className={cn('h-4 w-4', active ? 'text-indigo-400' : 'text-muted-foreground')} />
-          Tonight
+          Climate Program
           <span className="ml-auto flex items-center gap-1.5">
             {Number.isFinite(roomTemp) && (
               <span className="text-xs font-medium px-2 py-0.5 rounded-full tabular-nums bg-muted text-muted-foreground">
@@ -149,7 +150,7 @@ export function TonightCard() {
       </CardHeader>
       <CardContent className="space-y-4">
         {/* Mode */}
-        <div className="grid grid-cols-5 gap-1.5">
+        <div className="grid grid-cols-6 gap-1">
           {MODES.map((m) => {
             const Icon = m.icon;
             const selected = mode === m.key;
@@ -178,11 +179,12 @@ export function TonightCard() {
             ? statusText
             : sleep?.state === 'on'
               ? 'Sleep Mode is on. Pick a mode to run tonight.'
-              : 'The Night schedule or Sleep Mode starts the Program. Pick a mode to start it now.'}
+              : 'Hold keeps the hold target now. The Night schedule or Sleep Mode starts the night program.'}
         </p>
 
         {/* Targets */}
         <div className="space-y-2">
+          <Stepper label="Hold target (now)" entityId={HOLD_TARGET_ID} unit="°" fallback={22} decimals={1} onChange={setNumber} />
           <Stepper label="Night target" entityId={NIGHT_TARGET_ID} unit="°" fallback={15} decimals={1} onChange={setNumber} />
           <Stepper label="Wake target" entityId={WAKE_TARGET_ID} unit="°" fallback={23} decimals={1} onChange={setNumber} />
           <div className="flex items-center justify-between gap-2">
@@ -201,7 +203,7 @@ export function TonightCard() {
 
         {/* What the Program may use */}
         <div className="space-y-1.5">
-          <p className="text-xs text-muted-foreground">Program may use</p>
+          <p className="text-xs text-muted-foreground">Hold and Night may use</p>
           <div className="grid grid-cols-3 gap-2">
             <label className="flex items-center gap-2 text-sm">
               <Switch
@@ -231,6 +233,8 @@ export function TonightCard() {
               Fan
             </label>
           </div>
+          {/* Hold and Night cool with the roof fan; the A/C only joins above this */}
+          <Stepper label="A/C above" entityId={COOL_ABOVE_ID} unit="°" fallback={24} decimals={1} onChange={setNumber} />
           {!onShore && (
             <p className="text-[11px] text-muted-foreground">A/C only runs on shore power.</p>
           )}
