@@ -145,3 +145,9 @@ night_climate_use_ac:
 night_climate_use_fan:
   name: "Night Climate uses Roof Fan"
   icon: mdi:fan
+# Set by the controller when the fan's own thermostat sat idle in a warm room
+# (its sensor is in the incoming air); HA then runs the fan from the room
+# sensor. Cleared when the program ends.
+night_climate_fan_by_room:
+  name: "Night Climate runs the Roof Fan from the room sensor"
+  icon: mdi:fan-alert

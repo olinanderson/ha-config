@@ -1161,6 +1161,10 @@ night_climate_fan_off:
   alias: "Night Climate – roof fan off, lid closed"
   mode: queued
   sequence:
+    - variables:
+        was_running: >-
+          {{ is_state('fan.ag_pro_roof_fan', 'on') or is_state('cover.ag_pro_roof_fan_lid', 'open')
+             or is_state('switch.ag_pro_roof_fan_thermostat', 'on') }}
     - if:
         - "{{ is_state('fan.ag_pro_roof_fan', 'on') }}"
       then:
@@ -1176,17 +1180,53 @@ night_climate_fan_off:
         - action: cover.close_cover
           target:
             entity_id: cover.ag_pro_roof_fan_lid
+    # One-way IR: send "off, lid closed" a second time. On 2026-09-18 the single
+    # frame was missed and the lid stayed open in auto all through the warm-up.
+    # Only when this call actually switched something off, so a tick that finds
+    # everything off already stays silent (every frame is a beep).
+    - if:
+        - >
+          {{ was_running and states.button.ag_pro_roof_fan_force_off is not none
+             and not is_state('button.ag_pro_roof_fan_force_off', 'unavailable') }}
+      then:
+        - delay: "00:00:03"
+        - action: button.press
+          target:
+            entity_id: button.ag_pro_roof_fan_force_off
+
+# A/C off, but never blind. Its power command is an IR TOGGLE: sent to a unit
+# that is really off it switches it ON (2026-09-18, at its 26 °C default, because
+# the belief said "cooling" for two hours on a unit that never started). If the
+# unit has shown "cool" for 3 min and drawn nothing for 3 min it is off whatever
+# the entity says; the AG Pro corrects its belief by itself within a minute or two.
+night_climate_ac_off:
+  alias: "Night Climate – A/C off"
+  mode: queued
+  sequence:
+    - condition: template
+      value_template: "{{ states('climate.ag_pro_24v_air_conditioner') not in ['off', 'unavailable', 'unknown'] }}"
+    - if:
+        - >
+          {% set p = states.binary_sensor.ag_pro_24v_ac_power_detected %}
+          {{ p is not none and p.state == 'off'
+             and (now() - p.last_changed).total_seconds() > 180
+             and (now() - states.climate.ag_pro_24v_air_conditioner.last_changed).total_seconds() > 180 }}
+      then:
+        - action: system_log.write
+          data:
+            level: warning
+            logger: night_climate
+            message: "A/C shows cooling but has drawn no power for 3 min: not sending the off toggle (it would switch the unit on)"
+      else:
+        - action: climate.set_hvac_mode
+          target:
+            entity_id: climate.ag_pro_24v_air_conditioner
+          data:
+            hvac_mode: "off"
 
 night_climate_actuators_off:
   alias: "Night Climate – roof fan and A/C off"
   mode: queued
   sequence:
     - action: script.night_climate_fan_off
-    - if:
-        - "{{ states('climate.ag_pro_24v_air_conditioner') not in ['off', 'unavailable', 'unknown'] }}"
-      then:
-        - action: climate.set_hvac_mode
-          target:
-            entity_id: climate.ag_pro_24v_air_conditioner
-          data:
-            hvac_mode: "off"
+    - action: script.night_climate_ac_off

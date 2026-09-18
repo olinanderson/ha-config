@@ -18,12 +18,14 @@ vanlife_stop_category:
   initial: other
 
 # ─── Night Climate (Tonight card, automations night_climate_*) ───
-# Anything but "Off" means the program is running now, until the wake time.
+# Anything but "Off" means the program is running now. Hold keeps the hold
+# target with no end (daytime use); the others run until the wake time.
 night_climate_mode:
   name: "Night Climate Mode"
   icon: mdi:weather-night
   options:
     - "Off"
+    - Hold
     - Program
     - Fan all night
     - A/C all night

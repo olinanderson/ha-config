@@ -99,6 +99,29 @@ remote_transmitter:
   id: transmitter_main
   pin: GPIO2         # <- warning: strapping pin – use at your own risk
   carrier_duty_percent: 50%
+  # Quiet air between the roof fan and every other appliance, both ways. On
+  # 2026-09-18 the fan's lid-closed frame went out back to back with the A/C
+  # power toggle: the fan ignored it and stayed in auto with the lid open while
+  # HA showed it closed (sent alone the same frame had worked every time). Fan
+  # paths set ir_next_is_fan just before they transmit; a frame for a different
+  # appliance than the previous one is held here until 1.5 s have passed. The
+  # hold blocks the loop, which is fine for the rare overlap it covers.
+  on_transmit:
+    then:
+      - lambda: |-
+          const bool fan = id(ir_next_is_fan);
+          const uint32_t since = millis() - id(ir_last_ms);
+          if (id(ir_last_ms) != 0 && fan != id(ir_last_was_fan) && since < 1500) {
+            ESP_LOGD("ir", "Holding the %s frame %u ms: another appliance just transmitted",
+                     fan ? "roof fan" : "non-fan", (unsigned) (1500 - since));
+            delay(1500 - since);
+          }
+  on_complete:
+    then:
+      - lambda: |-
+          id(ir_last_was_fan) = id(ir_next_is_fan);
+          id(ir_next_is_fan)  = false;
+          id(ir_last_ms)      = millis();
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Globals
@@ -108,6 +131,20 @@ globals:
     type: float
     restore_value: no
     initial_value: '0.0'
+
+  # ── IR spacing (remote_transmitter.on_transmit / on_complete) ──
+  - id: ir_next_is_fan
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: ir_last_was_fan
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+  - id: ir_last_ms
+    type: uint32_t
+    restore_value: no
+    initial_value: '0'
 
   # ── AC climate controller state ──
   - id: ac_assumed_on
@@ -193,15 +230,19 @@ binary_sensor:
   # sensor. Threshold sits above standby (off ~0 W, on ~30-40 W). delayed_on/off
   # ride out the reading lag and brief dips so it can't flap. on_state feeds the
   # reconciler, which corrects ac_assumed_on when idle (see ac_power_reconcile).
+  # delayed_on is 30 s (was 8 s): while the shore charger works hard the A/C
+  # current channel picks up 2-9 s spikes of 8-59 W, and on 2026-09-17 those
+  # flipped the belief on and off about sixty times in one evening. A real run
+  # draws 20 W or more without a break. NaN (HA restarting) is no information.
   - platform: template
     name: "24V AC - Power Detected"
     id: ac_power_on
     device_class: power
     lambda: |-
-      if (!id(ac_power_sensor).has_state()) return {};
+      if (!id(ac_power_sensor).has_state() || std::isnan(id(ac_power_sensor).state)) return {};
       return id(ac_power_sensor).state > 5.0f;  // above 0 W standby; low enough to catch eco/sleep low-fan draw
     filters:
-      - delayed_on: 8s
+      - delayed_on: 30s
       - delayed_off: 45s
     on_state:
       - script.execute: ac_power_reconcile
@@ -300,6 +341,7 @@ cover:
                   fan.is_off: roof_fan
                 then:
                   # fan off – lid open IR code
+                  - lambda: 'id(ir_next_is_fan) = true;'
                   - remote_transmitter.transmit_raw:
                       transmitter_id: transmitter_main
                       carrier_frequency: 38kHz
@@ -332,10 +374,7 @@ cover:
             fan.is_off: roof_fan
           then:
             # fan off – lid closed IR code
-            - remote_transmitter.transmit_raw:
-                transmitter_id: transmitter_main
-                carrier_frequency: 38kHz
-                code: [1604,-834,778,-1646,800,-835,779,-1645,802,-834,780,-836,1601,-834,800,-2455,6474,-2457,802,-5710,805,-1620,5651,-858,779,-1645,803,-4899,779,-2458,4875,-834,1604,-1645,780,-4083,804,-3265,4025,-835,2397,-1670,2401,-1647,1602,-3294,7270,-1646,1604,-3270,2398,-1671,3228,-859,1577,-833,803,-1644,778,-8145,800,-1646,2402,-836,1626,-1623,1599,-835,774,-861,2400]
+            - script.execute: roof_fan_send_lid_closed
             # that frame has the auto bit clear
             - switch.template.publish:
                 id: roof_fan_thermostat
@@ -417,8 +456,17 @@ switch:
       - switch.template.publish:
           id: roof_fan_thermostat
           state: OFF
-      # Back to the manual state (fan off → off frame, which clears the auto bit).
-      - script.execute: roof_fan_dispatch
+      # Same as a manual off: stop and shut the lid. The lid-closed frame
+      # carries "fan off, auto off", so one frame does it all.
+      - if:
+          condition:
+            fan.is_on: roof_fan
+          then:
+            - fan.turn_off: roof_fan
+          else:
+            - cover.template.publish:
+                id: roof_fan_lid
+                state: CLOSED
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Climate entity – 24V Mini-Split AC (IR-controlled)
@@ -584,6 +632,12 @@ climate:
     swing_off_action:
       - script.execute: air_conditioner_swing_flap
 
+# Level check of the A/C belief against the measured power (see ac_power_reconcile).
+interval:
+  - interval: 60s
+    then:
+      - script.execute: ac_power_reconcile
+
 script:
   # ───────────────────────────────────────────────────────────────────────────
   # Roof fan frame builder (decoded from the remote, 2026-09-17)
@@ -602,6 +656,7 @@ script:
       speed_pct: int
       temp_f: int
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_raw:
           transmitter_id: transmitter_main
           carrier_frequency: 38kHz
@@ -627,6 +682,43 @@ script:
             }
             code.push_back(cur == 0 ? run * BIT : -(run * BIT));
             return code;
+
+  # The remote's "fan off, lid closed" frame as captured (flags 00: it also
+  # clears thermostat mode). Runs to completion inside script.execute.
+  - id: roof_fan_send_lid_closed
+    mode: queued
+    then:
+      - lambda: 'id(ir_next_is_fan) = true;'
+      - remote_transmitter.transmit_raw:
+          transmitter_id: transmitter_main
+          carrier_frequency: 38kHz
+          code: [1604,-834,778,-1646,800,-835,779,-1645,802,-834,780,-836,1601,-834,800,-2455,6474,-2457,802,-5710,805,-1620,5651,-858,779,-1645,803,-4899,779,-2458,4875,-834,1604,-1645,780,-4083,804,-3265,4025,-835,2397,-1670,2401,-1647,1602,-3294,7270,-1646,1604,-3270,2398,-1671,3228,-859,1577,-833,803,-1644,778,-8145,800,-1646,2402,-836,1626,-1623,1599,-835,774,-861,2400]
+
+  # Force off: bring every roof-fan entity to "off, lid closed" and ALWAYS send
+  # the lid-closed frame, whatever the entities said before. The link is one-way
+  # IR, so when the fan misses a frame HA cannot know; the dashboard's Off-again,
+  # the night program's second send and HA's watchdog press the button below.
+  # If an entity was still on, publishing it off sends the frame once already
+  # (fan on_turn_off → lid CLOSED → on_closed); the frame here follows 1 s later.
+  - id: roof_fan_force_off
+    mode: restart
+    then:
+      - lambda: |-
+          if (id(roof_fan).state) {
+            id(roof_fan).state = false;
+            id(roof_fan).publish_state();          // no control() call, so no dispatch
+          }
+          if (id(ceiling_fan_mode).state) id(ceiling_fan_mode).publish_state(false);
+          if (id(roof_fan_thermostat).state) id(roof_fan_thermostat).publish_state(false);
+      - if:
+          condition:
+            lambda: 'return id(roof_fan_lid).position > 0.5f;'
+          then:
+            - cover.template.publish:
+                id: roof_fan_lid
+                state: CLOSED
+      - delay: 1s
+      - script.execute: roof_fan_send_lid_closed
 
   # Auto frame from the current fan direction/speed and the set point number.
   - id: roof_fan_send_thermostat
@@ -1026,12 +1118,14 @@ script:
 
   # ── Busy window: held true while an on/off command's effect ramps in, so the
   #    power-feedback reconciler doesn't act on the laggy reading mid-command.
-  #    restart mode: each new toggle restarts the 40 s window.
+  #    restart mode: each new toggle restarts the window. 90 s (was 40 s): the
+  #    power flag now needs 30 s of draw on top of the reading lag, and the
+  #    reconciler also runs on a timer, so it must not judge a fresh toggle.
   - id: ac_busy_window
     mode: restart
     then:
       - lambda: 'id(ac_busy) = true;'
-      - delay: 40s
+      - delay: 90s
       - lambda: 'id(ac_busy) = false;'
 
   # ── Apply a remote preset (strong/eco/sleep). The preset IR frame jumps the AC
@@ -1058,9 +1152,13 @@ script:
 
   # ── Power-feedback reconciler (Layer 1 + 2): corrects assumed on/off from the
   #    debounced power sensor, but ONLY when idle (no recent command) and not in
-  #    the compressor lockout. Edge-triggered from ac_power_on's on_state and once
-  #    on boot — so it fixes real drift (reboot, physical remote, manual off at the
-  #    unit) without re-introducing the invert-during-command race we removed before.
+  #    the compressor lockout. Runs on ac_power_on's edges, once on boot and once
+  #    a minute (interval: below) — so it fixes real drift (reboot, physical
+  #    remote, manual off at the unit, a toggle the unit never obeyed) without
+  #    re-introducing the invert-during-command race we removed before. The
+  #    minute timer is from 2026-09-18: an edge that lands inside a busy or
+  #    shutdown window is lost, the belief stayed "cooling" for two hours on a
+  #    unit that was off, and the program's "off" then toggled it ON at 26 °C.
   - id: ac_power_reconcile
     mode: single
     then:
@@ -1107,11 +1205,13 @@ script:
   # Off commands (with roof fan open or closed)
   - id: roof_fan_off_and_open
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0027 0000 0041 001E 0021 003F 0021 001F 0020 003F 0021 001F 0020 001F 0040 001F 0021 005F 00FF 005F 0021 00DF 0020 003F 00E0 001F 0020 003F 0021 00BF 0020 005F 00C1 001F 0040 003F 0020 009F 0021 007F 009F 001F 0060 003F 0060 003F 0040 0080 0080 001F 0080 003F 0060 001F 0040 003F 0021 003F 0020 001F 0021 005F 0060 003F 0021 013E 0020 0040 0060 001F 0040 003F 0020 0020 0020 003F 0021 001F 0020 0181"
   - id: roof_fan_off_and_closed
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0026 0000 0040 001F 0021 003E 0021 001F 0021 003F 0020 001F 0021 001F 0040 001F 0020 005F 0100 005F 0020 00DE 0021 003F 00DF 001F 0021 003F 0020 00BE 0020 0060 00BF 001F 0040 003F 0021 009F 0020 007E 00A0 001F 005F 003F 0060 003F 0040 007E 011E 0040 005F 001F 0041 003F 0020 003F 0020 0020 0020 005F 0060 003F 0020 013D 0021 003F 005F 001F 0040 003F 0021 001F 0020 001F 0040 001F 0020 0181"
@@ -1119,51 +1219,61 @@ script:
   # On, Roof Fan Closed (Ceiling Fan) – speed control
   - id: roof_fan_on_closed_speed_10
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0026 0000 0041 001E 0021 003F 0021 001E 0021 003F 0021 001F 0021 001E 0041 001F 0020 005F 00FF 005F 0021 00DE 0020 003F 00E0 001F 0021 003F 0020 00BE 0021 005F 00BF 001F 0040 003F 0020 009E 0021 007F 009F 0020 005F 003F 005F 0040 0040 007F 0020 003F 005F 0020 003F 0040 0040 001F 0020 001F 0080 003F 0021 001F 0020 0060 0060 003F 0021 013E 0020 003F 0060 001F 0040 003F 0080 001F 0020 0181"
   - id: roof_fan_on_closed_speed_20
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0026 0000 0042 001E 0021 003F 0021 001E 0021 003F 0021 001E 0021 001F 0041 001F 0021 005E 0100 005E 0021 00DE 0021 003E 00E0 0020 0020 003F 0020 00C0 0020 005F 00BF 0020 003F 0040 001F 00A0 0020 007F 009F 0020 005F 0040 005F 0040 003F 007F 001F 0040 00BF 0040 005E 0020 0020 0020 005F 0040 0020 0020 001F 0060 005F 0040 001F 013F 0020 0040 005E 0020 003F 0040 0040 0040 001F 0020 0020 0181"
   - id: roof_fan_on_closed_speed_30
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0024 0000 0040 001F 0021 003E 0021 001F 0021 003E 0021 001F 0021 001F 0040 001F 0020 005E 0100 005D 0021 00DE 0021 003E 00E0 001F 0020 0040 0020 00BE 0020 0060 00BF 001F 0040 0040 001F 00A0 0020 007F 009E 0020 005F 0040 005E 0040 0040 007F 001F 0040 00BE 0040 003F 0080 005F 0040 001F 0020 0020 0060 005E 0040 0020 013E 001F 0040 005F 0020 003F 0040 005F 0060 001F 0181"
   - id: roof_fan_on_closed_speed_40
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0026 0000 0041 001E 0021 003F 0021 001E 0021 003F 0021 001F 0020 001F 0040 001F 0021 005F 00FF 005F 0021 00DE 0020 003F 00DF 001F 0020 003F 0020 00BF 0020 005F 00C0 001F 0040 003F 0021 009E 0021 007F 009F 001F 005F 0040 0060 003F 0040 007F 0020 003F 00BF 003F 0080 001F 0021 001F 0040 003F 0020 001F 0021 005F 0060 003F 0020 013D 0021 003F 005F 001F 0040 003F 0040 001F 0021 001F 0020 0181"
   - id: roof_fan_on_closed_speed_50
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0024 0000 0040 001F 0021 003F 0020 0020 0020 003F 0021 001F 0020 001F 0040 001F 0021 005D 0100 005E 0021 00DE 0021 003F 00DF 0020 0020 003F 0020 00BF 0020 005F 00BF 001F 0040 003F 0020 00A0 0020 007E 00A0 0020 005E 0040 005F 0040 003F 007F 001F 0040 00BE 0040 0040 0020 003F 0040 003F 0040 001F 0020 0020 0060 005E 0040 0020 013E 001F 0040 005F 0020 003F 0040 009F 0181"
   - id: roof_fan_on_closed_speed_60
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0023 0000 0040 001F 0021 003E 0021 001F 0021 003E 0021 001F 0021 001F 0040 001F 0020 005F 0100 005F 0020 00DE 0020 0040 00DF 001F 0021 003F 0020 00BE 0021 005F 00BF 001F 0040 003F 0021 009F 0020 007E 009F 0020 005F 003F 0060 003F 003F 0080 0020 0040 00BE 0040 005F 007E 0040 003F 0020 0020 0020 005F 005F 0040 0020 013D 0021 003F 005F 001F 0041 003F 0040 0181"
   - id: roof_fan_on_closed_speed_70
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0025 0000 0040 001F 0020 0040 0020 001F 0021 003F 0020 001F 0020 0020 0040 001F 0020 005F 0100 005F 0020 00DE 0020 0040 00DF 0020 001F 0040 0020 00BF 0020 005F 00C0 001F 0040 0040 0020 009F 0020 007F 009F 0020 0060 003F 0060 0040 003F 007F 0020 0040 00BF 0040 003F 0040 0060 0020 0020 003F 0020 0020 009F 001F 0021 003F 0020 013E 001F 0040 005F 0020 003F 0040 007F 0040 001F 0181"
   - id: roof_fan_on_closed_speed_80
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0025 0000 0040 0020 0020 0040 0020 001F 0020 0040 0020 001F 0021 001F 0040 001F 0020 005F 00FF 005F 0021 00DF 0020 003F 00E0 001F 0020 0040 0020 00BE 0021 005F 00C0 001F 003F 0040 0020 009F 0021 007F 00A0 001F 0060 003F 0060 0040 0040 007F 0020 003F 00C0 003F 00A0 001F 0021 001F 0020 003F 0020 0020 009F 001F 0021 003F 0020 013E 0020 0040 0060 001F 0040 003F 0040 005F 0040 0181"
   - id: roof_fan_on_closed_speed_90
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0026 0000 0040 001F 0020 003F 0020 0020 0020 003F 0020 0020 0020 0020 003F 001F 0021 005F 00FF 005F 0020 00E0 0020 003F 00DF 0020 0020 003F 0021 00BF 0020 0060 00C0 001F 003F 0040 0020 00A0 0020 007F 009F 0020 0060 003F 0060 003F 0040 007F 0021 0040 00BF 0040 003F 001F 0020 0040 0020 0020 0020 003F 0020 0020 009E 0020 0020 0040 0020 013E 0020 0040 005F 0020 0040 0040 005F 0020 0060 0181"
   - id: roof_fan_on_closed_speed_100
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0025 0000 003F 001F 0020 0040 0020 001F 0020 0040 0021 001E 0020 0020 0040 001F 0020 005F 00FF 0060 0020 00DE 0021 003F 00DF 0020 001F 0040 0020 00BE 0021 005F 00C0 001F 0040 003F 0021 009F 0020 007F 009F 0020 0060 003F 0061 003F 0040 007F 0021 003F 00BF 0040 0060 0020 003F 0040 0020 003F 0020 0020 009F 001F 0021 003F 0020 013F 0020 003F 0060 0020 003F 0040 003F 001F 0020 0181"
@@ -1171,51 +1281,61 @@ script:
   # On and Roof Fan Open, All Speeds – Air Out mode
   - id: roof_fan_on_open_air_out_speed_10
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0028 0000 0041 001F 0021 003F 0020 001F 0021 003F 0020 001F 0021 001F 0040 001F 0020 005F 0101 005F 0020 00E1 0020 003F 00E1 001F 0021 0040 0020 00BF 0021 0060 00C0 0021 0041 0040 0020 009F 0021 0080 00A0 0021 0060 003F 0060 0041 003F 0080 0020 0020 0021 0040 0020 0020 0040 0040 0040 0020 0020 0021 0080 003F 0040 003F 0060 0021 0020 003F 0020 0140 0020 0040 0060 0020 0040 0040 0020 0021 0020 0080 0020 0181"
   - id: roof_fan_on_open_air_out_speed_20
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0026 0000 0041 001F 0020 0040 0020 001F 0021 003F 0020 001F 0021 001F 0040 001F 0021 0060 00FF 0060 0020 00DF 0021 0040 00E1 0020 0020 003F 0020 00C1 0020 005F 00C0 0020 0040 0040 0020 00A0 0020 007F 00A1 0020 005F 0040 0060 003F 0040 007F 0021 0020 0020 003F 0080 003F 0060 0021 0020 001F 0061 0040 0040 0040 0060 001F 0020 003F 0021 0140 0020 0040 0060 0021 0040 0040 0020 0040 00A1 0181"
   - id: roof_fan_on_open_air_out_speed_30
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0026 0000 0041 001F 0021 003E 0021 001F 0021 003E 0021 001F 0021 001F 0040 001F 0020 005F 0100 005F 0021 00DF 0020 0040 00E0 001F 0020 0040 0020 00BF 0021 005F 00C0 001F 0040 003F 0020 009F 0021 007F 00A1 001F 0060 003F 0061 003F 003F 0080 0020 001F 0020 0040 0080 003F 0040 007F 0060 0040 0040 003F 0060 001F 0021 003F 0020 013E 0021 0040 0060 001F 0040 003F 0021 0020 003F 0020 0061 0181"
   - id: roof_fan_on_open_air_out_speed_40
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0026 0000 0040 001F 0020 0040 0020 0020 0020 003F 0020 0020 0020 001F 0040 001F 0020 005F 0100 005F 0020 00DE 0021 003F 00DF 001F 0020 0040 0020 00BE 0020 0060 00BF 001F 0040 003F 0020 00A0 0020 007F 009F 001F 005F 003F 0060 003F 0040 007F 0021 001F 0020 0040 007F 0040 007F 001F 0021 001F 003F 0040 0020 001F 00A0 001F 0021 003F 0020 013E 001F 0040 005F 001F 0040 003F 0080 0060 0020 0181"
   - id: roof_fan_on_open_air_out_speed_50
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0028 0000 0041 001F 0021 003F 0020 001F 0021 003F 0020 001F 0021 001F 0040 001F 0020 005F 0101 005F 0020 00DF 0020 0040 00E0 001F 0021 003F 0020 00BF 0021 005F 00C0 001F 0040 0040 0020 009F 0020 007F 00A0 0020 0060 003F 0061 003F 0040 0080 001F 0021 0020 0040 007F 003F 0040 0020 0040 003F 0040 003F 0040 003F 0060 0020 0020 0040 0020 013F 0020 0041 0060 0020 003F 0040 0020 0020 0020 0020 003F 0020 0020 0181"
   - id: roof_fan_on_open_air_out_speed_60
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0026 0000 0040 0020 0020 003F 0020 001F 0021 003F 0021 001F 0020 001F 0040 001F 0020 0060 00FF 005F 0020 00DF 0020 003F 00DF 0020 0020 003F 0020 00C0 0020 005F 00BF 0020 003F 003F 0021 009F 0020 0080 009F 001F 0060 003F 0060 0040 003F 007F 0020 0020 0020 0040 0080 003F 005F 0080 003F 003F 0021 001F 009F 0020 001F 0040 0020 013E 0020 003F 0060 0020 003F 003F 0060 0040 001F 0020 0020 0181"
   - id: roof_fan_on_open_air_out_speed_70
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0027 0000 0040 001F 0020 0040 0020 001F 0021 003E 0021 001F 0021 001F 0040 001F 0020 005F 0100 005F 0020 00DE 0020 0040 00DF 001F 0021 003F 0020 00BF 001F 0060 00BF 001F 0040 003F 0021 009F 0020 007F 009E 0020 0060 0040 0060 003F 0040 007F 001F 0020 0020 003F 0080 0040 003F 003F 005F 0020 0020 003F 0020 001F 00A0 001F 0020 0040 0020 013D 0021 003F 0060 001F 003F 0040 003F 0040 0020 001F 0021 0181"
   - id: roof_fan_on_open_air_out_speed_80
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0025 0000 0040 001F 0020 003F 0021 001F 0020 003F 0021 001F 0020 001F 0040 001F 0021 005F 00FF 0060 001F 00DF 0020 003F 00E0 001F 0020 003F 0021 00BF 001F 0060 00BE 0020 003F 0040 0020 009E 0020 0080 009F 0020 005F 0040 005F 003F 0040 007F 0020 0020 0020 003F 007F 0040 009F 001F 0020 0020 0020 003F 0020 0020 009F 0020 0020 0040 001F 013E 0020 003F 005F 0020 003F 0040 00DF 0181"
   - id: roof_fan_on_open_air_out_speed_90
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0028 0000 0042 001F 0020 003F 0021 001F 0020 003F 0021 001F 0020 001F 0040 001F 0021 005F 0100 005F 0021 00E0 0020 003F 00E1 001F 0020 003F 0021 00BF 0020 005F 00C0 0020 0040 003F 0020 009F 0021 007F 00A0 001F 0061 003F 0060 003F 0040 0080 0020 0020 0021 0040 0080 003F 0040 0020 0020 003F 0021 0020 0020 003F 0040 003F 0061 0020 0020 003F 0021 013F 0020 003F 0060 0020 0040 003F 0021 0020 0020 003F 0040 0181"
   - id: roof_fan_on_open_air_out_speed_100
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0026 0000 0041 001F 0021 003E 0021 001F 0021 003F 0020 001F 0021 001F 0040 001F 0020 005F 0101 005F 0020 00DF 0021 003F 00E0 001F 0021 003F 0020 00BF 0021 005F 00C0 001F 0040 003F 0021 009F 0020 007F 00A1 001F 0060 003F 0061 003F 0040 007F 0021 0020 0020 003F 0080 003F 0061 001F 003F 0040 0020 003F 0040 003F 0060 0020 0020 003F 0021 013F 0021 0040 0060 001F 0040 003F 0021 0040 0040 0181"
@@ -1223,51 +1343,61 @@ script:
   # On and Roof Fan Open, All Speeds – Air In mode
   - id: roof_fan_on_open_air_in_speed_10
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0027 0000 0041 001F 0021 0040 0020 001F 0021 0040 0020 0020 0021 0020 0041 0020 0020 005F 0101 005F 0021 00E0 0020 0040 00E0 0020 0020 0040 0020 00C0 0021 0060 00C1 0020 0041 0040 0020 00A1 0020 0080 00A0 0021 0060 0040 0060 0041 0041 0080 0020 0020 0041 0020 0020 0021 0041 0040 0041 0020 0021 0020 0080 0041 0020 0040 0041 0040 0040 0040 001F 0141 0020 0040 0060 0021 0040 0040 0060 0040 0040 0181"
   - id: roof_fan_on_open_air_in_speed_20
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0026 0000 0042 001F 0020 003F 0021 001F 0020 003F 0021 0020 0020 0020 0041 0020 0021 0060 0101 005F 0021 00E0 0020 0040 00E1 0020 0020 0041 0020 00C0 0020 0060 00C1 0020 0041 0040 0021 00A0 0021 0080 00A0 0020 0060 0041 0060 0040 0040 0080 0021 0020 0041 0020 0081 0040 0060 0020 0020 0020 0061 0040 0020 0040 0041 0041 0040 0041 0020 0140 0020 0041 0060 0020 0040 0041 0041 0021 0040 0181"
   - id: roof_fan_on_open_air_in_speed_30
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0024 0000 0041 001F 0021 003F 0021 001F 0021 003E 0021 001F 0021 001F 0040 001F 0020 005F 0101 0060 0020 00DF 0020 0041 00E0 0020 0020 0041 0020 00BF 0020 0061 00C1 001F 0040 003F 0020 00A1 0020 007F 00A1 0020 0060 003F 0061 003F 0040 007F 0020 0021 0040 0020 0081 0040 0040 0080 0060 003F 0021 0040 0040 0040 0040 0040 0020 013F 0021 0040 0060 0020 0041 0041 0081 0181"
   - id: roof_fan_on_open_air_in_speed_40
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0026 0000 0040 001F 0020 0040 0020 001F 0021 003F 0020 001F 0020 0020 0040 001F 0020 0060 00FE 0061 001F 00DE 0020 0040 00DF 001F 0021 003F 0020 00BE 0020 0060 00BE 0020 003F 0040 0021 009F 0020 007F 00A0 001F 005F 003F 0060 003F 0040 007F 0020 001F 0041 001F 007F 0040 0080 001F 0020 0020 003F 003F 0020 0020 009F 0020 0020 003F 0020 013D 0021 003F 005F 0020 0040 003F 005F 0080 0020 0181"
   - id: roof_fan_on_open_air_in_speed_50
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0027 0000 0041 001F 0021 003F 0021 001F 0021 003F 0021 0021 0020 0020 0041 0020 0021 0060 0101 0060 0020 00E0 0021 0040 00E1 0020 0020 0041 0020 00C0 0020 0060 00C1 0020 0041 0040 0020 00A1 0020 0080 00A1 0020 0061 0040 0060 0040 0041 0080 0021 0020 0040 0021 0081 0040 0041 0020 0041 0040 0041 0040 0020 0041 0040 0041 0040 0041 0020 0141 0020 0040 0060 0020 0041 0040 0061 0020 0020 0020 0021 0181"
   - id: roof_fan_on_open_air_in_speed_60
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0026 0000 0042 001F 0021 003E 0021 001F 0021 0040 0020 001F 0021 001F 0040 0020 0020 005F 0101 005F 0021 00E0 0020 003F 00E1 0020 0021 0041 0020 00C0 0021 0060 00C1 0020 0041 0040 0020 009F 0021 0080 00A1 0020 0060 003F 0060 0041 0040 0081 0020 0020 0041 0020 007F 003F 0061 0080 0040 003F 0021 0040 0040 0040 0040 0040 0020 013F 0020 0041 0060 0020 0040 003F 0040 0020 0020 0041 0020 0181"
   - id: roof_fan_on_open_air_in_speed_70
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0027 0000 0040 001F 0021 003E 0021 001F 0021 003F 0020 001F 0021 001F 0040 001F 0020 005F 00FF 005F 0021 00DE 0020 0040 00DF 001F 0021 003F 0020 00BE 0020 0060 00BF 001F 0040 003F 0020 00A0 0020 007E 00A0 001F 0060 003F 0060 003F 0040 007F 0020 001F 0040 0020 0080 003F 003F 0040 005F 001F 0020 0040 0020 001F 009F 0020 0020 003F 0021 013E 0020 003F 0060 001F 0040 003F 0040 0020 003F 001F 0021 0181"
   - id: roof_fan_on_open_air_in_speed_80
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0027 0000 0041 001F 0021 003F 0021 001F 0021 0040 0020 001F 0021 0020 0041 0020 0020 0060 0101 0061 0020 00E0 0021 0040 00E0 0020 0021 0041 0020 00C0 0020 0061 00C1 0020 0041 0040 0020 00A0 0020 0080 00A1 0020 0060 0040 0060 0041 0040 0080 0020 0020 0041 0020 0081 0040 00A0 0021 0020 0020 0020 0041 001F 0041 0041 0040 0041 0040 0020 0141 0020 0041 005F 0021 0041 0040 0040 0041 0020 0041 001F 0181"
   - id: roof_fan_on_open_air_in_speed_90
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0027 0000 0040 001F 0021 003E 0021 001F 0021 003E 0022 001F 0020 001F 0040 001F 0021 005F 00FF 005F 0020 00DE 0021 003F 00DF 001F 0020 003F 0021 00BE 0020 005F 00BF 001F 0040 003F 0021 009F 0020 007E 00A0 001F 0060 003F 005F 003F 0040 007E 0021 001F 0040 001F 0080 003F 0040 001F 0021 003F 0020 001F 0020 003F 0021 001F 00A0 001F 0020 003F 0021 013E 0020 003F 0060 001F 003F 0040 0040 005F 0040 0181"
   - id: roof_fan_on_open_air_in_speed_100
     then:
+      - lambda: 'id(ir_next_is_fan) = true;'
       - remote_transmitter.transmit_pronto:
           transmitter_id: transmitter_main
           data: "0000 006D 0025 0000 0040 001F 0020 0040 0020 0020 0020 003F 0020 001F 0021 001F 0040 001F 0020 005F 00FF 005F 0021 00DE 0020 0040 00DF 0020 0020 003F 0020 00BF 0020 005F 00BF 001F 0040 003F 0020 009F 0021 0080 009F 001F 0060 003F 005F 0040 003F 0080 0020 001F 0040 0020 007F 0040 0060 001F 0040 003F 0021 003F 0020 0020 009E 0020 0020 0040 0020 013E 0020 0040 005F 001F 0040 003F 009F 0181"
@@ -1400,6 +1530,13 @@ button:
     on_press:
       - script.execute: air_conditioner_sleep
       - script.execute: { id: ac_apply_preset, temp: 28, fan: 1 }
+
+  # ── Roof fan: re-send "off, lid closed" even when the entities already say so ──
+  - platform: template
+    name: "Roof Fan Force Off"
+    icon: mdi:fan-off
+    on_press:
+      - script.execute: roof_fan_force_off
 
   # ── AC Climate Controller buttons ──
   - platform: template

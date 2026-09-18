@@ -218,6 +218,14 @@ night_climate_night_target:
   step: 0.5
   unit_of_measurement: "°C"
   icon: mdi:thermometer-low
+# Hold mode: the temperature to keep right now, no schedule (seeded 22).
+night_climate_hold_target:
+  name: "Night Climate Hold Target"
+  min: 10
+  max: 30
+  step: 0.5
+  unit_of_measurement: "°C"
+  icon: mdi:thermostat
 night_climate_wake_target:
   name: "Night Climate Wake Target"
   min: 10
@@ -225,6 +233,15 @@ night_climate_wake_target:
   step: 0.5
   unit_of_measurement: "°C"
   icon: mdi:thermometer
+# Program / Hold: the A/C only joins above this room temperature (seeded 24),
+# so a low night target never becomes an A/C goal. Once on it cools to the target.
+night_climate_cool_above:
+  name: "Night Climate A/C Above"
+  min: 18
+  max: 35
+  step: 0.5
+  unit_of_measurement: "°C"
+  icon: mdi:snowflake-thermometer
 night_climate_warmup_minutes:
   name: "Night Climate Warm-up Minutes"
   min: 0

@@ -59,13 +59,17 @@
           {{ ns.s if ns.s | count > 0 else ['living (fallback)'] }}
 
     # ─── The target the program is holding right now ───
-    # Night target until the warm-up starts, the wake target from then on.
-    # The wake time is "next": before 07:30 today's, after it tomorrow's.
+    # Hold mode: the hold target. Otherwise the night target until the warm-up
+    # starts, the wake target from then on. The wake time is "next": before
+    # 07:30 today's, after it tomorrow's.
     - name: "Night Climate Target"
       unique_id: night_climate_target
       unit_of_measurement: "°C"
       icon: mdi:target
       state: >
+        {% if is_state('input_select.night_climate_mode', 'Hold') %}
+          {{ states('input_number.night_climate_hold_target') | float(22) }}
+        {% else %}
         {% set wake = states('input_datetime.night_climate_wake_time') %}
         {% set wake = wake if wake not in ['unknown', 'unavailable'] else '07:30:00' %}
         {% set warm = states('input_number.night_climate_warmup_minutes') | int(45) %}
@@ -76,14 +80,17 @@
         {% else %}
           {{ states('input_number.night_climate_night_target') | float(15) }}
         {% endif %}
+        {% endif %}
       attributes:
         phase: >
+          {% if is_state('input_select.night_climate_mode', 'Hold') %}hold{% else %}
           {% set wake = states('input_datetime.night_climate_wake_time') %}
           {% set wake = wake if wake not in ['unknown', 'unavailable'] else '07:30:00' %}
           {% set warm = states('input_number.night_climate_warmup_minutes') | int(45) %}
           {% set t = today_at(wake) %}
           {% set t = t if t > now() else t + timedelta(days=1) %}
           {{ 'warmup' if now() >= t - timedelta(minutes=warm) else 'night' }}
+          {% endif %}
         next_wake: >
           {% set wake = states('input_datetime.night_climate_wake_time') %}
           {% set wake = wake if wake not in ['unknown', 'unavailable'] else '07:30:00' %}
@@ -104,20 +111,21 @@
           {% set room = states('sensor.living_space_temperature') %}
           {% set wake = state_attr('sensor.night_climate_target', 'next_wake') %}
           {% set parts = [mode] %}
-          {% if mode in ['Program', 'Heater'] %}
+          {% if mode in ['Program', 'Heater', 'Hold'] %}
             {% set parts = parts + [('warming to ' if ph == 'warmup' else 'holding ') ~ tgt ~ ' °C'] %}
           {% endif %}
           {% if room not in ['unknown', 'unavailable'] %}{% set parts = parts + ['room ' ~ room ~ ' °C'] %}{% endif %}
           {% set on = [] %}
           {% if is_state('climate.a32_pro_van_hydronic_heating_pid', 'heat') %}{% set on = on + ['heater'] %}{% endif %}
           {% if is_state('climate.ag_pro_24v_air_conditioner', 'cool') %}{% set on = on + ['A/C'] %}{% endif %}
-          {% if is_state('fan.ag_pro_roof_fan', 'on') %}{% set on = on + ['fan ' ~ state_attr('fan.ag_pro_roof_fan', 'percentage') ~ '%'] %}{% endif %}
+          {% if is_state('fan.ag_pro_roof_fan', 'on') %}{% set on = on + ['fan ' ~ state_attr('fan.ag_pro_roof_fan', 'percentage') ~ '%' ~ (' by room sensor' if is_state('input_boolean.night_climate_fan_by_room', 'on') else '')] %}{% endif %}
           {% if is_state('switch.ag_pro_roof_fan_thermostat', 'on') %}{% set on = on + ['fan auto above ' ~ states('number.ag_pro_roof_fan_thermostat_set_point') ~ ' °F'] %}{% endif %}
           {% set parts = parts + [(on | join(' + ')) if on else 'nothing running'] %}
-          {% if mode in ['Program', 'A/C all night'] and states('sensor.shore_power_charger_power_24v') | float(0) <= 50 %}
+          {% if (mode == 'A/C all night' or (mode in ['Program', 'Hold'] and is_state('input_boolean.night_climate_use_ac', 'on')))
+                and not is_state('binary_sensor.shore_power_present', 'on') %}
             {% set parts = parts + ['A/C needs shore power'] %}
           {% endif %}
-          {% if mode in ['Program', 'Heater'] %}
+          {% if mode in ['Program', 'Hold', 'Heater'] %}
             {% if is_state('switch.a32_pro_switch32_hydronic_heater_power_supply', 'off') %}
               {% set parts = parts + ['heater supply is off'] %}
             {% elif is_state('input_boolean.heater_low_fuel_lockout', 'on') %}
@@ -126,6 +134,35 @@
               {% set parts = parts + ['Shop Mode blocks the heater'] %}
             {% endif %}
           {% endif %}
-          {% if wake %}{% set parts = parts + ['until ' ~ as_datetime(wake).strftime('%H:%M')] %}{% endif %}
+          {% if wake and mode != 'Hold' %}{% set parts = parts + ['until ' ~ as_datetime(wake).strftime('%H:%M')] %}{% endif %}
           {{ parts | join(' · ') }}
         {% endif %}
+
+- binary_sensor:
+    # ─── The roof fan motor is turning ───
+    # Under its own thermostat the fan entity stays off while the motor cycles,
+    # so the draw is the only sign. The controller uses "not running for 10 min"
+    # to notice that thermostat sitting idle in a warm room.
+    - name: "Roof Fan Running"
+      unique_id: roof_fan_running
+      device_class: running
+      delay_on: "00:00:05"
+      delay_off: "00:00:20"
+      state: "{{ states('sensor.roof_fan_power_12v') | float(0) > 3.5 }}"
+
+    # ─── Shore power ───
+    # There is no sensor for the pedestal itself. The charger's draw is the only
+    # sign, and it reads 0 W whenever the battery is full: on 2026-09-18 it only
+    # topped up about every 2.5 h, and a "> 50 W right now" test let the A/C
+    # start at exactly those moments. Present = the charger drew power within
+    # the last 3 h (input_datetime.shore_power_last_seen, automation
+    # shore_power_seen, which also clears it after an hour of A/C with no charger).
+    - name: "Shore Power Present"
+      unique_id: shore_power_present
+      device_class: plug
+      state: >
+        {% set seen = state_attr('input_datetime.shore_power_last_seen', 'timestamp') %}
+        {{ states('sensor.shore_power_charger_power_24v') | float(0) > 50
+           or (seen is not none and as_timestamp(now()) - seen | float(0) < 10800) }}
+      attributes:
+        last_seen: "{{ states('input_datetime.shore_power_last_seen') }}"

@@ -7,3 +7,10 @@ night_climate_wake_time:
   has_date: false
   has_time: true
   icon: mdi:alarm
+# When the shore charger last drew power (automation shore_power_seen);
+# binary_sensor.shore_power_present is built from it.
+shore_power_last_seen:
+  name: "Shore Power Last Seen"
+  has_date: true
+  has_time: true
+  icon: mdi:power-plug
