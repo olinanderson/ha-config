@@ -199,6 +199,65 @@
         {% endif %}
       availability: "true"
 
+# ─── Stable Water Tank Levels (fresh + grey) ─────────────────────────────────
+# The tank senders publish a 10-second moving average every second, which lets
+# through both slosh (fresh swung 15–25 points on every drive of 2026-09-24,
+# 2–4 parked) and spikes (grey jumped from ~10 % to 30–50 % even parked). Like
+# Stable Fuel Level: latch the 5-min median (integrations/sensor.yaml), but
+# only once the van has been parked 5 min, so the whole window is parked
+# samples, and hold it while driving. Whole percent with a 1-point deadband, so
+# the number no longer flickers. A fill or a grey dump shows up in ~3 min.
+- trigger:
+    - trigger: state
+      entity_id:
+        - sensor.fresh_water_level_5_min_median
+        - sensor.grey_water_level_5_min_median
+    - trigger: state
+      entity_id: binary_sensor.vehicle_is_moving
+      to: "off"
+      for: "00:05:00"
+    - trigger: time_pattern
+      minutes: "/5"
+  sensor:
+    - name: Stable Fresh Water Level
+      unique_id: stable_fresh_water_level
+      unit_of_measurement: "%"
+      state_class: measurement
+      icon: mdi:water
+      state: >
+        {% set med = states('sensor.fresh_water_level_5_min_median') | float(none) %}
+        {% set mv = states.binary_sensor.vehicle_is_moving %}
+        {% set parked = mv is none or (mv.state != 'on'
+             and (now() - mv.last_changed).total_seconds() >= 300) %}
+        {% set last = this.state | float(none) %}
+        {% if med is none %}
+          {{ last }}
+        {% elif last is none or (parked and (med - last) | abs >= 1) %}
+          {{ med | round(0) }}
+        {% else %}
+          {{ last }}
+        {% endif %}
+      availability: "true"
+    - name: Stable Grey Water Level
+      unique_id: stable_grey_water_level
+      unit_of_measurement: "%"
+      state_class: measurement
+      icon: mdi:water-opacity
+      state: >
+        {% set med = states('sensor.grey_water_level_5_min_median') | float(none) %}
+        {% set mv = states.binary_sensor.vehicle_is_moving %}
+        {% set parked = mv is none or (mv.state != 'on'
+             and (now() - mv.last_changed).total_seconds() >= 300) %}
+        {% set last = this.state | float(none) %}
+        {% if med is none %}
+          {{ last }}
+        {% elif last is none or (parked and (med - last) | abs >= 1) %}
+          {{ med | round(0) }}
+        {% else %}
+          {{ last }}
+        {% endif %}
+      availability: "true"
+
 # ─── Vehicle Distance Odometer (triggered, km) ───────────────────────────────
 # A lifetime trip odometer built by integrating OBD vehicle speed (trapezoidal)
 # on each speed update — accurate, GPS-independent, and updates ~1 Hz while

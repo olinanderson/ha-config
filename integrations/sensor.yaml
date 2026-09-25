@@ -12,6 +12,31 @@
     minutes: 5
   sampling_size: 300
 
+# ─── Water tank levels • 5-minute rolling median ───
+# Feed sensor.stable_fresh_water_level / stable_grey_water_level
+# (template/triggered.yaml). A median, not a mean: the grey sender spikes from
+# ~10 % to 30–50 % for seconds at a time even parked (2026-09-24), and a mean
+# would carry those spikes. The senders publish about once a second.
+- platform: statistics
+  name: "Fresh Water Level 5 min median"
+  unique_id: fresh_water_level_5_min_median
+  entity_id: sensor.a32_pro_fresh_water_tank_level
+  state_characteristic: median
+  max_age:
+    minutes: 5
+  sampling_size: 400
+  precision: 1
+
+- platform: statistics
+  name: "Grey Water Level 5 min median"
+  unique_id: grey_water_level_5_min_median
+  entity_id: sensor.a32_pro_grey_water_tank_level
+  state_characteristic: median
+  max_age:
+    minutes: 5
+  sampling_size: 400
+  precision: 1
+
 # ─── Battery net power • 5-minute rolling mean ───
 # Smooths the noisy BMS net power so the "time to full / empty" estimate doesn't
 # jump on momentary load spikes. + = charging, − = discharging. Used by the

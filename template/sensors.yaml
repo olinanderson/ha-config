@@ -96,9 +96,13 @@
     # Standard 20 lb BBQ propane tank with 2:1 ellipsoidal heads
     # Mopeka Pro Check F317 ultrasonic sensor on tank bottom
     # Sensor reports liquid height in mm (HA integration applies propane medium coefficient)
+    # Unavailable while the Mopeka is silent (dead CR2032, out of range): its
+    # float(0) used to turn "no reading" into 0 %, which looked like an empty
+    # tank for two months after the battery died on 2026-07-23.
     - name: Propane Tank Percentage
       unique_id: propane_tank_percentage
       unit_of_measurement: "%"
+      availability: "{{ has_value('sensor.pro_check_f317_tank_level') }}"
       state: >
         {% set R      = 149.2 %}
         {% set Ec     = R / 2 %}
@@ -122,14 +126,17 @@
 
     - name: "Propane – Raw Distance"
       unit_of_measurement: mm
+      availability: "{{ has_value('sensor.pro_check_f317_tank_level') }}"
       state: "{{ states('sensor.pro_check_f317_tank_level') | float(0) }}"
 
     - name: "Propane – Liquid Depth"
       unit_of_measurement: mm
+      availability: "{{ has_value('sensor.pro_check_f317_tank_level') }}"
       state: "{{ states('sensor.pro_check_f317_tank_level') | float(0) }}"
 
     - name: "Propane – Liquid Volume"
       unit_of_measurement: L
+      availability: "{{ has_value('sensor.pro_check_f317_tank_level') }}"
       state: >
         {% set pct = states('sensor.propane_tank_percentage') | float(0) %}
         {% set R = 149.2 %}

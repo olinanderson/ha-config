@@ -1230,3 +1230,37 @@ night_climate_actuators_off:
   sequence:
     - action: script.night_climate_fan_off
     - action: script.night_climate_ac_off
+
+# The Off button on the Van page's Living Space card: whatever heats or cools
+# the living space off, however it was started. Choosing Off on the mode alone
+# does nothing once the mode already reads Off (no state change, so
+# night_climate_mode_off never runs) and never reaches an A/C or heater started
+# from its own card: on 2026-09-21 five taps on Off left a hand-started A/C
+# running. Unlike the program's own end at the wake time, this turns the heater
+# off too, because a person asked for everything off. The fan and A/C scripts
+# only send when their appliance is on, so a second tap is silent.
+living_space_off:
+  alias: "Living Space – everything off"
+  mode: single
+  max_exceeded: silent
+  sequence:
+    - if:
+        - "{{ not is_state('input_select.night_climate_mode', 'Off') }}"
+      then:
+        - action: input_select.select_option
+          target:
+            entity_id: input_select.night_climate_mode
+          data:
+            option: "Off"
+    # No IR here, so it goes first; the fan and A/C frames take a few seconds.
+    - if:
+        - "{{ is_state('climate.a32_pro_van_hydronic_heating_pid', 'heat') }}"
+      then:
+        - action: climate.set_hvac_mode
+          target:
+            entity_id: climate.a32_pro_van_hydronic_heating_pid
+          data:
+            hvac_mode: "off"
+    # night_climate_mode_off runs the same script when the mode changes above;
+    # it is queued, and the second pass finds everything off and sends nothing.
+    - action: script.night_climate_actuators_off

@@ -34,6 +34,13 @@ simply stays at the wake target after the wake time. (History: that entry was pa
 2026-09-17 and, with Sleep Mode never switched on, nothing heated the van, 16.9 °C at 08:00. Do not switch
 off whatever heats the van in the morning.)
 
+**Everything off by hand:** the Off button on the Van page's Living Space card runs
+`script.living_space_off`, not the mode. It sets the mode to Off if it is not already, turns the heater
+off and runs `script.night_climate_actuators_off`, so it also stops an A/C, fan or heater started from its
+own card. Selecting Off on a mode that already reads Off changes no state, so `night_climate_mode_off`
+never runs. Only this button turns the heater off. The wake time and Sleep Mode ending still leave it
+on.
+
 **One-way IR and what backs it up** (from the first night, 2026-09-18, when the user walked in to the
 heater, the A/C at 26 °C and the roof fan all running):
 
