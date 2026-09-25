@@ -28,6 +28,10 @@ import {
   Sun,
 } from 'lucide-react';
 
+const ALT_CURRENT_ID = 'sensor.a32_pro_s5140_channel_8_current_24v_alternator_charger';
+// Below this the shunt is reading noise, not charge.
+const ALT_MIN_AMPS = 0.5;
+
 function EngineCard() {
   const { value: speed } = useEntityNumeric('sensor.192_168_10_90_0d_vehiclespeed');
   const { value: rpm } = useEntityNumeric('sensor.192_168_10_90_0c_enginerpm');
@@ -388,6 +392,9 @@ function MainHeroCard() {
   const aggression = useEntity('sensor.hill_aggression');
   const { value: rpm } = useEntityNumeric('sensor.192_168_10_90_0c_enginerpm');
   const { value: chargerV } = useEntityNumeric('sensor.a32_pro_orion_input_voltage');
+  // What the alternator chargers put out on the 24 V side (A32 Pro shunt, channel 8).
+  // The big Amps number is the pack's net: this minus everything the van draws.
+  const { value: altAmps } = useEntityNumeric(ALT_CURRENT_ID);
   // Last-good cache (template sensor) so ambient holds its reading when the van
   // is off / WiCAN stops publishing, instead of blanking after the 30s expiry.
   const { value: ambient } = useEntityNumeric('sensor.ambient_air_temp_last_good');
@@ -484,18 +491,34 @@ function MainHeroCard() {
               </div>
               <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50 max-sm:py-1" onClick={() => open('sensor.olins_van_bms_current', 'Battery Current', 'A')}>
                 <p className={cn('text-3xl font-bold tabular-nums', battColor)}>{fmt(battCurrent, 1)}</p>
-                <p className="text-[10px] text-muted-foreground">Amps</p>
-                <p
-                  className="text-[9px] tabular-nums text-muted-foreground/70 transition-colors hover:text-muted-foreground"
-                  title="Watts into (+) or out of (−) the pack — tap for history"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    open('sensor.olins_van_bms_power', 'Battery Power', 'W');
-                  }}
-                >
-                  {battWattsRounded != null
-                    ? `${battWattsRounded > 0 ? '+' : ''}${battWattsRounded === 0 ? 0 : battWattsRounded} W`
-                    : '—'}
+                <p className="text-[10px] text-muted-foreground">Net amps</p>
+                <p className="text-[9px] tabular-nums text-muted-foreground/70">
+                  <span
+                    className="transition-colors hover:text-muted-foreground"
+                    title="Watts into (+) or out of (−) the pack — tap for history"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      open('sensor.olins_van_bms_power', 'Battery Power', 'W');
+                    }}
+                  >
+                    {battWattsRounded != null
+                      ? `${battWattsRounded > 0 ? '+' : ''}${battWattsRounded === 0 ? 0 : battWattsRounded} W`
+                      : '—'}
+                  </span>
+                  {/* Only while the alternator chargers put something out; same
+                      line on a phone so the driving screen keeps its height */}
+                  {altAmps != null && altAmps >= ALT_MIN_AMPS && (<>
+                    <span className="sm:hidden"> · </span>
+                    <span
+                      className="font-medium text-sky-400/90 transition-colors hover:text-sky-300 sm:block"
+                      title="Alternator chargers' output current (24 V side) — tap for history"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        open(ALT_CURRENT_ID, 'Alternator Charger Current', 'A');
+                      }}
+                    >
+                      alt {altAmps.toFixed(1)} A
+                    </span></>)}
                 </p>
               </div>
               <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50 max-sm:py-1" onClick={() => open('sensor.olins_van_bms_temperature', 'Battery Temp', '°C')}>

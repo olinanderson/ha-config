@@ -186,7 +186,9 @@ hero (Power + Driving), Current Trip, Living Space, all visible without scrollin
 (engine running, fuel averages loaded, Auto with three running pills) ends at 988 (2026-09-24). Below `sm`
 the fit comes from: `PageContainer compactOnPhone` (no page title, `space-y-3` between cards), the
 single-line badges, the hero card's tighter padding (`max-sm:py-1` tiles), the Battery tile's drive rate
-on the same line as the Wh (wider screens keep its own "%/h driving" line), the trip stats as one row of
+on the same line as the Wh (wider screens keep its own "%/h driving" line), the "Net amps" tile's
+alternator charger output ("alt 19.8 A", `sensor.a32_pro_s5140_channel_8_current_24v_alternator_charger`,
+shown from 0.5 A, tap for history) on the same line as the pack watts, the trip stats as one row of
 four with the range, the city/highway explainer hidden (it is also on the trip history card), `pt-4`
 headers and `pt-2` card content on the trip and living space cards, and the living space status kept to
 one truncated line. The band tile's NOW chip wraps under HIGHWAY there rather than being clipped. Alert banners (DTC
