@@ -44,10 +44,13 @@ function num(s: string | undefined): number {
   return Number.isFinite(n) ? n : NaN;
 }
 
-function Stat({ icon, value, label }: { icon: ReactNode; value: string; label: string }) {
+function Stat({
+  icon, value, label, valueClassName,
+}: { icon: ReactNode; value: string; label: string; valueClassName?: string }) {
+  // Four of these share a row, so a phone gets the smaller number.
   return (
-    <div className="rounded-lg bg-muted/40 p-2">
-      <p className="text-2xl font-bold tabular-nums leading-tight">{value}</p>
+    <div className="rounded-lg bg-muted/40 px-1 py-1.5 sm:p-2">
+      <p className={cn('text-xl font-bold tabular-nums leading-tight sm:text-2xl', valueClassName)}>{value}</p>
       <p className="mt-0.5 flex items-center justify-center gap-1 text-[10px] text-muted-foreground">
         {icon}
         {label}
@@ -193,7 +196,9 @@ function BandTile({
     <div className={cn('relative flex flex-col overflow-hidden rounded-xl p-2.5 pt-3', t.bg, active && t.ring)}>
       {/* Colour stripe — makes city vs highway unmistakable at a glance. */}
       <div className={cn('absolute inset-x-0 top-0 h-1', t.bar)} />
-      <div className="flex items-center justify-between">
+      {/* On a phone HIGHWAY and the NOW chip are wider than the tile, so the
+          chip wraps under the label instead of being clipped by the edge. */}
+      <div className="flex flex-wrap items-center justify-between gap-x-1 gap-y-1">
         <span className={cn('flex items-center gap-1 text-[11px] font-bold uppercase tracking-wide', t.text)}>
           {icon}
           {label}
@@ -425,7 +430,7 @@ export function CurrentTripCard() {
 
   return (
     <Card>
-      <CardHeader className="pb-2">
+      <CardHeader className="pb-2 max-sm:pt-4">
         <CardTitle className="flex items-center gap-2 text-base">
           <Route className="h-4 w-4" />
           {title}
@@ -456,7 +461,7 @@ export function CurrentTripCard() {
           </div>
         </CardTitle>
       </CardHeader>
-      <CardContent>
+      <CardContent className="pt-2 sm:pt-4">
         {waiting ? (
           <p className="py-2 text-xs text-muted-foreground">
             {isCurrent ? 'Trip starting — waiting for data…' : 'No trip data yet'}
@@ -510,7 +515,9 @@ export function CurrentTripCard() {
                 />
               )}
             </div>
-            <div className="mt-2 grid grid-cols-3 gap-2 text-center">
+            {/* Distance, time, fuel and range in one row: on a phone this card
+                shares the screen with the van and the living space. */}
+            <div className={cn('mt-2 grid gap-2 text-center', range != null ? 'grid-cols-4' : 'grid-cols-3')}>
               <Stat
                 icon={<MapPin className="h-3 w-3" />}
                 value={distance != null ? distance.toFixed(1) : '—'}
@@ -522,23 +529,18 @@ export function CurrentTripCard() {
                 value={liters != null ? liters.toFixed(1) : '—'}
                 label="liters"
               />
+              {range != null && (
+                <Stat
+                  icon={<Gauge className="h-3 w-3" />}
+                  value={`≈${Math.round(range / 5) * 5}`}
+                  label="km to empty"
+                  valueClassName={range < 50 ? 'text-red-500' : range < 150 ? 'text-amber-400' : undefined}
+                />
+              )}
             </div>
-            {range != null && (
-              <div className="mt-2 flex items-center justify-center gap-1.5 rounded-lg bg-muted/30 py-1.5">
-                <Gauge className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm text-muted-foreground">≈</span>
-                <span
-                  className={cn(
-                    'text-xl font-bold tabular-nums',
-                    range < 50 ? 'text-red-500' : range < 150 ? 'text-amber-400' : 'text-foreground',
-                  )}
-                >
-                  {Math.round(range / 5) * 5}
-                </span>
-                <span className="text-sm text-muted-foreground">km to empty</span>
-              </div>
-            )}
-            {showSplit && <SplitInfo className="mt-2 text-center" />}
+            {/* The explainer also sits on the trip history card further down,
+                so a phone can spare it here. */}
+            {showSplit && <SplitInfo className="mt-2 text-center max-sm:hidden" />}
             <div className="mt-2 flex flex-wrap items-center justify-center gap-x-2 text-[11px] tabular-nums text-muted-foreground">
               {avgSpeed != null && <span>{avgSpeed.toFixed(0)} km/h avg</span>}
               {kmPerL != null && (

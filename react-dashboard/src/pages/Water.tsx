@@ -7,7 +7,8 @@ import { Switch } from '@/components/ui/switch';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useToggle, useService } from '@/hooks/useService';
 import { fmt, cn } from '@/lib/utils';
-import { Droplets, Waves, ShowerHead, Flame, Trash2, CircleDot, Thermometer } from 'lucide-react';
+import { Droplets, Waves, ShowerHead, Flame, Trash2, CircleDot, Thermometer, BatteryWarning } from 'lucide-react';
+import { usePropane, propaneProblemText } from '@/hooks/usePropane';
 
 const valves = [
   { entityId: 'switch.a32_pro_switch01_water_system_valve_1', name: 'Valve 1' },
@@ -130,7 +131,8 @@ function WaterControls() {
 }
 
 function PropaneCard() {
-  const { value: pct } = useEntityNumeric('sensor.propane_tank_percentage');
+  const { value: pct, problem, battery } = usePropane();
+  const dead = problem === 'dead';
   const { value: volume } = useEntityNumeric('sensor.propane_liquid_volume');
   const { value: depth } = useEntityNumeric('sensor.propane_liquid_depth');
   const { value: distance } = useEntityNumeric('sensor.propane_raw_distance');
@@ -147,23 +149,39 @@ function PropaneCard() {
         <CardTitle className="flex items-center gap-2 text-base">
           <Flame className="h-4 w-4" />
           Propane
-          <span
-            className={cn(
-              'ml-auto text-2xl font-bold tabular-nums',
-              pctNum < 15 ? 'text-red-500' : pctNum < 30 ? 'text-orange-500' : 'text-green-500',
-            )}
-          >
-            {fmt(pct, 0)}%
-          </span>
+          {dead ? (
+            <span className="ml-auto flex items-center gap-1.5 text-base font-semibold text-orange-400">
+              <BatteryWarning className="h-4 w-4" />
+              Battery dead
+            </span>
+          ) : (
+            <span
+              className={cn(
+                'ml-auto text-2xl font-bold tabular-nums',
+                pctNum < 15 ? 'text-red-500' : pctNum < 30 ? 'text-orange-500' : 'text-green-500',
+              )}
+            >
+              {pct == null ? '—' : `${fmt(pct, 0)}%`}
+            </span>
+          )}
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
-        <div className="h-3 rounded-full bg-muted overflow-hidden">
-          <div
-            className={cn('h-full rounded-full transition-all duration-500', barColor)}
-            style={{ width: `${Math.min(100, Math.max(0, pctNum))}%` }}
-          />
-        </div>
+        {/* A silent sensor has no level, so no bar that reads as an empty tank */}
+        {!dead && (
+          <div className="h-3 rounded-full bg-muted overflow-hidden">
+            <div
+              className={cn('h-full rounded-full transition-all duration-500', barColor)}
+              style={{ width: `${Math.min(100, Math.max(0, pctNum))}%` }}
+            />
+          </div>
+        )}
+        {problem && (
+          <p className="flex items-center gap-1.5 text-xs text-orange-400">
+            <BatteryWarning className="h-3.5 w-3.5 shrink-0" />
+            {propaneProblemText(problem, battery)}
+          </p>
+        )}
         <div className="grid gap-1">
           <SparklineStat entityId="sensor.propane_liquid_volume" label="Volume" value={fmt(volume, 1)} unit="L" color="#22c55e" />
           <SparklineStat entityId="sensor.propane_liquid_depth" label="Liquid Depth" value={fmt(depth, 0)} unit="mm" color="#3b82f6" />
@@ -283,12 +301,12 @@ export default function Water() {
         <div className="space-y-4">
           <TankLevel
             name="Fresh Water"
-            entityId="sensor.a32_pro_fresh_water_tank_level"
+            tank="fresh"
             icon={<Droplets className="h-4 w-4 text-blue-500" />}
           />
           <TankLevel
             name="Grey Water"
-            entityId="sensor.a32_pro_grey_water_tank_level"
+            tank="grey"
             invertWarning
             icon={<Trash2 className="h-4 w-4 text-orange-500" />}
           />

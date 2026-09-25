@@ -406,8 +406,10 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 ### Water System
 | Entity | Description |
 |---|---|
-| `sensor.a32_pro_fresh_water_tank_level` | Fresh water (%) |
-| `sensor.a32_pro_grey_water_tank_level` | Grey water (%) |
+| `sensor.a32_pro_fresh_water_tank_level` | Fresh water (%), raw: swings 15–25 points driving |
+| `sensor.stable_fresh_water_level` | Fresh water (%), stable: 5-min median, moves only after 5 min parked, 1-point steps (dashboard uses this) |
+| `sensor.a32_pro_grey_water_tank_level` | Grey water (%), raw: spikes 20–40 points even parked |
+| `sensor.stable_grey_water_level` | Grey water (%), stable, same as fresh (dashboard uses this) |
 | `switch.a32_pro_water_system_master_switch` | Water master on/off |
 | `switch.a32_pro_water_system_state_main` | Water mode: main |
 | `switch.a32_pro_water_system_state_recirculating_shower` | Water mode: recirc shower |
@@ -662,7 +664,7 @@ integration for backward compatibility). The old `ha-wican` HACS integration has
 | Entity | Description |
 |---|---|
 | `sensor.pro_check_f317_tank_level` | Raw ultrasonic distance (mm) |
-| `sensor.propane_tank_percentage` | Template: calculated % (hemisphere+cylinder, 80% fill) |
+| `sensor.propane_tank_percentage` | Template: calculated % (hemisphere+cylinder, 80% fill) — unavailable while the Mopeka sensor is (dead coin cell 2026-07-23) |
 | `sensor.propane_raw_distance` | Template: raw mm |
 | `sensor.propane_liquid_depth` | Template: liquid depth mm |
 | `sensor.propane_liquid_volume` | Template: liquid volume (L) |
@@ -1331,7 +1333,7 @@ react-dashboard/
       Power.tsx            # Battery, solar, power breakdown
       Climate.tsx          # Thermostat, heating controls, fan, temperatures
       Water.tsx            # Tank levels, propane, water controls
-      Van.tsx              # Fuel, tire pressure, OBD data, GPS
+      Van.tsx              # Fuel, tire pressure, OBD data, GPS, living space climate
       Cameras.tsx          # 4-camera MSE grid (always mounted, see note below)
       Schedule.tsx         # Scheduler-component front end. Heater preset = thermostat to N °C / off at a time; Night = the Night Climate program with its targets; Other = any entity
       System.tsx           # Connectivity, device status, system info
@@ -1340,10 +1342,12 @@ react-dashboard/
       SolarCard.tsx        # PV power, MPPT details, daily yield
       WeatherCard.tsx      # Current conditions + 7-day forecast (WS subscription)
       TemperatureCard.tsx  # BME280 readings (4 zones)
-      TankLevel.tsx        # Reusable tank bar (fresh/grey water)
+      TankLevel.tsx        # Reusable tank bar (tank="fresh"/"grey" uses hooks/useTankLevel.ts: stable level, raw fallback)
       HeaterCard.tsx       # Hydronic heater: thermostat, blower Auto/Manual, one Hot Water / Hydronic Heater switch, status
       FanControl.tsx       # Roof fan: Off / Manual / Auto, speed or set point (sent 1.2 s after the last change), direction, lid; Off again re-sends off
       TonightCard.tsx      # Night Climate: mode, targets, wake time, what the Program may use, "A/C above", fan speed/direction
+      LivingSpaceCard.tsx  # Van page, under the trip card: living space temp + Off / Auto (Hold) / Fan with captions, Auto target, one-line derived status (same input_select as TonightCard)
+      VanBadges.tsx        # Van page top row: propane, fresh, grey, lights
       PowerBreakdown.tsx   # Per-circuit power consumption
       ToggleButton.tsx     # Animated toggle with glow/pulse when active
       PresenceBar.tsx      # Occupancy indicator
@@ -1354,7 +1358,7 @@ react-dashboard/
       StatValue.tsx        # Labeled stat with optional sparkline
       StatusDot.tsx        # Colored status indicator
       layout/
-        PageContainer.tsx  # Page wrapper with consistent padding
+        PageContainer.tsx  # Page wrapper with consistent padding; compactOnPhone = Van page's one-screen phone layout
       ui/                  # shadcn/ui primitives (card, button, etc.)
 ```
 

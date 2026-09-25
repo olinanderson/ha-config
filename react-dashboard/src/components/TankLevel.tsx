@@ -1,16 +1,22 @@
 import { Card, CardContent } from '@/components/ui/card';
 import { useEntityNumeric } from '@/hooks/useEntity';
+import { useTankLevel, type Tank } from '@/hooks/useTankLevel';
 import { fmt, cn } from '@/lib/utils';
 
 interface TankLevelProps {
   name: string;
-  entityId: string;
+  /** A water tank: shows its stable level (useTankLevel). */
+  tank?: Tank;
+  /** Any other level entity, shown as is. */
+  entityId?: string;
   invertWarning?: boolean;
   icon?: React.ReactNode;
 }
 
-export function TankLevel({ name, entityId, invertWarning, icon }: TankLevelProps) {
-  const { value: level } = useEntityNumeric(entityId);
+export function TankLevel({ name, tank, entityId, invertWarning, icon }: TankLevelProps) {
+  const tankLevel = useTankLevel(tank ?? 'fresh');
+  const plain = useEntityNumeric(entityId ?? '');
+  const level = tank ? tankLevel.value : plain.value;
   const lvl = level ?? 0;
 
   const barColor = invertWarning

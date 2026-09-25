@@ -17,6 +17,8 @@ import { ReadyToDriveBanner } from '@/components/ReadyToDriveBanner';
 import { StarlinkBanner } from '@/components/StarlinkStatus';
 import { WeatherSummaryCard } from '@/components/WeatherSummaryCard';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
+import { useTankLevel } from '@/hooks/useTankLevel';
+import { usePropane } from '@/hooks/usePropane';
 import { useToggle, useService } from '@/hooks/useService';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
 import { cn, fmt } from '@/lib/utils';
@@ -76,10 +78,10 @@ function BadgeItem({
 function BadgeBar() {
   const { value: soc } = useEntityNumeric('sensor.olins_van_bms_battery');
   const { value: solar } = useEntityNumeric('sensor.total_mppt_pv_power');
-  const { value: fresh } = useEntityNumeric('sensor.a32_pro_fresh_water_tank_level');
-  const { value: grey } = useEntityNumeric('sensor.a32_pro_grey_water_tank_level');
+  const { value: fresh, entityId: freshId } = useTankLevel('fresh');
+  const { value: grey, entityId: greyId } = useTankLevel('grey');
   const { value: fuel } = useEntityNumeric('sensor.stable_fuel_level');
-  const { value: propane } = useEntityNumeric('sensor.propane_tank_percentage');
+  const { value: propane, problem: propaneProblem } = usePropane();
   const { value: dlSpeed } = useEntityNumeric('sensor.starlink_downlink_throughput_mbps');
   const starlink = useEntity('sensor.starlink_status');
   const inverter = useEntity('binary_sensor.shelly_em_reachable');
@@ -170,14 +172,14 @@ function BadgeBar() {
         value={`${fmt(fresh, 0)}%`}
         color={v(fresh) < 20 ? 'text-red-500' : v(fresh) < 50 ? 'text-orange-500' : 'text-blue-500'}
         icon={Droplets}
-        onClick={() => open('sensor.a32_pro_fresh_water_tank_level', 'Fresh Water', '%')}
+        onClick={() => open(freshId, 'Fresh Water', '%')}
       />
       <BadgeItem
         label="Grey"
         value={`${fmt(grey, 0)}%`}
         color={v(grey) > 80 ? 'text-red-500' : v(grey) > 60 ? 'text-orange-500' : 'text-green-500'}
         icon={Trash2}
-        onClick={() => open('sensor.a32_pro_grey_water_tank_level', 'Grey Water', '%')}
+        onClick={() => open(greyId, 'Grey Water', '%')}
       />
       <BadgeItem
         label="Grey Dump"
@@ -195,9 +197,15 @@ function BadgeBar() {
       />
       <BadgeItem
         label="Propane"
-        value={`${fmt(propane, 0)}%`}
+        value={
+          propaneProblem === 'dead'
+            ? 'Battery dead'
+            : propane == null
+              ? '—'
+              : `${fmt(propane, 0)}%${propaneProblem === 'low' ? ' · batt low' : ''}`
+        }
         color={
-          v(propane) < 15 ? 'text-red-500' : v(propane) < 30 ? 'text-orange-500' : 'text-green-500'
+          propaneProblem ? 'text-orange-400' : v(propane) < 15 ? 'text-red-500' : v(propane) < 30 ? 'text-orange-500' : 'text-green-500'
         }
         icon={Flame}
         onClick={() => open('sensor.propane_tank_percentage', 'Propane', '%')}
@@ -373,10 +381,10 @@ export default function Home() {
         {/* Column 3: Tanks + Weather + Modes */}
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-3">
-            <TankLevel name="Fresh" entityId="sensor.a32_pro_fresh_water_tank_level" />
+            <TankLevel name="Fresh" tank="fresh" />
             <TankLevel
               name="Grey"
-              entityId="sensor.a32_pro_grey_water_tank_level"
+              tank="grey"
               invertWarning
             />
           </div>

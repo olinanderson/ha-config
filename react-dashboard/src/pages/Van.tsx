@@ -1,5 +1,7 @@
 import { PageContainer } from '@/components/layout/PageContainer';
 import { CurrentTripCard } from '@/components/CurrentTripCard';
+import { LivingSpaceCard } from '@/components/LivingSpaceCard';
+import { VanBadges } from '@/components/VanBadges';
 import { FuelTripHistory } from '@/components/FuelTripHistory';
 import { StarlinkBanner, StarlinkBadge } from '@/components/StarlinkStatus';
 import { SparklineStat, ClickableValue } from '@/components/ClickableValue';
@@ -420,11 +422,13 @@ function MainHeroCard() {
 
   return (
     <Card>
-      <CardContent className="pt-4 pb-4">
+      {/* Spacing is tighter below sm: on a phone this card, the trip and the
+          living space have to share one screen while driving. */}
+      <CardContent className="py-3 sm:py-4">
         <div className="divide-y divide-border sm:grid sm:grid-cols-2 sm:divide-x sm:divide-y-0">
           {/* ── Power / battery ── */}
-          <div className="pb-4 sm:pb-0 sm:pr-4">
-            <div className="mb-2 flex items-center justify-between">
+          <div className="pb-2 sm:pb-0 sm:pr-4">
+            <div className="mb-1.5 flex items-center justify-between sm:mb-2">
               <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                 <Battery className="h-3.5 w-3.5" />
                 Power
@@ -453,25 +457,32 @@ function MainHeroCard() {
             </div>
 
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.olins_van_bms_battery', 'Battery', '%')}>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50 max-sm:py-1" onClick={() => open('sensor.olins_van_bms_battery', 'Battery', '%')}>
                 <p className={cn('text-3xl font-bold tabular-nums', socColor)}>{fmt(soc, 0)}%</p>
                 <p className="text-[10px] text-muted-foreground">Battery</p>
+                {/* On a phone the drive rate shares the Wh line, so the card is
+                    no taller with the engine running (the driving screen). Wider
+                    screens give it its own line. */}
                 <p className="text-[9px] tabular-nums text-muted-foreground/70">
                   {storedWh != null ? `${Math.round(storedWh)} Wh` : '—'}
+                  {engineRunning && driveChargeRate != null && (
+                    <>
+                      <span className="sm:hidden"> · </span>
+                      <span
+                        className={cn(
+                          'font-medium sm:block',
+                          driveChargeRate >= 0 ? 'text-green-400/90' : 'text-orange-400',
+                        )}
+                        title="Avg battery %/h over your last 20 drives — net of solar input and house loads"
+                      >
+                        ≈{driveChargeRate >= 0 ? '+' : ''}{driveChargeRate.toFixed(1)}%/h
+                        <span className="max-sm:hidden"> driving</span>
+                      </span>
+                    </>
+                  )}
                 </p>
-                {engineRunning && driveChargeRate != null && (
-                  <p
-                    className={cn(
-                      'text-[9px] font-medium tabular-nums',
-                      driveChargeRate >= 0 ? 'text-green-400/90' : 'text-orange-400',
-                    )}
-                    title="Avg battery %/h over your last 20 drives — net of solar input and house loads"
-                  >
-                    ≈{driveChargeRate >= 0 ? '+' : ''}{driveChargeRate.toFixed(1)}%/h driving
-                  </p>
-                )}
               </div>
-              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.olins_van_bms_current', 'Battery Current', 'A')}>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50 max-sm:py-1" onClick={() => open('sensor.olins_van_bms_current', 'Battery Current', 'A')}>
                 <p className={cn('text-3xl font-bold tabular-nums', battColor)}>{fmt(battCurrent, 1)}</p>
                 <p className="text-[10px] text-muted-foreground">Amps</p>
                 <p
@@ -487,22 +498,22 @@ function MainHeroCard() {
                     : '—'}
                 </p>
               </div>
-              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.olins_van_bms_temperature', 'Battery Temp', '°C')}>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50 max-sm:py-1" onClick={() => open('sensor.olins_van_bms_temperature', 'Battery Temp', '°C')}>
                 <p className={cn('text-3xl font-bold tabular-nums', battTempColor(battTemp))}>{fmt(battTemp, 0)}°</p>
                 <p className="text-[10px] text-muted-foreground">Batt Temp</p>
               </div>
             </div>
 
-            {/* Long SOC bar */}
-            <div className="mt-2 px-1">
-              <Progress value={soc ?? 0} className="h-2.5" indicatorClassName={(soc ?? 0) < 20 ? 'bg-red-500' : (soc ?? 0) < 40 ? 'bg-orange-400' : 'bg-green-500'} />
+            {/* Long SOC bar, with the time to full / empty at its end */}
+            <div className="mt-2 flex items-center gap-3 px-1">
+              <Progress value={soc ?? 0} className="h-2.5 flex-1" indicatorClassName={(soc ?? 0) < 20 ? 'bg-red-500' : (soc ?? 0) < 40 ? 'bg-orange-400' : 'bg-green-500'} />
+              <span className="shrink-0 text-sm font-medium tabular-nums text-muted-foreground">{estimateDisplay}</span>
             </div>
-            <p className="mt-1.5 text-center text-sm font-medium text-muted-foreground">{estimateDisplay}</p>
           </div>
 
           {/* ── Driving vitals ── */}
-          <div className="pt-4 sm:pt-0 sm:pl-4">
-            <div className="mb-2 flex items-center justify-between">
+          <div className="pt-2 sm:pt-0 sm:pl-4">
+            <div className="mb-1.5 flex items-center justify-between sm:mb-2">
               <span className="flex items-center gap-1.5 text-xs font-semibold text-muted-foreground">
                 <Gauge className="h-3.5 w-3.5" />
                 Driving
@@ -514,15 +525,15 @@ function MainHeroCard() {
 
             {/* The three temperatures — each its own slot so they read as peers. */}
             <div className="grid grid-cols-3 gap-2 text-center">
-              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_05_enginecoolanttemp', 'Coolant Temp', '°C')}>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50 max-sm:py-1" onClick={() => open('sensor.192_168_10_90_05_enginecoolanttemp', 'Coolant Temp', '°C')}>
                 <p className={cn('text-2xl font-bold tabular-nums', coolantColor)}>{fmt(coolant, 0)}°</p>
                 <p className="text-[10px] text-muted-foreground">Coolant</p>
               </div>
-              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_tran_f_temp', 'Trans Temp', '°C')}>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50 max-sm:py-1" onClick={() => open('sensor.192_168_10_90_tran_f_temp', 'Trans Temp', '°C')}>
                 <p className={cn('text-2xl font-bold tabular-nums', transColor)}>{fmt(transTemp, 0)}°</p>
                 <p className="text-[10px] text-muted-foreground">Trans</p>
               </div>
-              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.ambient_air_temp_last_good', 'Ambient Air', '°C')}>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50 max-sm:py-1" onClick={() => open('sensor.ambient_air_temp_last_good', 'Ambient Air', '°C')}>
                 <p className={cn('text-2xl font-bold tabular-nums', ambientColor)}>{fmt(ambient, 0)}°</p>
                 <p className="text-[10px] text-muted-foreground">Ambient</p>
               </div>
@@ -530,16 +541,16 @@ function MainHeroCard() {
 
             {/* Grade, rpm, charger input voltage (Orion 12V side) — same weight as
                 the temperature row above, just a second line of vitals. */}
-            <div className="mt-2 grid grid-cols-3 gap-2 text-center">
-              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.road_grade', 'Road Grade', '%')}>
+            <div className="mt-1 grid grid-cols-3 gap-2 text-center sm:mt-2">
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50 max-sm:py-1" onClick={() => open('sensor.road_grade', 'Road Grade', '%')}>
                 <p className="text-2xl font-bold tabular-nums">{fmt(gradePct, 1)}%</p>
                 <p className="text-[10px] text-muted-foreground">Grade{aggression?.state ? ` · ${aggression.state}` : ''}</p>
               </div>
-              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.192_168_10_90_0c_enginerpm', 'RPM', 'rpm')}>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50 max-sm:py-1" onClick={() => open('sensor.192_168_10_90_0c_enginerpm', 'RPM', 'rpm')}>
                 <p className="text-2xl font-bold tabular-nums">{fmt(rpm, 0)}</p>
                 <p className="text-[10px] text-muted-foreground">RPM</p>
               </div>
-              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50" onClick={() => open('sensor.a32_pro_orion_input_voltage', 'Charger Input', 'V')}>
+              <div className="cursor-pointer rounded-lg p-1.5 transition-colors hover:bg-muted/50 max-sm:py-1" onClick={() => open('sensor.a32_pro_orion_input_voltage', 'Charger Input', 'V')}>
                 <p className={cn('text-2xl font-bold tabular-nums', chargerVColor)}>{fmt(chargerV, 2)}</p>
                 <p className="text-[10px] text-muted-foreground">Chrg V</p>
               </div>
@@ -623,14 +634,20 @@ function EngineIcon({ className }: { className?: string }) {
 
 export default function Van() {
   return (
-    <PageContainer title="Van & Vehicle">
+    // On a phone the first three cards are the driving screen and fit it
+    // without scrolling: the van, the fuel economy, the living space (checked
+    // on an iPhone 16 Pro Max in the HA app, 503 x 977 CSS px under the tab
+    // bar at its 87.5 % zoom, with the engine running and a two-line climate
+    // status). The title is dropped there to make room. The rest is for when
+    // you are parked.
+    <PageContainer title="Van & Vehicle" compactOnPhone>
       <DTCBanner placement="top" />
       <StarlinkBanner />
+      <VanBadges />
       <MainHeroCard />
-      <div className="mt-4">
-        <CurrentTripCard />
-      </div>
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3 mt-4">
+      <CurrentTripCard />
+      <LivingSpaceCard />
+      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="space-y-4">
           <DiagnosticsCard />
           <EngineCard />

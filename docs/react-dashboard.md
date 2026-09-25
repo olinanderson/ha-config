@@ -127,6 +127,69 @@ already shows Off presses `button.ag_pro_roof_fan_force_off`, which always sends
 is one-way IR, so when the fan misses a frame HA still shows Off and this is the way to send it again.
 Tests: `src/components/FanControl.test.tsx`.
 
+## Living Space Card
+
+`src/components/LivingSpaceCard.tsx` sits on the **Van page** under the Current Trip card: the back
+of the van at a glance while driving, and the smallest control that can do something about it. It shows
+`sensor.living_space_temperature` big with `sensor.ambient_air_temp_last_good` under it, a pill per
+appliance that is actually running (heater / A/C / roof fan, read from their own entities, the fan spinning
+when `sensor.roof_fan_power_12v` says the motor is turning), and three buttons that each say what they do:
+**Off** "all off", **Auto** "heat or cool", **Fan** "roof fan". Auto is the program's Hold mode; Auto and Fan
+write the same helper as the Climate Program card (`input_select.night_climate_mode`: Hold /
+`Fan all night`), so the two cards can never disagree and HA still decides what runs. Off runs
+`script.living_space_off` instead: it ends the program if one runs, turns the heater off and runs
+`script.night_climate_actuators_off` for the fan and the A/C, so it also stops an appliance started from
+its own card. Choosing Off on the mode did neither: on 2026-09-21 the A/C was started from its card, the mode
+stayed Off, and five taps on Off only re-selected Off. With the mode Off and something running, Off is not
+shown selected. Auto is the one that both heats and cools, so it is the only mode with a − / + target:
+turn it up and the heater runs, down and the roof fan or the A/C does. That target is
+`input_number.night_climate_hold_target`, stepped by the helper's own min/max/step; Off and Fan show no
+target. When the mode is one the card has no button for (Night, Heater, A/C all night, set from the Climate
+page) a badge names it, no button is selected and its target shows read-only from
+`sensor.night_climate_target`. The line underneath is one sentence built by the card, always one line so
+the phone height is known: "▲ Heating to 22.0° · heater", "▼ Cooling to 22.0° · roof fan", "At target
+22.0°", "Warmer than 22.0° · A/C needs shore power", "A/C on from its own card · Off turns it off",
+"Everything off · …". The warnings (shore power, heater supply, fuel lockout, Shop Mode) are picked out
+of `sensor.night_climate_status`, whose full text is the line's tooltip. Tests:
+`src/components/LivingSpaceCard.test.tsx`.
+
+## Van Page Badges and Tank Levels
+
+`src/components/VanBadges.tsx` is the one-line row at the top of the Van page: Propane, Fresh, Grey and
+Lights. Tapping a level opens its history. Tapping Lights turns all four LED controllers off, or on when
+none is on, the same as the Home badge. Propane everywhere (Van and Home badges, Water card) goes through
+`src/hooks/usePropane.ts`. When the Mopeka itself (`sensor.pro_check_f317_tank_level`) is unavailable it
+shows **Battery dead** in orange instead of a level, and the Water card hides its bar and says to replace
+the coin cell. A silent sensor under a fixed tank is its battery (it died that way on 2026-07-23), and
+before 2026-09-24 the template turned "no reading" into 0 %, an empty-looking tank. With the sensor's
+battery at 15 % or less the level still shows, with a low-battery mark. Tests: `src/hooks/usePropane.test.ts`.
+
+The water levels everywhere on the dashboard (Home badges and tanks, Water page, Van badges) come from
+`src/hooks/useTankLevel.ts`. It uses `sensor.stable_fresh_water_level` / `sensor.stable_grey_water_level`
+(template/triggered.yaml: a 5-min median that only moves after 5 min parked and by at least 1 point) and
+falls back to the raw A32 Pro sensors while those are unavailable. `TankLevel` takes `tank="fresh" | "grey"`
+for these and `entityId` for anything else.
+
+Worth knowing while driving: under Hold the A/C only starts on `binary_sensor.shore_power_present` (the
+charger drew power within 3 h) and the roof fan only when it is at least 1 °C cooler outside, so on a hot
+drive away from shore power neither will cool.
+
+## Van Page on a Phone
+
+On a phone the badge row and the first three cards of the Van page are the driving screen: badges,
+hero (Power + Driving), Current Trip, Living Space, all visible without scrolling. The target is an iPhone
+16 Pro Max in the HA app, which renders the page at 87.5 % zoom: 503 × 1022 CSS px, the tab bar ends at
+45 and the Living Space card has to end by 999 to clear the home indicator. The worst realistic case
+(engine running, fuel averages loaded, Auto with three running pills) ends at 988 (2026-09-24). Below `sm`
+the fit comes from: `PageContainer compactOnPhone` (no page title, `space-y-3` between cards), the
+single-line badges, the hero card's tighter padding (`max-sm:py-1` tiles), the Battery tile's drive rate
+on the same line as the Wh (wider screens keep its own "%/h driving" line), the trip stats as one row of
+four with the range, the city/highway explainer hidden (it is also on the trip history card), `pt-4`
+headers and `pt-2` card content on the trip and living space cards, and the living space status kept to
+one truncated line. The band tile's NOW chip wraps under HIGHWAY there rather than being clipped. Alert banners (DTC
+with the CEL on, Starlink recovery, Shop Mode) push the cards down on purpose. Anything added to these
+three cards or above them needs re-measuring on that screen.
+
 ## CSS Scoping
 
 No shadow DOM. Root `.van-dash-root` has `position: relative`.
