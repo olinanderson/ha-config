@@ -211,9 +211,16 @@
 #          up in ~3 min.
 #   Grey:  30-min median, parked 30 min, 2-point deadband. Its sender also
 #          wanders for minutes at a time, so a dump shows up in ~15 min.
+#          Also held while the hydronic heater runs and for 60 min after:
+#          the sender wanders through most heater runs and for up to 30 min
+#          after, and the median takes another 30 min to flush that out. On
+#          the 2026-09-18..25 history this halved the changes (199 -> 106).
+#          Water used during a heater run shows up an hour after it stops.
 # binary_sensor.vehicle_is_moving is a template sensor, so a template reload
 # or an HA restart sets its last_changed to now: the levels then hold their
-# restored values for 5 / 30 min before following the median again.
+# restored values for 5 / 30 min before following the median again. The
+# heater switch's last_changed also resets on an HA restart or when the A32
+# Pro reconnects, so grey then holds for 60 min.
 - trigger:
     - trigger: state
       entity_id:
@@ -255,10 +262,13 @@
         {% set mv = states.binary_sensor.vehicle_is_moving %}
         {% set parked = mv is none or (mv.state != 'on'
              and (now() - mv.last_changed).total_seconds() >= 1800) %}
+        {% set ht = states.switch.a32_pro_switch24_hydronic_heater %}
+        {% set heater_quiet = ht is none or (ht.state != 'on'
+             and (now() - ht.last_changed).total_seconds() >= 3600) %}
         {% set last = this.state | float(none) %}
         {% if med is none %}
           {{ last }}
-        {% elif last is none or (parked and (med - last) | abs >= 2) %}
+        {% elif last is none or (parked and heater_quiet and (med - last) | abs >= 2) %}
           {{ med | round(0) }}
         {% else %}
           {{ last }}

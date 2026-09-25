@@ -863,3 +863,91 @@
         recovery_attempts: "{{ states('input_number.starlink_recovery_attempts') | int(0) }}"
         recovery_failed: "{{ is_state('input_boolean.starlink_recovery_failed', 'on') }}"
         auto_recovery: "{{ is_state('input_boolean.starlink_auto_recovery', 'on') }}"
+
+# ─── Battery cell voltages (JBD BMS via bms_ble) ─────────────────────────────
+# bms_ble 2.x reports the 8 cell voltages only as the cell_voltages attribute of
+# the delta-voltage sensor, and the recorder hasn't stored that attribute since
+# the 2026-09-16 update. One sensor per cell gives them history and long-term
+# statistics. Cell 1 is the weak, low-capacity cell (first to 3.65 V at the
+# top, first empty at the bottom): Battery Cell 1 Gap is cell 1 minus the mean
+# of cells 2–8, negative when it sags. All nine go unavailable, never 0, when
+# the attribute is missing, has fewer than 8 cells, or holds a value outside
+# 2–4 V (a garbled BLE read; LiFePO4 cells stay within about 2.5–3.65 V).
+- sensor:
+    - name: "Battery Cell 1 Voltage"
+      unique_id: battery_cell_1_voltage
+      unit_of_measurement: "V"
+      device_class: voltage
+      state_class: measurement
+      availability: &battery_cells_ok >
+        {% set c = state_attr('sensor.olins_van_bms_delta_voltage', 'cell_voltages') %}
+        {{ c is sequence and c is not string and c | count >= 8
+           and c | map('float', 0) | min > 2 and c | map('float', 0) | max < 4 }}
+      state: "{{ (state_attr('sensor.olins_van_bms_delta_voltage', 'cell_voltages') or [])[0] | default(none) }}"
+
+    - name: "Battery Cell 2 Voltage"
+      unique_id: battery_cell_2_voltage
+      unit_of_measurement: "V"
+      device_class: voltage
+      state_class: measurement
+      availability: *battery_cells_ok
+      state: "{{ (state_attr('sensor.olins_van_bms_delta_voltage', 'cell_voltages') or [])[1] | default(none) }}"
+
+    - name: "Battery Cell 3 Voltage"
+      unique_id: battery_cell_3_voltage
+      unit_of_measurement: "V"
+      device_class: voltage
+      state_class: measurement
+      availability: *battery_cells_ok
+      state: "{{ (state_attr('sensor.olins_van_bms_delta_voltage', 'cell_voltages') or [])[2] | default(none) }}"
+
+    - name: "Battery Cell 4 Voltage"
+      unique_id: battery_cell_4_voltage
+      unit_of_measurement: "V"
+      device_class: voltage
+      state_class: measurement
+      availability: *battery_cells_ok
+      state: "{{ (state_attr('sensor.olins_van_bms_delta_voltage', 'cell_voltages') or [])[3] | default(none) }}"
+
+    - name: "Battery Cell 5 Voltage"
+      unique_id: battery_cell_5_voltage
+      unit_of_measurement: "V"
+      device_class: voltage
+      state_class: measurement
+      availability: *battery_cells_ok
+      state: "{{ (state_attr('sensor.olins_van_bms_delta_voltage', 'cell_voltages') or [])[4] | default(none) }}"
+
+    - name: "Battery Cell 6 Voltage"
+      unique_id: battery_cell_6_voltage
+      unit_of_measurement: "V"
+      device_class: voltage
+      state_class: measurement
+      availability: *battery_cells_ok
+      state: "{{ (state_attr('sensor.olins_van_bms_delta_voltage', 'cell_voltages') or [])[5] | default(none) }}"
+
+    - name: "Battery Cell 7 Voltage"
+      unique_id: battery_cell_7_voltage
+      unit_of_measurement: "V"
+      device_class: voltage
+      state_class: measurement
+      availability: *battery_cells_ok
+      state: "{{ (state_attr('sensor.olins_van_bms_delta_voltage', 'cell_voltages') or [])[6] | default(none) }}"
+
+    - name: "Battery Cell 8 Voltage"
+      unique_id: battery_cell_8_voltage
+      unit_of_measurement: "V"
+      device_class: voltage
+      state_class: measurement
+      availability: *battery_cells_ok
+      state: "{{ (state_attr('sensor.olins_van_bms_delta_voltage', 'cell_voltages') or [])[7] | default(none) }}"
+
+    - name: "Battery Cell 1 Gap"
+      unique_id: battery_cell_1_gap
+      unit_of_measurement: "mV"
+      device_class: voltage
+      state_class: measurement
+      availability: *battery_cells_ok
+      state: >
+        {% set c = (state_attr('sensor.olins_van_bms_delta_voltage', 'cell_voltages') or [])
+                   | map('float', 0) | list %}
+        {{ ((c[0] - (c[1:8] | sum) / 7) * 1000) | round(0) | int if c | count >= 8 else none }}
