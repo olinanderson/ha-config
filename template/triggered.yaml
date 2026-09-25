@@ -203,15 +203,22 @@
 # The tank senders publish a 10-second moving average every second, which lets
 # through both slosh (fresh swung 15–25 points on every drive of 2026-09-24,
 # 2–4 parked) and spikes (grey jumped from ~10 % to 30–50 % even parked). Like
-# Stable Fuel Level: latch the 5-min median (integrations/sensor.yaml), but
-# only once the van has been parked 5 min, so the whole window is parked
-# samples, and hold it while driving. Whole percent with a 1-point deadband, so
-# the number no longer flickers. A fill or a grey dump shows up in ~3 min.
+# Stable Fuel Level: latch the median (integrations/sensor.yaml), but only once
+# the van has been parked as long as the median's window, so the whole window
+# is parked samples, and hold it while driving. Whole percent with a deadband,
+# so the number no longer flickers.
+#   Fresh: 5-min median, parked 5 min, 1-point deadband. Use or a fill shows
+#          up in ~3 min.
+#   Grey:  30-min median, parked 30 min, 2-point deadband. Its sender also
+#          wanders for minutes at a time, so a dump shows up in ~15 min.
+# binary_sensor.vehicle_is_moving is a template sensor, so a template reload
+# or an HA restart sets its last_changed to now: the levels then hold their
+# restored values for 5 / 30 min before following the median again.
 - trigger:
     - trigger: state
       entity_id:
         - sensor.fresh_water_level_5_min_median
-        - sensor.grey_water_level_5_min_median
+        - sensor.grey_water_level_30_min_median
     - trigger: state
       entity_id: binary_sensor.vehicle_is_moving
       to: "off"
@@ -244,14 +251,14 @@
       state_class: measurement
       icon: mdi:water-opacity
       state: >
-        {% set med = states('sensor.grey_water_level_5_min_median') | float(none) %}
+        {% set med = states('sensor.grey_water_level_30_min_median') | float(none) %}
         {% set mv = states.binary_sensor.vehicle_is_moving %}
         {% set parked = mv is none or (mv.state != 'on'
-             and (now() - mv.last_changed).total_seconds() >= 300) %}
+             and (now() - mv.last_changed).total_seconds() >= 1800) %}
         {% set last = this.state | float(none) %}
         {% if med is none %}
           {{ last }}
-        {% elif last is none or (parked and (med - last) | abs >= 1) %}
+        {% elif last is none or (parked and (med - last) | abs >= 2) %}
           {{ med | round(0) }}
         {% else %}
           {{ last }}
@@ -266,8 +273,10 @@
 # 30 s dt cap so a WiCAN dropout can't inject a huge phantom segment, and a
 # speed sanity gate so a negative or 255-style sentinel can't spike it.
 # Trigger-based template sensors restore their last state across a Core restart
-# by default (this.state survives), so the lifetime total persists; a
-# template.reload starts it fresh from 0 (then the trip baseline re-captures 0).
+# and across a template.reload (this.state survives), so the lifetime total
+# persists. Checked in the recorder: the reloads of 2026-09-18 and 2026-09-25
+# each brought it back at the same km, as they did Moving Fuel Total and Stable
+# Fuel Level, so a reload does not reset the trip.
 - trigger:
     - trigger: state
       entity_id: sensor.192_168_10_90_0d_vehiclespeed

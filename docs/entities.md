@@ -86,7 +86,7 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor, plus `sensor.mppt1_
 | `sensor.a32_pro_fresh_water_tank_level` | Fresh water (%), raw: swings 15–25 points driving |
 | `sensor.stable_fresh_water_level` | Fresh water (%), stable: 5-min median, moves only after 5 min parked, 1-point steps (dashboard uses this) |
 | `sensor.a32_pro_grey_water_tank_level` | Grey water (%), raw: spikes 20–40 points even parked |
-| `sensor.stable_grey_water_level` | Grey water (%), stable, same as fresh (dashboard uses this) |
+| `sensor.stable_grey_water_level` | Grey water (%), stable: 30-min median, moves only after 30 min parked, 2-point steps (dashboard uses this) |
 | `switch.a32_pro_water_system_master_switch` | Water master on/off |
 | `switch.a32_pro_water_system_state_main` | Water mode: main |
 | `switch.a32_pro_water_system_state_recirculating_shower` | Water mode: recirc shower |

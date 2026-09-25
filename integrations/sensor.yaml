@@ -12,11 +12,17 @@
     minutes: 5
   sampling_size: 300
 
-# ─── Water tank levels • 5-minute rolling median ───
+# ─── Water tank levels • rolling median (fresh 5 min, grey 30 min) ───
 # Feed sensor.stable_fresh_water_level / stable_grey_water_level
 # (template/triggered.yaml). A median, not a mean: the grey sender spikes from
 # ~10 % to 30–50 % for seconds at a time even parked (2026-09-24), and a mean
 # would carry those spikes. The senders publish about once a second.
+# Grey also wanders for several minutes at a time while parked (its 5-min
+# medians went 19 → 36 → 20 → 16 % within an hour on 2026-09-25, against a
+# steady 7 % overnight), so it gets 30 min. Replaying 72 h of history with the
+# stable sensor's latch: 7.0 → 2.5 changes per parked hour, still following the
+# dumps and fills. Fresh already changes about once every two parked hours on
+# 5 min, and a shorter window shows real use sooner.
 - platform: statistics
   name: "Fresh Water Level 5 min median"
   unique_id: fresh_water_level_5_min_median
@@ -28,13 +34,13 @@
   precision: 1
 
 - platform: statistics
-  name: "Grey Water Level 5 min median"
-  unique_id: grey_water_level_5_min_median
+  name: "Grey Water Level 30 min median"
+  unique_id: grey_water_level_30_min_median
   entity_id: sensor.a32_pro_grey_water_tank_level
   state_characteristic: median
   max_age:
-    minutes: 5
-  sampling_size: 400
+    minutes: 30
+  sampling_size: 2400
   precision: 1
 
 # ─── Battery net power • 5-minute rolling mean ───

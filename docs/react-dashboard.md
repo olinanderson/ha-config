@@ -165,10 +165,13 @@ before 2026-09-24 the template turned "no reading" into 0 %, an empty-looking ta
 battery at 15 % or less the level still shows, with a low-battery mark. Tests: `src/hooks/usePropane.test.ts`.
 
 The water levels everywhere on the dashboard (Home badges and tanks, Water page, Van badges) come from
-`src/hooks/useTankLevel.ts`. It uses `sensor.stable_fresh_water_level` / `sensor.stable_grey_water_level`
-(template/triggered.yaml: a 5-min median that only moves after 5 min parked and by at least 1 point) and
-falls back to the raw A32 Pro sensors while those are unavailable. `TankLevel` takes `tank="fresh" | "grey"`
-for these and `entityId` for anything else.
+`src/hooks/useTankLevel.ts`, which only knows `sensor.stable_fresh_water_level` /
+`sensor.stable_grey_water_level` (template/triggered.yaml: fresh a 5-min median that moves after 5 min
+parked and by at least 1 point, grey a 30-min median that moves after 30 min parked and by at least 2).
+The history dialog opens the same sensors, whose history starts 2026-09-25. There is no raw fallback: the
+dashboard showed the raw sensors while the stable ones did not exist yet, and a tap then opened the noisy
+raw history. The stable sensors restore across restarts and reloads, and if one is ever unavailable the
+level reads "—". `TankLevel` takes `tank="fresh" | "grey"` for these and `entityId` for anything else.
 
 Worth knowing while driving: under Hold the A/C only starts on `binary_sensor.shore_power_present` (the
 charger drew power within 3 h) and the roof fan only when it is at least 1 °C cooler outside, so on a hot

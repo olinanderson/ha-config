@@ -409,7 +409,7 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 | `sensor.a32_pro_fresh_water_tank_level` | Fresh water (%), raw: swings 15–25 points driving |
 | `sensor.stable_fresh_water_level` | Fresh water (%), stable: 5-min median, moves only after 5 min parked, 1-point steps (dashboard uses this) |
 | `sensor.a32_pro_grey_water_tank_level` | Grey water (%), raw: spikes 20–40 points even parked |
-| `sensor.stable_grey_water_level` | Grey water (%), stable, same as fresh (dashboard uses this) |
+| `sensor.stable_grey_water_level` | Grey water (%), stable: 30-min median, moves only after 30 min parked, 2-point steps (dashboard uses this) |
 | `switch.a32_pro_water_system_master_switch` | Water master on/off |
 | `switch.a32_pro_water_system_state_main` | Water mode: main |
 | `switch.a32_pro_water_system_state_recirculating_shower` | Water mode: recirc shower |
@@ -1342,7 +1342,7 @@ react-dashboard/
       SolarCard.tsx        # PV power, MPPT details, daily yield
       WeatherCard.tsx      # Current conditions + 7-day forecast (WS subscription)
       TemperatureCard.tsx  # BME280 readings (4 zones)
-      TankLevel.tsx        # Reusable tank bar (tank="fresh"/"grey" uses hooks/useTankLevel.ts: stable level, raw fallback)
+      TankLevel.tsx        # Reusable tank bar (tank="fresh"/"grey" uses hooks/useTankLevel.ts: the stable sensors only, never the raw ones)
       HeaterCard.tsx       # Hydronic heater: thermostat, blower Auto/Manual, one Hot Water / Hydronic Heater switch, status
       FanControl.tsx       # Roof fan: Off / Manual / Auto, speed or set point (sent 1.2 s after the last change), direction, lid; Off again re-sends off
       TonightCard.tsx      # Night Climate: mode, targets, wake time, what the Program may use, "A/C above", fan speed/direction
