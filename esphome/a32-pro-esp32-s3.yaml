@@ -6,6 +6,23 @@ esphome:
   # C++ helpers shared by the lambdas below (DI33-40 expander sanity check).
   includes:
     - a32_helpers.h
+  # Bring the water system back as it was before a reboot: every water relay
+  # comes up off, and set_water_state (a no-op when the water was off) sets
+  # the valves, waits and starts the pumps last. Nothing in this config holds
+  # up setup, so -100 still runs a second or two after power-up, WiFi or not.
+  on_boot:
+    priority: -100
+    then:
+      # Heater: the relay keeps its restored state (Switch24/32 are DISABLED).
+      # Like the old boot-time Switch24 off, count the boot as a heater-off
+      # for the power supply's 180 s guard, and keep a manual request only
+      # if its relay came back on.
+      - lambda: |-
+          id(hydronic_heater_last_off_timestamp) = id(real_time_clock).now().timestamp;
+          if (!id(hydronic_heater_on_off_physical).state) id(heater_manual_request) = false;
+      - script.execute:
+          id: set_water_state
+          state: !lambda 'return id(last_water_state);'
 
 # Hydronic heater monitor / blower gate constants that aren't worth a HA
 # entity. The user-tunable thresholds (blower start temp, heater OK temp, max
@@ -546,11 +563,19 @@ switch:
           if (!id(heater_restart_in_progress) && st != 4 && st != 5) {
             id(heater_retry_state) = 0;
           }
+          // Save the relay's off state to flash now instead of at the next
+          // once-a-minute write, so a crash or power cut right after switching
+          // the heater off can't bring it back on at the next boot.
+          global_preferences->sync();
 
   # Template switch for the hydronic heater (Switch24)
   - platform: template
     name: "Switch24 Hydronic Heater"
     id: hydronic_heater_on_off
+    # The default, ALWAYS_OFF, ran turn_off_action at every boot: it dropped the
+    # relay it had just restored and the manual request, and the thermostat
+    # relit it (an off/on for the Espar). DISABLED leaves the relay as it was.
+    restore_mode: DISABLED
     lambda: |-
       // Reflect the physical pin’s actual ON/OFF state.
       return id(hydronic_heater_on_off_physical).state;
@@ -644,6 +669,9 @@ switch:
   - platform: template
     name: "Switch32 Hydronic Heater Power Supply"
     id: hydronic_heater_power_supply_control
+    # DISABLED too: with ALWAYS_OFF its turn_off_action ran at boot, and only
+    # the stamp Switch24's boot-time off left kept it from cutting the power.
+    restore_mode: DISABLED
     lambda: |-
       // Reflect the state of the physical power supply switch.
       return id(hydronic_heater_power_supply_physical).state;
@@ -712,6 +740,9 @@ switch:
   - platform: template
     name: "Water System Master Switch"
     id: water_system_master_switch
+    # The default, ALWAYS_OFF, ran turn_off_action at every boot and wiped the
+    # restored water_system_enabled. on_boot (esphome:) re-applies the state.
+    restore_mode: DISABLED
     lambda: |-
       return id(water_system_enabled);
     turn_on_action:
@@ -1593,10 +1624,11 @@ globals:
 
   # User's manual intent to run the heater (Switch24), independent of the
   # thermostat. Keeps the climate's OFF handler from turning a hand-started
-  # heater back off underneath the user.
+  # heater back off underneath the user. Restored so a hand-started run
+  # survives a reboot with its relay (on_boot drops it if the relay came up off).
   - id: heater_manual_request
     type: bool
-    restore_value: no
+    restore_value: yes
     initial_value: 'false'
 
   - id: water_system_enabled
@@ -1610,6 +1642,11 @@ globals:
     initial_value: '1'
 
   - id: valves_need_delay          # true if a valve position changes this run
+    type: bool
+    restore_value: no
+    initial_value: 'false'
+
+  - id: water_valves_settled       # false after a boot until set_water_state has waited once
     type: bool
     restore_value: no
     initial_value: 'false'
@@ -1983,7 +2020,10 @@ script:
                 bool v2_desired = (state == 3);                 // Valve 2
                 bool v3_desired = (state == 3);                 // Valve 3
 
-                id(valves_need_delay) =
+                // After a boot the valve relays come up off wherever the
+                // valves are, and the saved mode can be up to 60 s old
+                // (flash write interval), so the first run always waits.
+                id(valves_need_delay) = !id(water_valves_settled) ||
                   (id(water_system_valve_1_open_closed).state != v1_desired) ||
                   (id(water_system_valve_2_open_closed).state != v2_desired) ||
                   (id(water_system_valve_3_open_closed).state != v3_desired);
@@ -2031,6 +2071,7 @@ script:
                   lambda: 'return id(valves_need_delay);'
                 then:
                   - delay: 10s
+            - lambda: 'id(water_valves_settled) = true;'
 
             # ── 8. Start the pumps appropriate to this mode ───────────
             - switch.turn_on: main_system_water_pump_on_off
@@ -2122,10 +2163,14 @@ climate:
                 ESP_LOGI("CLIMATE", "Climate is OFF. PID disabled.");
             # Turn off the hydronic heater only if nothing else still wants it:
             # hot water mode or a manual heater request keep it running (and
-            # keep the warm-up monitor watching it).
+            # keep the warm-up monitor watching it). Right after a boot HA
+            # hasn't sent hot water mode yet (it reads off), so the heater is
+            # left alone until it has, for up to 5 min.
             - if:
                 condition:
-                  lambda: 'return id(ha_hot_water_mode).state || id(heater_manual_request);'
+                  lambda: |-
+                    return id(ha_hot_water_mode).state || id(heater_manual_request)
+                        || (!id(ha_hot_water_mode).has_state() && millis() < 300000);
                 then:
                   - logger.log:
                       level: INFO
@@ -2419,6 +2464,9 @@ sensor:
       - lambda: "return x / 100.0;"
 
   # 2) volume percentage (linear) + 10‑sample moving average
+  # Full scale is 190 Ω = 0.76 V. Over 0.80 V is a bad contact or an open
+  # sender (up to 1.15 V seen while driving), so the reading is skipped instead
+  # of averaged in as 100 %. No valid reading for 5 min ➜ unknown.
   - platform: template
     name: "Grey Water Tank Level (%)"
     id: grey_water_level
@@ -2427,6 +2475,7 @@ sensor:
     update_interval: 1s
     lambda: |-
       float V = id(grey_water_level_voltage).state;
+      if (std::isnan(V) || V > 0.80f) return {};  // invalid ➜ don't publish
       float R = V / 0.004;                    // V➜Ω
       float pct = (R / 190.0) * 100.0;        // linear height ➜ %
       return pct < 0 ? 0 : (pct > 100 ? 100 : pct);
@@ -2434,6 +2483,7 @@ sensor:
       - sliding_window_moving_average:
           window_size: 10
           send_every: 1
+      - timeout: 5min
 
   - platform: modbus_controller
     modbus_controller_id: s5140
