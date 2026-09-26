@@ -2602,3 +2602,94 @@
                 entity_id: input_datetime.shore_power_last_seen
               data:
                 datetime: "1970-01-02 00:00:00"
+
+# ────────────────────────────────────────────────────────────────
+# Starlink power budget (added 2026-09-26 while the van sits unattended)
+# The dish is ~33 W around the clock and the only load HA can cut without
+# wiring. Overnight it is switched fully off at the A32 supply switch (the
+# Starlink sleep schedule stays off — this replaces it). A low-SoC guard holds
+# it off below 30 % so the pack rests for solar, releasing above 40 %.
+# starlink_auto_recover already stands down while the supply switch is off.
+# ────────────────────────────────────────────────────────────────
+- id: starlink_night_off
+  alias: "Starlink • off overnight (23:00)"
+  mode: single
+  trigger:
+    - trigger: time
+      at: "23:00:00"
+  action:
+    - action: switch.turn_off
+      target:
+        entity_id: switch.a32_pro_switch26_starlink_power_supply
+
+- id: starlink_morning_on
+  alias: "Starlink • back on in the morning (08:00)"
+  mode: single
+  trigger:
+    - trigger: time
+      at: "08:00:00"
+  condition:
+    - condition: state
+      entity_id: input_boolean.starlink_low_soc_hold
+      state: "off"
+  action:
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_switch26_starlink_power_supply
+
+- id: starlink_low_soc_guard
+  alias: "Starlink • hold off while the battery is below 30 %"
+  mode: single
+  trigger:
+    - trigger: numeric_state
+      entity_id: sensor.olins_van_bms_battery
+      below: 30
+      for: "00:05:00"
+  condition:
+    - condition: state
+      entity_id: input_boolean.starlink_low_soc_hold
+      state: "off"
+  action:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.starlink_low_soc_hold
+    - action: switch.turn_off
+      target:
+        entity_id: switch.a32_pro_switch26_starlink_power_supply
+    - action: persistent_notification.create
+      data:
+        notification_id: starlink_low_soc_hold
+        title: "Starlink held off — battery low"
+        message: >
+          Pack at {{ states('sensor.olins_van_bms_battery') }} %. Starlink
+          stays off until the pack is back above 40 %, or until you turn off
+          input_boolean.starlink_low_soc_hold.
+
+- id: starlink_low_soc_release
+  alias: "Starlink • release the low-battery hold above 40 %"
+  mode: single
+  trigger:
+    - trigger: numeric_state
+      entity_id: sensor.olins_van_bms_battery
+      above: 40
+      for: "00:10:00"
+  condition:
+    - condition: state
+      entity_id: input_boolean.starlink_low_soc_hold
+      state: "on"
+  action:
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.starlink_low_soc_hold
+    - action: persistent_notification.dismiss
+      data:
+        notification_id: starlink_low_soc_hold
+    # Overnight the 08:00 automation brings it back; by day do it now.
+    - if:
+        - condition: time
+          after: "08:00:00"
+          before: "23:00:00"
+      then:
+        - action: switch.turn_on
+          target:
+            entity_id: switch.a32_pro_switch26_starlink_power_supply

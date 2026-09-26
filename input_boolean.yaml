@@ -151,3 +151,10 @@ night_climate_use_fan:
 night_climate_fan_by_room:
   name: "Night Climate runs the Roof Fan from the room sensor"
   icon: mdi:fan-alert
+
+# Set by starlink_low_soc_guard when the pack falls below 30 %: the Starlink
+# supply stays off (the 08:00 restore skips it) until the pack is back above
+# 40 % (starlink_low_soc_release). Turn it off yourself to force Starlink back.
+starlink_low_soc_hold:
+  name: "Starlink held off — battery low"
+  icon: mdi:battery-alert-variant-outline
