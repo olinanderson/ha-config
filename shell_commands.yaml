@@ -60,18 +60,6 @@ start_osrm_proxy: >
 # Diagnostic: dump ps aux + netstat from inside HA container to a readable file
 diag_psout: sh /config/www/vanlife-panel/psout.sh
 
-# Start Syncthing for bidirectional config sync with PC over Tailscale.
-# Uses a double-fork launcher so the shell_command returns immediately — a plain
-# `nohup ... &` left an fd tied to HA's pipe and blocked until the 60 s timeout,
-# spamming "Timed out running command" every ~3 min from the liveness watchdog.
-start_syncthing: >
-  /bin/sh -c 'if ! nc -z 127.0.0.1 22000 2>/dev/null; then
-    python3 /config/www/vanlife-panel/start_syncthing_daemon.py;
-    echo "Syncthing started";
-  else
-    echo "Syncthing already running";
-  fi'
-
 # Start u-blox USB GPS bridge — reads NMEA from /dev/ttyACM0 and publishes the
 # device_tracker.ublox_gps MQTT tracker (raw GPS source for the whole system).
 start_gps_ublox: >

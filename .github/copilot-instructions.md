@@ -1,25 +1,14 @@
 # Copilot Instructions — Home Assistant (Olin's Van)
 
-> **Workspace location**: The config is synced bidirectionally to local PCs via
-> **Syncthing over Tailscale**. Changes propagate in ~10 seconds.
+> **Deployment (since 2026-09-25)**: `/config` on HA is a git checkout of this
+> repo. Edit locally, commit, then run `bash deploy.sh` (push → pull on HA →
+> check_config → reload). `bash deploy.sh --dry` previews. Syncthing is gone;
+> do not start it on any PC, it fights the git checkout.
 >
 > | Machine | Path | Tailscale IP |
 > |---|---|---|
-> | **Asylum** (primary desktop) | `C:\Users\Olin\Documents\Workspace\ha_config` | `100.106.30.112` |
-> | **Satellite** (laptop) | `C:\Users\Olin Anderson\Documents\Workspace\ha_config` | `100.73.225.9` |
->
-> The old SMB network drive (`H:` / `\\homeassistant\config`) still works but is
-> slow — prefer editing the local copy.
-
-> **⚠ SYNCTHING CHECK**: Before relying on file sync, **always verify Syncthing is
-> running on Windows** (`tasklist | grep -i syncthing`). If not running, start it:
-> `start "" "$(where syncthing)" --no-browser`. Also verify after any deploy that
-> the file actually arrived on HA (`ssh hassio@100.80.15.86 "grep -c 'UNIQUE_STRING' /config/path/to/file"`).
->
-> | Machine | Auto-start? | Notes |
-> |---|---|---|
-> | **Asylum** | ❌ No | Must launch manually after reboot |
-> | **Satellite** | ✅ Yes | Windows Scheduled Task `Syncthing` runs at logon |
+> | **Atlantis** (always-on Mac) | `~/Workspace/ha_config` | `100.71.252.3` |
+> | **Asylum** (desktop, in the van) | `C:\Users\Olin\Documents\Workspace\ha_config` | `100.106.30.112` |
 
 ---
 
@@ -83,7 +72,7 @@ entertainment, and safety subsystems for full-time van life.
 
 ---
 
-## Syncthing — Bidirectional Config Sync
+## Syncthing — REMOVED 2026-09-25 (kept for history; replaced by deploy.sh)
 
 The HA config folder (`/config` on the HA host) is synced bidirectionally to local
 PCs via **Syncthing** over **Tailscale**. This replaces the slow SMB network drive
