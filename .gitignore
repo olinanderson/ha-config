@@ -126,3 +126,8 @@ themes/
 # --- Build cache + runtime logs (churn, not source) ---
 *.tsbuildinfo
 *.log
+
+# --- Not config: JS deps, camera clips, crash dumps ---
+node_modules/
+recordings/
+*.stackdump
