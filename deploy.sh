@@ -51,7 +51,7 @@ needs_restart=""
 needs_reload=0
 while IFS= read -r f; do
     case "$f" in
-        esphome/*|react-dashboard/*|docs/*|*.md|*.py|*.js|*.sh|.github/*|.claude/*|.gitignore|.stignore) ;;   # not HA runtime config
+        esphome/*|react-dashboard/*|relay/*|docs/*|*.md|*.py|*.js|*.sh|.github/*|.claude/*|.gitignore|.stignore) ;;   # not HA runtime config
         *) if grep -Eq "$reloadable" <<<"$f"; then needs_reload=1; else needs_restart+="$f "; fi ;;
     esac
 done <<<"$changed"

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react';
+import { vanApiBase } from '@/lib/vanlife-api';
 
 export interface FuelTrip {
   start_ts: number;
@@ -59,10 +60,7 @@ export interface FuelTripsResult {
 const IS_LOCAL = /^(192\.168\.|10\.|100\.|172\.(1[6-9]|2\d|3[01])\.|localhost$)/.test(
   location.hostname,
 );
-const API_BASE = () =>
-  IS_LOCAL
-    ? `${location.protocol}//${location.hostname}:8765`
-    : `${location.origin}/api`;
+const API_BASE = vanApiBase;
 
 const REFRESH_MS = 5 * 60 * 1000; // 5 minutes
 

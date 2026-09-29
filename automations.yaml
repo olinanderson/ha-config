@@ -2612,33 +2612,116 @@
                 datetime: "1970-01-02 00:00:00"
 
 # ────────────────────────────────────────────────────────────────
-# Starlink power budget (added 2026-09-26 while the van sits unattended)
-# The dish is ~33 W around the clock and the only load HA can cut without
-# wiring. Overnight it is switched fully off at the A32 supply switch (the
-# Starlink sleep schedule stays off — this replaces it).
-# starlink_auto_recover already stands down while the supply switch is off.
+# Starlink duty cycle (2026-09-29; replaces the 23:00–08:00 night-off)
+# The dish draws ~33 W, the biggest load HA can cut. With
+# input_boolean.starlink_duty_cycle on, Starlink runs in short windows at :00
+# and :30. In each window the atlantis relay (relay/ in this repo) reconnects,
+# stores the latest state for the dashboard it serves, sends any commands queued
+# while the van was offline, and marks input_datetime.starlink_relay_last_sync.
+# The window then closes:
+#   - once the relay has synced, at least 3 min after it opened (power-on to
+#     reachable over Tailscale measured 2 min 46–48 s on 2026-09-28), plus the
+#     relay's own 60 s hold so results of sent commands come back;
+#   - after 8 min at the latest if the relay never shows up;
+#   - never while starlink_relay_hold_until is in the future (the relay pushes
+#     it forward while someone is actively using the dashboard).
+# binary_sensor.starlink_duty_cycle_paused keeps Starlink on while driving, on
+# shore power, or with someone in the van by day.
+# Each window is also a power cycle, which is what clears the PoE converter
+# latch-up (see starlink_auto_recover). A long off (9 h on 2026-09-28/29) is
+# what seems to trigger it; windows keep every off under 30 min.
 # There is deliberately no low-battery cut: a guard that held Starlink off
 # below 30 % (added 2026-09-26, removed 2026-09-29) left the van unreachable
 # for hours, with no way to check on it or undo the hold remotely.
 # ────────────────────────────────────────────────────────────────
-- id: starlink_night_off
-  alias: "Starlink • off overnight (23:00)"
+- id: starlink_duty_window_open
+  alias: "Starlink • duty cycle: open a window (:00 and :30)"
   mode: single
   trigger:
-    - trigger: time
-      at: "23:00:00"
+    - trigger: time_pattern
+      minutes: "/30"
+  condition:
+    - condition: state
+      entity_id: input_boolean.starlink_duty_cycle
+      state: "on"
+    - condition: state
+      entity_id: switch.a32_pro_switch26_starlink_power_supply
+      state: "off"
+  action:
+    - action: input_datetime.set_datetime
+      target:
+        entity_id: input_datetime.starlink_window_started
+      data:
+        timestamp: "{{ now().timestamp() }}"
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_switch26_starlink_power_supply
+
+- id: starlink_duty_window_close
+  alias: "Starlink • duty cycle: close the window once synced"
+  mode: single
+  trigger:
+    - trigger: time_pattern
+      minutes: "/1"
+  condition:
+    - condition: state
+      entity_id: input_boolean.starlink_duty_cycle
+      state: "on"
+    - condition: state
+      entity_id: binary_sensor.starlink_duty_cycle_paused
+      state: "off"
+    - condition: state
+      entity_id: switch.a32_pro_switch26_starlink_power_supply
+      state: "on"
+    # Never cut the supply in the middle of a recovery power cycle.
+    - condition: state
+      entity_id: input_boolean.starlink_recovery_in_progress
+      state: "off"
+    - condition: template
+      value_template: >
+        {% set t = now().timestamp() %}
+        {% set opened = as_timestamp(states('input_datetime.starlink_window_started'), 0) %}
+        {% set synced = as_timestamp(states('input_datetime.starlink_relay_last_sync'), 0) %}
+        {% set hold = as_timestamp(states('input_datetime.starlink_relay_hold_until'), 0) %}
+        {{ t >= hold and ((synced > opened and t - opened >= 180) or t - opened >= 480) }}
   action:
     - action: switch.turn_off
       target:
         entity_id: switch.a32_pro_switch26_starlink_power_supply
 
-- id: starlink_morning_on
-  alias: "Starlink • back on in the morning (08:00)"
+# Paused (driving, shore power, someone in the van) or duty cycle switched off:
+# Starlink on now, not at the next window.
+- id: starlink_duty_resume_power
+  alias: "Starlink • on while the duty cycle is paused or off"
   mode: single
   trigger:
-    - trigger: time
-      at: "08:00:00"
+    - trigger: state
+      entity_id: binary_sensor.starlink_duty_cycle_paused
+      to: "on"
+    - trigger: state
+      entity_id: input_boolean.starlink_duty_cycle
+      to: "off"
   action:
     - action: switch.turn_on
       target:
         entity_id: switch.a32_pro_switch26_starlink_power_supply
+
+# Pause ended or duty cycle switched on while Starlink is running: treat the
+# time from now as a window, so it closes once the relay has synced (or after
+# 8 min) instead of straight away.
+- id: starlink_duty_restart_window
+  alias: "Starlink • duty cycle: start a window when it takes over"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: binary_sensor.starlink_duty_cycle_paused
+      to: "off"
+    - trigger: state
+      entity_id: input_boolean.starlink_duty_cycle
+      to: "on"
+  action:
+    - action: input_datetime.set_datetime
+      target:
+        entity_id: input_datetime.starlink_window_started
+      data:
+        timestamp: "{{ now().timestamp() }}"

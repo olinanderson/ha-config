@@ -4,11 +4,14 @@ const IS_LOCAL = /^(192\.168\.|10\.|100\.|172\.(1[6-9]|2\d|3[01])\.|localhost$)/
   location.hostname,
 );
 
-/** Local: direct to osrm_proxy. Remote (Nabu Casa): proxy through HA's HTTP API */
-const API_BASE = () =>
-  IS_LOCAL
-    ? `${location.protocol}//${location.hostname}:8765`
-    : `${location.origin}/api`;
+/**
+ * Local: direct to osrm_proxy. Remote (Nabu Casa): proxy through HA's HTTP API.
+ * The atlantis relay page sets __VAN_API_BASE__ to its own /api pass-through.
+ */
+export const vanApiBase = (): string =>
+  (window as { __VAN_API_BASE__?: string }).__VAN_API_BASE__ ??
+  (IS_LOCAL ? `${location.protocol}//${location.hostname}:8765` : `${location.origin}/api`);
+const API_BASE = vanApiBase;
 
 /** Get HA auth token — waits up to 5s for __HASS__ to be available */
 async function getAuthToken(): Promise<string | null> {

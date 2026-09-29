@@ -14,3 +14,23 @@ shore_power_last_seen:
   has_date: true
   has_time: true
   icon: mdi:power-plug
+# Starlink duty cycle (automations starlink_duty_*).
+# When the current window opened (set by HA).
+starlink_window_started:
+  name: "Starlink window started"
+  has_date: true
+  has_time: true
+  icon: mdi:timer-play-outline
+# Set by the atlantis relay once it has the latest state and has sent its queue.
+starlink_relay_last_sync:
+  name: "Starlink relay last sync"
+  has_date: true
+  has_time: true
+  icon: mdi:sync
+# The relay pushes this forward while someone is using the dashboard, so the
+# window stays open for them.
+starlink_relay_hold_until:
+  name: "Starlink relay hold until"
+  has_date: true
+  has_time: true
+  icon: mdi:timer-lock-outline

@@ -160,3 +160,25 @@
       icon: mdi:satellite-uplink
       state: >
         {{ states('binary_sensor.starlink_connectivity') in ['unavailable', 'unknown'] }}
+
+# ─── Starlink duty cycle paused ───
+# On while Starlink should stay on regardless of the duty cycle: driving, on
+# shore power, or someone in the van by day. Overnight (23:00–08:00) presence
+# doesn't count, which keeps the old night-time saving.
+- binary_sensor:
+    - name: "Starlink duty cycle paused"
+      unique_id: starlink_duty_cycle_paused
+      icon: mdi:satellite-variant
+      state: >
+        {{ is_state('binary_sensor.vehicle_is_moving', 'on')
+           or is_state('binary_sensor.shore_power_present', 'on')
+           or (is_state('binary_sensor.van_occupied', 'on')
+               and today_at('08:00') <= now() < today_at('23:00')) }}
+      attributes:
+        reason: >-
+          {%- if is_state('binary_sensor.vehicle_is_moving', 'on') -%} driving
+          {%- elif is_state('binary_sensor.shore_power_present', 'on') -%} shore power
+          {%- elif is_state('binary_sensor.van_occupied', 'on')
+                   and today_at('08:00') <= now() < today_at('23:00') -%} someone in the van
+          {%- else -%} none
+          {%- endif -%}

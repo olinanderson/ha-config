@@ -1,0 +1,40 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>Van</title>
+  <link rel="stylesheet" href="/van-dashboard.css" />
+  <style>
+    html, body { height: 100%; margin: 0; }
+    body { display: flex; flex-direction: column; background: #0b0f14; }
+    #root { flex: 1; min-height: 0; }
+    #relay-bar {
+      font: 12px/1.3 -apple-system, system-ui, sans-serif; color: #cbd5e1;
+      background: #111827; border-bottom: 1px solid #1f2937;
+      padding: 6px 12px; padding-top: max(6px, env(safe-area-inset-top));
+      display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
+    }
+    #relay-bar .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
+    #relay-bar .on { background: #22c55e; }
+    #relay-bar .off { background: #f59e0b; }
+    #relay-bar .muted { color: #94a3b8; }
+    #relay-bar button {
+      font: inherit; color: #e2e8f0; background: #1f2937; border: 1px solid #334155;
+      border-radius: 6px; padding: 2px 8px; cursor: pointer;
+    }
+    #relay-bar .spacer { flex: 1; }
+    #relay-bar ul { flex-basis: 100%; margin: 2px 0 0; padding: 0; list-style: none; }
+    #relay-bar li { display: flex; gap: 8px; align-items: center; padding: 2px 0; }
+    #relay-bar .fail { color: #f87171; }
+    #relay-bar .ok { color: #86efac; }
+  </style>
+</head>
+<body>
+  <div id="relay-bar"><span class="muted">Connecting to atlantis…</span></div>
+  <div id="root"></div>
+  <script type="module" src="/standalone.js"></script>
+</body>
+</html>

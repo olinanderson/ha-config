@@ -1,0 +1,13 @@
+{
+  "name": "van-relay",
+  "private": true,
+  "type": "module",
+  "description": "Stands in for Home Assistant while the van is offline between Starlink windows",
+  "scripts": {
+    "start": "node relay.mjs",
+    "test": "node --test"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  }
+}

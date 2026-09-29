@@ -151,3 +151,11 @@ night_climate_use_fan:
 night_climate_fan_by_room:
   name: "Night Climate runs the Roof Fan from the room sensor"
   icon: mdi:fan-alert
+
+# Starlink duty cycle (automations starlink_duty_*): when on, Starlink only runs
+# in short windows at :00 and :30 while nobody needs it, and the atlantis relay
+# (relay/) syncs and sends queued dashboard commands in each window. Turn it off
+# to keep Starlink on all the time.
+starlink_duty_cycle:
+  name: "Starlink duty cycle"
+  icon: mdi:satellite-uplink

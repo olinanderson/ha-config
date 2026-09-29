@@ -11,7 +11,9 @@ function getWindyRouteUrl(lat: number, lon: number, layer: WindyLayer): string {
   const hass = (window as any).__HASS__;
   const hassUrl = hass?.auth?.data?.hassUrl || `${window.location.protocol}//${window.location.hostname}:8123`;
   const isHttps = hassUrl.startsWith('https');
-  const apiBase = isHttps ? hassUrl + '/api' : hassUrl.replace(':8123', ':8765');
+  const apiBase =
+    (window as { __VAN_API_BASE__?: string }).__VAN_API_BASE__ ??
+    (isHttps ? hassUrl + '/api' : hassUrl.replace(':8123', ':8765'));
   const token = hass?.auth?.data?.access_token || '';
   return `${hassUrl}/local/react-dashboard/windy-route.html`
     + `?lat=${lat.toFixed(4)}&lon=${lon.toFixed(4)}`
