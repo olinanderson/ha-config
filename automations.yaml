@@ -2622,7 +2622,10 @@
 #   - once the relay has synced, at least 3 min after it opened (power-on to
 #     reachable over Tailscale measured 2 min 46–48 s on 2026-09-28), plus the
 #     relay's own 60 s hold so results of sent commands come back;
-#   - after 8 min at the latest if the relay never shows up;
+#   - not at all while the relay hasn't synced: a dish that doesn't come back
+#     stays powered, so starlink_auto_recover can power-cycle it (an 8 min cap
+#     here, removed the same day, cut it off first; the van stayed offline);
+#     if atlantis itself is down, Starlink simply stays on;
 #   - never while starlink_relay_hold_until is in the future (the relay pushes
 #     it forward while someone is actively using the dashboard).
 # binary_sensor.starlink_duty_cycle_paused keeps Starlink on while driving, on
@@ -2683,7 +2686,10 @@
         {% set opened = as_timestamp(states('input_datetime.starlink_window_started'), 0) %}
         {% set synced = as_timestamp(states('input_datetime.starlink_relay_last_sync'), 0) %}
         {% set hold = as_timestamp(states('input_datetime.starlink_relay_hold_until'), 0) %}
-        {{ t >= hold and ((synced > opened and t - opened >= 180) or t - opened >= 480) }}
+        {# No time cap: a window that never syncs stays open, so a dish stuck
+           after power-on gets starlink_auto_recover's power cycle (15 min)
+           instead of being switched off again first. #}
+        {{ t >= hold and synced > opened and t - opened >= 180 }}
   action:
     - action: switch.turn_off
       target:
@@ -2707,8 +2713,8 @@
         entity_id: switch.a32_pro_switch26_starlink_power_supply
 
 # Pause ended or duty cycle switched on while Starlink is running: treat the
-# time from now as a window, so it closes once the relay has synced (or after
-# 8 min) instead of straight away.
+# time from now as a window, so it closes once the relay has synced instead of
+# straight away.
 - id: starlink_duty_restart_window
   alias: "Starlink • duty cycle: start a window when it takes over"
   mode: single
