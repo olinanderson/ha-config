@@ -26,7 +26,13 @@ const hass = {
   user: { name: 'Olin', is_admin: true },
   auth: { data: { hassUrl: origin, access_token: 'relay' } },
   language: 'en',
+  // HA follows the device's appearance setting; do the same.
+  themes: { darkMode: matchMedia('(prefers-color-scheme: dark)').matches },
 };
+matchMedia('(prefers-color-scheme: dark)').addEventListener('change', (e) => {
+  hass.themes = { darkMode: e.matches };
+  window.dispatchEvent(new Event('hass-updated'));
+});
 
 V.subscribeEntities(conn, (ents) => {
   hass.states = ents;

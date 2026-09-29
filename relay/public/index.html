@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" class="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
@@ -8,28 +8,33 @@
   <title>Van</title>
   <link rel="stylesheet" href="/van-dashboard.css" />
   <style>
+    :root { --bar-bg: #f8fafc; --bar-fg: #334155; --bar-muted: #64748b; --bar-line: #e2e8f0; --btn-bg: #fff; --btn-line: #cbd5e1; }
+    @media (prefers-color-scheme: dark) {
+      :root { --bar-bg: #111827; --bar-fg: #cbd5e1; --bar-muted: #94a3b8; --bar-line: #1f2937; --btn-bg: #1f2937; --btn-line: #334155; }
+      body { background: #0b0f14; }
+    }
     html, body { height: 100%; margin: 0; }
-    body { display: flex; flex-direction: column; background: #0b0f14; }
+    body { display: flex; flex-direction: column; }
     #root { flex: 1; min-height: 0; }
     #relay-bar {
-      font: 12px/1.3 -apple-system, system-ui, sans-serif; color: #cbd5e1;
-      background: #111827; border-bottom: 1px solid #1f2937;
+      font: 12px/1.3 -apple-system, system-ui, sans-serif; color: var(--bar-fg);
+      background: var(--bar-bg); border-bottom: 1px solid var(--bar-line);
       padding: 6px 12px; padding-top: max(6px, env(safe-area-inset-top));
       display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px;
     }
     #relay-bar .dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; margin-right: 6px; }
     #relay-bar .on { background: #22c55e; }
     #relay-bar .off { background: #f59e0b; }
-    #relay-bar .muted { color: #94a3b8; }
+    #relay-bar .muted { color: var(--bar-muted); }
     #relay-bar button {
-      font: inherit; color: #e2e8f0; background: #1f2937; border: 1px solid #334155;
+      font: inherit; color: inherit; background: var(--btn-bg); border: 1px solid var(--btn-line);
       border-radius: 6px; padding: 2px 8px; cursor: pointer;
     }
     #relay-bar .spacer { flex: 1; }
     #relay-bar ul { flex-basis: 100%; margin: 2px 0 0; padding: 0; list-style: none; }
     #relay-bar li { display: flex; gap: 8px; align-items: center; padding: 2px 0; }
-    #relay-bar .fail { color: #f87171; }
-    #relay-bar .ok { color: #86efac; }
+    #relay-bar .fail { color: #dc2626; }
+    #relay-bar .ok { color: #16a34a; }
   </style>
 </head>
 <body>
