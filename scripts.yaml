@@ -589,6 +589,41 @@ starlink_recover_abort:
       data:
         value: 0
 
+# Timing test for a Starlink duty cycle: cut the supply for N minutes, then
+# restore it, so the time from power-on to "reachable over Tailscale" can be
+# measured from outside. HA has to bring the dish back itself — nobody can reach
+# it while the supply is off. recovery_in_progress is borrowed as the restart
+# fail-safe (starlink_recovery_resume_after_restart re-energises the supply if
+# HA restarts mid-test) and it also keeps starlink_auto_recover out of the way.
+starlink_power_off_test:
+  alias: "Starlink • power-off timing test"
+  icon: mdi:timer-sand
+  mode: single
+  max_exceeded: silent
+  fields:
+    minutes:
+      description: How long to keep the supply off
+      default: 25
+      selector:
+        number:
+          min: 1
+          max: 60
+  sequence:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.starlink_recovery_in_progress
+    - action: switch.turn_off
+      target:
+        entity_id: switch.a32_pro_switch26_starlink_power_supply
+    - delay:
+        minutes: "{{ minutes | default(25) | int }}"
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_switch26_starlink_power_supply
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.starlink_recovery_in_progress
+
 ########################################################################
 #  Shop Mode – apply the lockdown (idempotent)                         #
 ########################################################################
