@@ -1672,13 +1672,21 @@
 # A template trigger (not a state trigger) so it also re-arms correctly if HA
 # restarts or reloads while the dish is already dark — a state trigger would
 # need a transition that has already happened and would never fire.
+#
+# The supply switch is part of the template so the trigger re-arms when the
+# supply comes back on. Without it, the 23:00 night-off made the dish
+# unreachable, the 15 minutes ran out while the supply was still off (so the
+# condition below blocked it), and the template then stayed true all night: on
+# 2026-09-29 the dish failed to come back at 08:00 and nothing retried it until
+# it was cycled by hand at 15:00.
 - id: starlink_auto_recover
   alias: "Starlink • auto power-cycle when the link drops"
   mode: single
   trigger:
     - trigger: template
       value_template: >
-        {{ states('binary_sensor.starlink_connectivity') in ['unavailable', 'unknown'] }}
+        {{ is_state('switch.a32_pro_switch26_starlink_power_supply', 'on')
+           and states('binary_sensor.starlink_connectivity') in ['unavailable', 'unknown'] }}
       for: "00:15:00"
   condition:
     - condition: state
