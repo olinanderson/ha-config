@@ -2614,8 +2614,9 @@
 # ────────────────────────────────────────────────────────────────
 # Starlink duty cycle (2026-09-29; replaces the 23:00–08:00 night-off)
 # The dish draws ~33 W, the biggest load HA can cut. With
-# input_boolean.starlink_duty_cycle on, Starlink runs in short windows at :00
-# and :30. In each window the atlantis relay (relay/ in this repo) reconnects,
+# input_boolean.starlink_duty_cycle on, Starlink runs in a short window at the
+# top of each hour (every 30 min until 2026-09-29; hourly halves the power
+# cycles, and the dish sometimes fails to come back after one). In each window the atlantis relay (relay/ in this repo) reconnects,
 # stores the latest state for the dashboard it serves, sends any commands queued
 # while the van was offline, and marks input_datetime.starlink_relay_last_sync.
 # The window then closes:
@@ -2631,18 +2632,20 @@
 # binary_sensor.starlink_duty_cycle_paused keeps Starlink on while driving, on
 # shore power, or with someone in the van by day.
 # Each window is also a power cycle, which is what clears the PoE converter
-# latch-up (see starlink_auto_recover). A long off (9 h on 2026-09-28/29) is
-# what seems to trigger it; windows keep every off under 30 min.
+# latch-up (see starlink_auto_recover). It isn't only long offs that trigger
+# it: after 9 h off on 2026-09-28/29, but also after 8 and 22 min off on the
+# first duty-cycle afternoon; a window stays open until the relay syncs, so
+# auto-recover gets to power-cycle a dish that didn't come back.
 # There is deliberately no low-battery cut: a guard that held Starlink off
 # below 30 % (added 2026-09-26, removed 2026-09-29) left the van unreachable
 # for hours, with no way to check on it or undo the hold remotely.
 # ────────────────────────────────────────────────────────────────
 - id: starlink_duty_window_open
-  alias: "Starlink • duty cycle: open a window (:00 and :30)"
+  alias: "Starlink • duty cycle: open a window (every hour at :00)"
   mode: single
   trigger:
     - trigger: time_pattern
-      minutes: "/30"
+      minutes: 0
   condition:
     - condition: state
       entity_id: input_boolean.starlink_duty_cycle

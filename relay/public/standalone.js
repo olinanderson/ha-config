@@ -68,11 +68,11 @@ function ago(ms) {
   const h = Math.floor(m / 60);
   return `${h} h ${m % 60} min ago`;
 }
-// Windows open at :00 and :30; the van is reachable about 3 min later.
+// Windows open every hour at :00; the van is reachable about 3 min later.
 function nextSync() {
   const d = new Date(t());
   d.setSeconds(0, 0);
-  d.setMinutes(d.getMinutes() < 30 ? 30 : 60);
+  d.setMinutes(60);
   return d.getTime() + 3 * 60000;
 }
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
