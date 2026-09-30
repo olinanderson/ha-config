@@ -201,6 +201,10 @@ function connectUpstream() {
         applyEntityDiff(entities, m.event);
         broadcastEntities(m.event);
         markDirty();
+        // HA started a new window while the relay was already connected (a
+        // pause ended, or the duty cycle was switched on): the relay is in
+        // sync, so say so, or the window never closes.
+        if (online && (m.event.a?.[WINDOW_STARTED] || m.event.c?.[WINDOW_STARTED])) markSync();
       }
       return;
     }
@@ -218,12 +222,18 @@ async function goOnline() {
   // is set up again against the live HA.
   dropForwardingClients();
   await flushQueue();
+  await markSync();
+  pushHold(CFG.syncHoldMs).catch((e) => log('could not push the hold:', e.message));
+}
+
+const WINDOW_STARTED = 'input_datetime.starlink_window_started';
+
+async function markSync() {
   lastSync = now();
   markDirty();
   broadcastStatus();
   try {
     await setDatetime('input_datetime.starlink_relay_last_sync', lastSync);
-    await pushHold(CFG.syncHoldMs);
   } catch (e) {
     log('could not mark the sync in HA:', e.message);
   }

@@ -38,6 +38,7 @@ function fakeHa(calls) {
       if (m.type === 'auth') return ws.send(JSON.stringify({ type: 'auth_ok', ha_version: '2026.4.0' }));
       if (m.type === 'ping') return ws.send(JSON.stringify({ id: m.id, type: 'pong' }));
       if (m.type === 'subscribe_entities') {
+        fakeHa.pushEntities = (event) => ws.send(JSON.stringify({ id: m.id, type: 'event', event }));
         ws.send(JSON.stringify({ id: m.id, type: 'result', success: true, result: null }));
         return ws.send(
           JSON.stringify({
@@ -130,6 +131,13 @@ test('queues while offline, sends on reconnect', async () => {
     await until(() => calls.some((c) => c.target?.entity_id === 'input_datetime.starlink_relay_hold_until'));
     assert.deepEqual(JSON.parse(fs.readFileSync(path.join(dataDir, 'queue.json'), 'utf8')), []);
     await closed;
+
+    // Online: HA starts a new window (a pause ended); the relay marks a fresh sync.
+    const syncs = () => calls.filter((c) => c.target?.entity_id === 'input_datetime.starlink_relay_last_sync').length;
+    const syncsBefore = syncs();
+    fakeHa.pushEntities({ c: { 'input_datetime.starlink_window_started': { '+': { s: '2026-09-29 18:07:25' } } } });
+    fakeHa.pushEntities({ a: { 'input_datetime.starlink_window_started': { s: '2026-09-29 18:07:25', a: {}, c: 'w', lc: 2 } } });
+    await until(() => syncs() >= syncsBefore + 1);
 
     // Online: a new client's command goes straight through.
     const c2 = await relayClient();
