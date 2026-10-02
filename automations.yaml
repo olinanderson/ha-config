@@ -813,13 +813,16 @@
       # Wait 30 seconds to avoid toggling at traffic lights
       for: "00:00:30"
 
-    # When vehicle stops moving
+    # When vehicle stops moving. Long enough that if you park and walk away
+    # the radar has already dropped (van_occupied needs 3 min of nothing), so
+    # power saving just stays on. With 2 min it switched off at every errand
+    # stop, restoring lights, monitors and the inverter for the ~3 min until
+    # the away rule switched it back on (2026-09-30 to 10-02: 48 changes).
     - id: stop_driving
       trigger: state
       entity_id: binary_sensor.vehicle_is_moving
       to: "off"
-      # Wait 2 minutes to avoid toggling in stop-and-go traffic
-      for: "00:02:00"
+      for: "00:05:00"
 
   action:
     - choose:
@@ -841,6 +844,10 @@
             # Only if currently in power saving mode
             - condition: state
               entity_id: input_boolean.power_saving_mode
+              state: "on"
+            # and someone stayed in the van
+            - condition: state
+              entity_id: binary_sensor.van_occupied
               state: "on"
           sequence:
             - action: script.power_saving_mode_off
