@@ -118,6 +118,26 @@ function resolveView(view: ViewWindow | null, data: HistoryPoint[]): [number, nu
   return [lo, lo + span];
 }
 
+// Value + time next to the hover dot, on the right of it unless that would run
+// past the plot, and above it unless that would leave the top.
+function HoverLabel({ x, y, value, time, color, left, right, top, bottom }: {
+  x: number; y: number; value: string; time: string; color: string;
+  left: number; right: number; top: number; bottom: number;
+}) {
+  const w = Math.max(value.length * 7.5, time.length * 5.6) + 14;
+  const h = 34;
+  const gap = 10;
+  const bx = x + gap + w <= right ? x + gap : Math.max(left, x - gap - w);
+  const by = Math.min(Math.max(y - h - gap, top), bottom - h);
+  return (
+    <g pointerEvents="none">
+      <rect x={bx} y={by} width={w} height={h} rx={6} fill="hsl(var(--card))" stroke={color} strokeOpacity={0.5} />
+      <text x={bx + 7} y={by + 15} fontSize={13} fontWeight={600} fill={color}>{value}</text>
+      <text x={bx + 7} y={by + 28} fontSize={10} className="fill-muted-foreground">{time}</text>
+    </g>
+  );
+}
+
 // Zoom survives data updates. Key the chart on the series (entity + range) so
 // a new fetch starts unzoomed.
 export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6', unit = '', trend = false }: ChartProps) {
@@ -702,6 +722,19 @@ export function HistoryChart({ data, width = 600, height = 250, color = '#3b82f6
               fill={color}
               stroke="hsl(var(--card))"
               strokeWidth={2}
+            />
+            <HoverLabel
+              x={toX(hoverPoint.t)}
+              y={toY(hoverPoint.v)}
+              value={`${fmtV(hoverPoint.v)}${unit}`}
+              time={new Date(hoverPoint.t).toLocaleString([], showDates
+                ? { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }
+                : { hour: 'numeric', minute: '2-digit' })}
+              color={color}
+              left={margin.left}
+              right={width - margin.right}
+              top={margin.top}
+              bottom={margin.top + chartH}
             />
           </>
         )}
