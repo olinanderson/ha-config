@@ -1,18 +1,11 @@
-import { useCallback } from 'react';
-import { BatteryWarning, Droplets, Flame, Lightbulb, Trash2 } from 'lucide-react';
-import { useEntity } from '@/hooks/useEntity';
+import { BatteryWarning, Droplets, Flame, Fuel, Trash2 } from 'lucide-react';
+import { useEntityNumeric } from '@/hooks/useEntity';
 import { useTankLevel } from '@/hooks/useTankLevel';
 import { usePropane, propaneProblemText, PROPANE_PCT_ID } from '@/hooks/usePropane';
-import { useService } from '@/hooks/useService';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
 import { cn, fmt } from '@/lib/utils';
 
-export const LIGHT_IDS = [
-  'light.led_controller_cct_1',
-  'light.led_controller_cct_2',
-  'light.led_controller_sc_1',
-  'light.led_controller_sc_2',
-];
+const FUEL_ID = 'sensor.stable_fuel_level';
 
 // One line each, so the row costs the phone driving screen as little height as
 // possible (docs/react-dashboard.md → Van Page on a Phone).
@@ -62,44 +55,31 @@ function Chip({
 
 const pct = (n: number | null) => (n == null ? '—' : `${fmt(n, 0)}%`);
 
-/** Propane, fresh and grey water, and the lights, at the top of the Van page. */
+/** Fuel, fresh and grey water, and propane, at the top of the Van page. */
 export function VanBadges() {
-  const { value: propane, problem: propaneProblem, battery: propaneBattery } = usePropane();
+  const { value: fuel } = useEntityNumeric(FUEL_ID);
   const { value: fresh, entityId: freshId } = useTankLevel('fresh');
   const { value: grey, entityId: greyId } = useTankLevel('grey');
-  const l1 = useEntity(LIGHT_IDS[0]);
-  const l2 = useEntity(LIGHT_IDS[1]);
-  const l3 = useEntity(LIGHT_IDS[2]);
-  const l4 = useEntity(LIGHT_IDS[3]);
-  const lightsOn = [l1, l2, l3, l4].filter((l) => l?.state === 'on').length;
-
+  const { value: propane, problem: propaneProblem, battery: propaneBattery } = usePropane();
   const { open } = useHistoryDialog();
-  const callService = useService();
-  const toggleLights = useCallback(() => {
-    callService('light', lightsOn > 0 ? 'turn_off' : 'turn_on', undefined, {
-      entity_id: LIGHT_IDS,
-    });
-  }, [callService, lightsOn]);
 
   return (
     <div className="grid grid-cols-4 gap-2">
       <Chip
-        label="Propane"
-        value={propaneProblem === 'dead' ? 'Battery dead' : pct(propane)}
-        alert={propaneProblem === 'dead'}
-        warn={propaneProblem === 'low'}
+        label="Fuel"
+        value={pct(fuel)}
         color={
-          propane == null
+          fuel == null
             ? 'text-muted-foreground'
-            : propane < 15
+            : fuel < 15
               ? 'text-red-500'
-              : propane < 30
+              : fuel < 30
                 ? 'text-orange-500'
                 : 'text-green-500'
         }
-        icon={Flame}
-        title={propaneProblemText(propaneProblem, propaneBattery) || 'Propane history'}
-        onClick={() => open(PROPANE_PCT_ID, 'Propane', '%')}
+        icon={Fuel}
+        title="Fuel history"
+        onClick={() => open(FUEL_ID, 'Fuel Level', '%')}
       />
       <Chip
         label="Fresh"
@@ -134,12 +114,22 @@ export function VanBadges() {
         onClick={() => open(greyId, 'Grey Water', '%')}
       />
       <Chip
-        label="Lights"
-        value={lightsOn > 0 ? `${lightsOn} on` : 'Off'}
-        color={lightsOn > 0 ? 'text-yellow-500' : 'text-muted-foreground'}
-        icon={Lightbulb}
-        title={lightsOn > 0 ? 'Turn all lights off' : 'Turn all lights on'}
-        onClick={toggleLights}
+        label="Propane"
+        value={propaneProblem === 'dead' ? 'Battery dead' : pct(propane)}
+        alert={propaneProblem === 'dead'}
+        warn={propaneProblem === 'low'}
+        color={
+          propane == null
+            ? 'text-muted-foreground'
+            : propane < 15
+              ? 'text-red-500'
+              : propane < 30
+                ? 'text-orange-500'
+                : 'text-green-500'
+        }
+        icon={Flame}
+        title={propaneProblemText(propaneProblem, propaneBattery) || 'Propane history'}
+        onClick={() => open(PROPANE_PCT_ID, 'Propane', '%')}
       />
     </div>
   );

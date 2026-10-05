@@ -155,9 +155,10 @@ of `sensor.night_climate_status`, whose full text is the line's tooltip. Tests:
 
 ## Van Page Badges and Tank Levels
 
-`src/components/VanBadges.tsx` is the one-line row at the top of the Van page: Propane, Fresh, Grey and
-Lights. Tapping a level opens its history. Tapping Lights turns all four LED controllers off, or on when
-none is on, the same as the Home badge. Propane everywhere (Van and Home badges, Water card) goes through
+`src/components/VanBadges.tsx` is the one-line row at the top of the Van page: Fuel, Fresh, Grey and
+Propane, in that order. Tapping one opens its history. Fuel is `sensor.stable_fuel_level`, coloured like
+the Fuel card (red under 15 %, orange under 30 %). The row had a Lights toggle until 2026-10-04, when it
+gave way to Fuel at the user's request; the Home badge still toggles the lights. Propane everywhere (Van and Home badges, Water card) goes through
 `src/hooks/usePropane.ts`. When the Mopeka itself (`sensor.pro_check_f317_tank_level`) is unavailable it
 shows **Battery dead** in orange instead of a level, and the Water card hides its bar and says to replace
 the coin cell. A silent sensor under a fixed tank is its battery (it died that way on 2026-07-23), and
