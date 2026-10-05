@@ -27,9 +27,16 @@ for f in dist/van-dashboard.js dist/van-dashboard.css panel-loader.js; do
   echo "  -> $(basename "$f")"
 done
 
+# Tracked dashboard changes, plus new source files (not stray screenshots).
+changes=$( { git -C .. status --short --untracked-files=no -- react-dashboard www/react-dashboard docs/react-dashboard.md
+             git -C .. ls-files --others --exclude-standard -- react-dashboard/src | sed 's/^/?? /'; } )
 echo ""
-echo "Nothing has gone to HA yet. Dashboard changes in the repo:"
-git -C .. status --short -- react-dashboard www/react-dashboard docs/react-dashboard.md | sed 's/^/  /'
+if [ -z "$changes" ]; then
+  echo "The bundle is identical to the committed one: nothing to commit or deploy."
+  exit 0
+fi
+echo "Nothing has gone to HA yet. Dashboard changes to commit:"
+echo "$changes" | sed 's/^/  /'
 
 # Other uncommitted work can stay where it is, but not in the dashboard commit.
 other=$(git -C .. status --porcelain --untracked-files=no -- . ':!react-dashboard/' ':!www/react-dashboard/' ':!docs/react-dashboard.md')
@@ -43,7 +50,8 @@ cat <<'MSG'
 
 Next:
   1. Commit the source together with the bundle, from the repo root:
-       git add react-dashboard www/react-dashboard && git commit
+       git add react-dashboard/src www/react-dashboard && git commit
+     Add docs/react-dashboard.md or any other file above that belongs to the change.
   2. Deploy from the repo root: bash deploy.sh
      (pushes to GitHub, fast-forwards /config on HA)
   3. Hard-refresh the browser (Ctrl+Shift+R / Cmd+Shift+R) or reopen the HA app.

@@ -23,7 +23,7 @@ A failing test or a TypeScript error stops it before anything is copied. It neve
 ### 3. Commit and deploy
 ```bash
 cd ..
-git add react-dashboard www/react-dashboard   # plus docs/react-dashboard.md if you changed it
+git add react-dashboard/src www/react-dashboard   # plus docs/react-dashboard.md or anything else the change touched
 git commit
 bash deploy.sh    # pushes to GitHub, fast-forwards /config on HA
 ```
