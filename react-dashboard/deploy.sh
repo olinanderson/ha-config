@@ -1,50 +1,51 @@
 #!/usr/bin/env bash
-# Deploy built React dashboard to Home Assistant
-# Run from the react-dashboard directory: ./deploy.sh
-
+# Build the React dashboard into www/react-dashboard/, ready for the git deploy.
+# Run as `npm run deploy` or `bash deploy.sh` from react-dashboard/.
+#
+# It never writes to HA. /config on HA is a git checkout of this repo (since
+# 2026-09-25) and www/react-dashboard/* is tracked, so a copy straight onto HA
+# leaves its checkout modified and the next top-level deploy.sh fails at
+# `git merge --ff-only`. That happened on 2026-10-04, after the 2026-10-02
+# bundle had only been copied over by the old version of this script.
+#
+#   npm test -> npm run build -> copy into ../www/react-dashboard/
+#   then: commit, and run `bash deploy.sh` from the repo root
 set -euo pipefail
 
-SSH_HOST="hassio@100.80.15.86"
-SSH_KEY="$HOME/.ssh/id_ed25519"
-REMOTE_DIR="/config/www/react-dashboard"
-LOCAL_DIST="dist"
+cd "$(dirname "$0")"
+WWW="../www/react-dashboard"
+
+echo "Testing..."
+npm test
 
 echo "Building..."
 npm run build
 
-echo "Deploying to HA..."
-
-# Create remote directory
-ssh -i "$SSH_KEY" "$SSH_HOST" "sudo mkdir -p $REMOTE_DIR"
-
-# Deploy built JS + CSS
-for file in "$LOCAL_DIST"/van-dashboard.js "$LOCAL_DIST"/van-dashboard.css; do
-  if [ -f "$file" ]; then
-    fname=$(basename "$file")
-    echo "  → $fname"
-    cat "$file" | ssh -i "$SSH_KEY" "$SSH_HOST" "cat > /tmp/$fname && sudo cp /tmp/$fname $REMOTE_DIR/$fname && rm /tmp/$fname"
-  fi
+echo "Copying into www/react-dashboard/..."
+for f in dist/van-dashboard.js dist/van-dashboard.css panel-loader.js; do
+  cp "$f" "$WWW/$(basename "$f")"
+  echo "  -> $(basename "$f")"
 done
 
-# Deploy panel loader
-echo "  → panel-loader.js"
-cat panel-loader.js | ssh -i "$SSH_KEY" "$SSH_HOST" "cat > /tmp/panel-loader.js && sudo cp /tmp/panel-loader.js $REMOTE_DIR/panel-loader.js && rm /tmp/panel-loader.js"
+echo ""
+echo "Nothing has gone to HA yet. Dashboard changes in the repo:"
+git -C .. status --short -- react-dashboard www/react-dashboard docs/react-dashboard.md | sed 's/^/  /'
 
-echo ""
-echo "Done! Files deployed to $REMOTE_DIR"
-echo ""
-echo "Add to configuration.yaml if not already present:"
-echo ""
-echo "  panel_custom:"
-echo "    - name: van-dashboard"
-echo "      url_path: van-dashboard"
-echo "      sidebar_title: Dashboard"
-echo "      sidebar_icon: mdi:view-dashboard"
-echo "      module_url: /local/react-dashboard/panel-loader.js"
-echo "      embed_iframe: false"
-echo "      trust_external_script: true"
-echo ""
-echo "Then restart HA or reload the frontend."
-echo ""
-echo "⚠️  IMPORTANT: Hard-refresh the browser (Ctrl+Shift+R / Cmd+Shift+R) after deploy"
-echo "   to force reload of cached JS/CSS. A normal refresh WON'T pick up the new build."
+# Other uncommitted work can stay where it is, but not in the dashboard commit.
+other=$(git -C .. status --porcelain --untracked-files=no -- . ':!react-dashboard/' ':!www/react-dashboard/' ':!docs/react-dashboard.md')
+if [ -n "$other" ]; then
+  echo ""
+  echo "Also uncommitted, outside the dashboard (leave these out of its commit):"
+  echo "$other" | sed 's/^/  /'
+fi
+
+cat <<'MSG'
+
+Next:
+  1. Commit the source together with the bundle, from the repo root:
+       git add react-dashboard www/react-dashboard && git commit
+  2. Deploy from the repo root: bash deploy.sh
+     (pushes to GitHub, fast-forwards /config on HA)
+  3. Hard-refresh the browser (Ctrl+Shift+R / Cmd+Shift+R) or reopen the HA app.
+     A normal refresh WON'T pick up the new build.
+MSG

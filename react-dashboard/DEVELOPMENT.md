@@ -2,7 +2,7 @@
 
 ## The Golden Rule
 
-**After every code change: build → deploy → open the dashboard → check the browser console.**
+**After every code change: `npm run deploy` → commit → `bash deploy.sh` → open the dashboard → check the browser console.**
 
 TypeScript and tests catch a lot, but some things (missing HA entities, API failures, layout issues, Leaflet quirks) only show up in the real browser against the real van system. Don't skip the visual check.
 
@@ -11,27 +11,28 @@ TypeScript and tests catch a lot, but some things (missing HA entities, API fail
 ## Making Changes
 
 ### 1. Edit source files
-All source is in `react-dashboard/src/`. The workspace syncs to HA via Syncthing, but the **built files** (`www/react-dashboard/van-dashboard.js` and `.css`) are what HA actually serves.
+All source is in `react-dashboard/src/`. HA serves the **built files** in `www/react-dashboard/` (`van-dashboard.js`, `van-dashboard.css`, `panel-loader.js`). They are tracked in git and reach HA only through the repo's git deploy: `/config` on HA is a git checkout of this repo (since 2026-09-25).
 
-### 2. Build
+### 2. Test, build and copy into www/
 ```bash
 cd react-dashboard
-npm run build
+npm run deploy    # = bash deploy.sh: npm test, npm run build, copy into ../www/react-dashboard/
 ```
-TypeScript errors fail the build — fix them before continuing.
+A failing test or a TypeScript error stops it before anything is copied. It never writes to HA, and at the end it lists the dashboard files that changed (and warns about any other uncommitted work, which belongs in its own commit).
 
-### 3. Deploy (copy to www/)
+### 3. Commit and deploy
 ```bash
-# Windows (PowerShell)
-Copy-Item dist/van-dashboard.js ../www/react-dashboard/van-dashboard.js
-Copy-Item dist/van-dashboard.css ../www/react-dashboard/van-dashboard.css
+cd ..
+git add react-dashboard www/react-dashboard   # plus docs/react-dashboard.md if you changed it
+git commit
+bash deploy.sh    # pushes to GitHub, fast-forwards /config on HA
 ```
-Syncthing pushes `www/` to HA automatically (~10s).
-
-> **TODO**: There's a `deploy.sh` referenced in package.json but it doesn't exist yet. Create it when needed.
+Always commit the source together with its bundle. Never copy files onto HA by hand (scp, or the old version of `react-dashboard/deploy.sh`): HA's checkout then has local changes and the next `deploy.sh` stops at `git merge --ff-only`. That happened on 2026-10-04, after the 2026-10-02 bundle had only been copied over. Once a committed bundle at least as new is ready, clear it with `ssh hassio@100.80.15.86 'sudo git -C /config checkout -- www/react-dashboard'` and deploy again.
 
 ### 4. Open the dashboard
-`http://100.80.15.86:8123` → navigate to the changed page
+`http://100.80.15.86:8123` → navigate to the changed page.
+
+⚠️ **Hard-refresh** (Ctrl+Shift+R / Cmd+Shift+R) after a deploy, or close and reopen the HA app. A normal refresh WON'T pick up the new build.
 
 ### 5. Check the browser console ✅
 Open DevTools → Console. Look for:
@@ -100,7 +101,8 @@ beforeEach(() => {
 |---|---|---|
 | Missing HA entity | Component renders nothing / `undefined` | Check entity ID in HA dev tools |
 | dvr_proxy down | Camera page shows "Loading..." forever | SSH → check `ps aux \| grep dvr_proxy` |
-| Syncthing not synced | Changes not appearing | Check Syncthing at `http://100.80.15.86:8384` |
+| Old build still showing | Changes not appearing | Hard-refresh. Then check HA has the commit: `ssh hassio@100.80.15.86 'sudo git -C /config log -1 --oneline'` |
+| `deploy.sh` fails at `git merge --ff-only` | Top-level deploy stops after the push | HA's checkout has local changes, usually files copied over by hand. See "Commit and deploy" above |
 | Leaflet CSS not loaded | Map shows broken tiles | Ensure `import 'leaflet/dist/leaflet.css'` in the page |
 | CORS on Open-Meteo/RainViewer | Console shows CORS errors | These are public APIs — only happens if blocked (van on cellular with filtering) |
 | Build succeeds but page is blank | JS runtime error | Check console for the actual error |
@@ -124,7 +126,7 @@ react-dashboard/
 └── package.json
 ```
 
-The built files that get deployed to HA:
+The built files HA serves, tracked in git and deployed by the top-level `deploy.sh`:
 ```
 www/react-dashboard/
 ├── van-dashboard.js      # Everything bundled
@@ -140,4 +142,4 @@ www/react-dashboard/
 1. Create `src/components/MyWidget.tsx`
 2. Add a test in `src/test/MyWidget.test.tsx` — minimum: renders without crash + no console errors
 3. Import and use in the relevant page
-4. `npm test` → `npm run build` → deploy → visual check in browser
+4. `npm run deploy` → commit → `bash deploy.sh` → visual check in browser
