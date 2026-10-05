@@ -38,12 +38,14 @@ function windColor(speed: number): string {
   return '#ef4444';
 }
 
-/** Draw a wind arrow icon as a canvas data URL */
-function windArrowIcon(speed: number, dir: number, size = 32): string {
+/** Draw a wind arrow icon as a canvas data URL, or null when there is no 2D
+ *  context (jsdom in the tests has none, and a browser may refuse one). */
+function windArrowIcon(speed: number, dir: number, size = 32): string | null {
   const canvas = document.createElement('canvas');
   canvas.width = size;
   canvas.height = size;
-  const ctx = canvas.getContext('2d')!;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) return null;
   const cx = size / 2, cy = size / 2;
   const color = windColor(speed);
 
@@ -170,10 +172,14 @@ function WindLeafletMap({ lat, lon, zoom = 6, height = 'h-52' }: { lat: number; 
       markersRef.current = [];
 
       pts.forEach((p) => {
+        // Without an arrow the speed label still shows
         const dataUrl = windArrowIcon(p.speed, p.dir, 28);
-        const arrowIcon = L.icon({ iconUrl: dataUrl, iconSize: [28, 28], iconAnchor: [14, 14] });
-        const m = L.marker([p.lat, p.lon], { icon: arrowIcon, interactive: false });
-        m.addTo(mapRef.current!);
+        if (dataUrl) {
+          const arrowIcon = L.icon({ iconUrl: dataUrl, iconSize: [28, 28], iconAnchor: [14, 14] });
+          const m = L.marker([p.lat, p.lon], { icon: arrowIcon, interactive: false });
+          m.addTo(mapRef.current!);
+          markersRef.current.push(m);
+        }
         // Speed label
         const labelIcon = L.divIcon({
           html: `<span style="color:${windColor(p.speed)};font-size:9px;font-weight:600;white-space:nowrap;text-shadow:0 1px 2px #000">${Math.round(p.speed)}</span>`,
@@ -181,7 +187,7 @@ function WindLeafletMap({ lat, lon, zoom = 6, height = 'h-52' }: { lat: number; 
         });
         const lbl = L.marker([p.lat, p.lon], { icon: labelIcon, interactive: false });
         lbl.addTo(mapRef.current!);
-        markersRef.current.push(m, lbl);
+        markersRef.current.push(lbl);
       });
     });
 
