@@ -5,7 +5,7 @@
 | Mode | Script ON | Script OFF | Description |
 |---|---|---|---|
 | **Power Saving** | `script.power_saving_mode_on` | `script.power_saving_mode_off` | Lights off, monitors off, water off; auto on leaving/driving |
-| **Sleep Mode** | `script.sleep_mode_on` | `script.wake_up_routine` | Pre-bed wind-down: monitors off, lights dim (cabinet 70% / skylight 40% / main 10%), all off after 5 min. Cancel mid-wind-down restores prior state; turning off after it completes runs the morning wake-up. Starlink: start +30 min, default 1 AM MST on off |
+| **Sleep Mode** | `script.sleep_mode_on` | `script.wake_up_routine` | Bedtime: monitors and every interior light off at once, and the Night climate program starts (if the mode was Off or Hold). Night on the Climate Program card turns it on too. Off within 5 min puts lights and monitors back as they were; later it runs the morning wake-up. Until 2026-10-05 it dimmed the lights for a 5-min wind-down first. Starlink: start +30 min, default 1 AM MST on off |
 | **Shower Mode** | `script.shower_mode_on` | `script.shower_mode_off` | Lights 100%, water recirc, roof fan exhaust 60% |
 | **Cook Mode** | `script.cook_mode` | `script.cook_mode_off` | LPG valve open, lights 100%, roof fan exhaust 60% |
 | **Bedtime** | `script.bedtime_routine` | — | Progressive 10-min shutdown |
@@ -26,7 +26,8 @@
 
 Hooks: the Schedule page's **Night** preset (a scheduler entry, 00:30 daily by default) sets the targets and
 the wake time and picks the mode, which starts the program; Sleep Mode on → Program (only if the mode was
-Off); Sleep Mode off → Off. The wake time sets the
+Off or Hold); Night picked on the card by a person → Sleep Mode on (`night_climate_night_starts_sleep`, not
+for the schedule, so it never switches the lights off by itself); Sleep Mode off → Off. The wake time sets the
 mode to Off (fan and A/C off; the heater is left where the warm-up put it) and runs
 `script.wake_up_routine`. The target stays at the wake target until 5 min past the wake time: the controller's
 5-min tick fires in the same second, and until 2026-10-05 it saw the night target first and switched the
@@ -125,7 +126,7 @@ with the 1200-baud rule above.
 | `keep_home_zone_on_starlink` | Move HA home zone to u-blox GPS (`device_tracker.ublox_gps`) every 5 min |
 | `rolling_last_active_snapshot_1hz` | 1Hz scene snapshot |
 | Shelly EM 1s ping | Update inverter detection every second |
-| `night_climate_*` (×6) | Night Climate: controller (5-min loop), start with Sleep Mode, stop with Sleep Mode, fan + A/C off when the mode goes Off, wake time, roof-fan watchdog (re-sends off if the motor draws power while HA has it off) |
+| `night_climate_*` (×7) | Night Climate: controller (5-min loop, skipped while shore power or the target is unavailable, e.g. during a reload), start with Sleep Mode, Night on the card turns Sleep Mode on, stop with Sleep Mode, fan + A/C off when the mode goes Off, wake time, roof-fan watchdog (re-sends off if the motor draws power while HA has it off) |
 | `shore_power_seen` | Keeps `input_datetime.shore_power_last_seen` for `binary_sensor.shore_power_present` (charger drew power within 3 h) |
 | `syncthing_start_on_boot` | Start Syncthing 30s after HA boot |
 | `dvr_proxy_start_on_boot` | Start DVR proxy 40s after HA boot |

@@ -1046,15 +1046,19 @@
         entity_id: scene.pre_shower_mode_state
 
 # ────────────────────────────────────────────────────────────────
-# Sleep Mode – pre-bed wind-down (dim now, all lights off after 5 min)
+# Sleep Mode – lights and monitors off at once, the night climate starts
 #   Triggered by input_boolean.sleep_mode so the dashboard toggle,
-#   voice "goodnight", and script.sleep_mode_on all run this routine.
-#   Cancelling within the 5 min aborts the shutdown and restores the
-#   pre-sleep state (see sleep_mode_off_restore).
+#   voice "goodnight", script.sleep_mode_on and Night on the Climate
+#   Program card (night_climate_night_starts_sleep) all run this routine.
+#   The Night program itself is started by night_climate_start_on_sleep.
+#   Until 2026-10-05 this dimmed the lights for a 5-min wind-down; the
+#   user asked for everything off when they press Sleep. Turning Sleep off
+#   within those 5 min still just puts the lights and monitors back (see
+#   sleep_mode_off_restore).
 # ────────────────────────────────────────────────────────────────
 - id: sleep_mode_on_actions
-  alias: "Sleep Mode – Pre-bed wind-down on toggle ON"
-  # restart: re-pressing (off→on) starts a fresh wind-down with a new snapshot
+  alias: "Sleep Mode – lights off on toggle ON"
+  # restart: re-pressing (off→on) starts a fresh cycle with a new snapshot
   mode: restart
   trigger:
     - trigger: state
@@ -1097,31 +1101,20 @@
           - switch.a32_pro_do8_switch06_top_monitor
           - switch.a32_pro_do8_switch07_bottom_monitor
 
-    # Wind-down lighting: under-cabinet 70 %, skylight (Accent) 40 %, main 10 %
-    - action: light.turn_on
-      target:
-        entity_id: light.led_controller_cct_2   # under-cabinet
-      data:
-        brightness_pct: 70
-    - action: light.turn_on
-      target:
-        entity_id: light.led_controller_sc_2    # skylight (Accent)
-      data:
-        brightness_pct: 40
-    - action: light.turn_on
-      target:
-        entity_id: light.led_controller_cct_1   # main
-      data:
-        brightness_pct: 10
-
-    # Turn every other interior light off (shower)
+    # Every interior light off
     - action: light.turn_off
       target:
-        entity_id: light.led_controller_sc_1    # shower
+        entity_id:
+          - light.led_controller_cct_1
+          - light.led_controller_cct_2
+          - light.led_controller_sc_1
+          - light.led_controller_sc_2
+          - light.main_lighting_switch
+          - light.under_cabinet_lighting_switch
 
     # Schedule Starlink sleep start (+30 min). continue_on_error so a Starlink
-    # hiccup (e.g. time entity unavailable) can never abort the wind-down
-    # before the 5-min auto-off below.
+    # hiccup (e.g. time entity unavailable) can never abort the routine
+    # before the 5-min cancel window below.
     - action: script.starlink_sleep_start_after_30m
       continue_on_error: true
 
@@ -1143,25 +1136,15 @@
                   {% set hour = (8 + delta) % 24 %}
                   {{ '%02d:%02d:%02d' % (hour, 15, 0) }}
 
-    # ~5 min for the nightly routine, then turn everything off — but only
-    # if sleep mode wasn't cancelled (which would have restored state).
+    # 5 min in which Sleep off is a cancel (lights and monitors back as they
+    # were); after that mark as asleep so the next OFF runs the morning
+    # wake-up routine instead of a plain restore.
     - delay: "00:05:00"
     - if:
         - condition: state
           entity_id: input_boolean.sleep_mode
           state: "on"
       then:
-        - action: light.turn_off
-          target:
-            entity_id:
-              - light.led_controller_cct_1
-              - light.led_controller_cct_2
-              - light.led_controller_sc_1
-              - light.led_controller_sc_2
-              - light.main_lighting_switch
-              - light.under_cabinet_lighting_switch
-        # Wind-down finished → mark as asleep so the next OFF runs the
-        # morning wake-up routine instead of a plain restore.
         - action: input_boolean.turn_on
           target:
             entity_id: input_boolean.sleep_winddown_complete
@@ -2238,6 +2221,26 @@
       data:
         option: Program
 
+# Night on the Climate Program card is bedtime: it turns Sleep Mode on (lights
+# and monitors off), the user's wish since 2026-10-05. Only when a person picked
+# it, so the 00:30 Night schedule never switches the lights off by itself.
+- id: night_climate_night_starts_sleep
+  alias: "Night Climate – Night on the card turns Sleep Mode on"
+  mode: single
+  trigger:
+    - trigger: state
+      entity_id: input_select.night_climate_mode
+      to: Program
+  condition:
+    - condition: state
+      entity_id: input_boolean.sleep_mode
+      state: "off"
+    - "{{ trigger.to_state.context.user_id is not none }}"
+  action:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.sleep_mode
+
 - id: night_climate_stop_on_sleep_off
   alias: "Night Climate – stop when Sleep Mode ends"
   mode: single
@@ -2320,6 +2323,11 @@
       to:
   condition:
     - "{{ states('input_select.night_climate_mode') not in ['Off', 'unknown', 'unavailable'] }}"
+    # A template reload (every deploy) leaves these unavailable for a moment;
+    # shore power reading "off" then would switch the A/C off at once.
+    - >-
+      {{ states('binary_sensor.shore_power_present') in ['on', 'off']
+         and states('sensor.night_climate_target') not in ['unknown', 'unavailable'] }}
   action:
     - variables:
         mode: "{{ states('input_select.night_climate_mode') }}"
