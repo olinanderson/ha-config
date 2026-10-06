@@ -2187,16 +2187,17 @@
 # ────────────────────────────────────────────────────────────────
 # Night Climate – hold a night target, warm up for the wake time
 #   Mode (input_select.night_climate_mode) is what runs now:
-#     Program       heater when cold; roof fan when warm and cooler outside
-#                   (its own thermostat, or HA from the room sensor when that
-#                   sits idle); A/C only above "A/C above", on shore power and
-#                   not while it is clearly colder outside; night target, then
-#                   the wake target from the warm-up
+#     Program       heater when cold; when warm, on shore power the A/C
+#                   (above "A/C above", full fan), off shore the roof fan while
+#                   it is cooler outside (its own thermostat, or HA from the
+#                   room sensor when that sits idle); night target, then the
+#                   wake target from the warm-up
 #     Hold          the same, at the hold target, with no end (daytime use)
 #     Fan all night / A/C all night / Heater
 #                   one appliance until the wake time
-#   Sleep Mode ON starts the Program; the wake time ends everything and
-#   turns Sleep Mode off (wake_up_routine). The heater is left where the
+#   Sleep Mode ON starts the Program, and Night picked on the card turns
+#   Sleep Mode on; the wake time ends everything and turns Sleep Mode off
+#   (wake_up_routine). The heater is left where the
 #   warm-up put it (the old 07:30 scheduler entry is gone since 2026-09-17,
 #   the warm-up is the morning heat). Sensors in template/night_climate.yaml.
 #   One-way IR is backed up three ways since the night of 2026-09-18: the AG
