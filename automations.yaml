@@ -2344,8 +2344,10 @@
         # Cooler outside: worth starting (1 °C) and worth keeping (0.3 °C)
         fan_ok: "{{ room is not none and outdoor is not none and outdoor < room - 1 }}"
         fan_keep: "{{ room is not none and outdoor is not none and outdoor < room - 0.3 }}"
-        # Clearly colder outside and the fan allowed: cooling is the fan's job, not the A/C's
-        fan_can_cool: "{{ use_fan and room is not none and outdoor is not none and outdoor < room - 3 }}"
+        # On shore power the A/C is the cooling tool and the roof fan stays
+        # off; off shore the roof fan takes its place (the user's rule since
+        # 2026-10-05, replacing "the fan whenever it is 3 °C colder outside").
+        ac_ok: "{{ use_ac and shore }}"
         # 20 min on its own thermostat in a warm room and the motor has not
         # turned for 10 min: that thermostat is not doing the job (2026-09-18:
         # in Intake its sensor sits in the incoming air; 103 s of running all night).
@@ -2355,7 +2357,7 @@
              and (now() - run.last_changed).total_seconds() > 600
              and (now() - states.switch.ag_pro_roof_fan_thermostat.last_changed).total_seconds() > 1200 }}
         ac_wanted: >-
-          {{ use_ac and shore and room is not none and room > cool_above and not fan_can_cool }}
+          {{ ac_ok and room is not none and room > cool_above }}
         fan_settings:
           direction: "{{ states('input_select.night_climate_fan_direction') }}"
           speed: "{{ states('input_number.night_climate_fan_speed') | int(30) }}"
@@ -2401,15 +2403,14 @@
                   then:
                     - action: script.night_climate_ac_off
 
-        # ── Program / Hold: heater below target−1. Above target+2 the roof fan
-        #    cools while it is cooler outside: on its own thermostat first, and
-        #    if that sits idle (its sensor is in the incoming air) HA runs the
-        #    fan from the room sensor instead. The A/C joins only above the
-        #    "A/C above" temperature, on shore power, and never while it is
-        #    clearly colder outside (2026-09-18: it was called at 21 °C inside
-        #    and 9 °C outside to chase a 15 °C target). Once on it cools to the
-        #    target. Fan and A/C never run together. Between the bands whatever
-        #    is running holds its own target.
+        # ── Program / Hold: heater below target−1. Above target+2: on shore
+        #    power the A/C, from the "A/C above" temperature, cooling to the
+        #    target (16 °C at the least, full fan) until the warm-up; off shore
+        #    the roof fan while it is cooler outside: on its own thermostat
+        #    first, and if that sits idle (its sensor is in the incoming air)
+        #    HA runs the fan from the room sensor instead. Fan and A/C never
+        #    run together. Between the bands whatever is running holds its
+        #    own target.
         - conditions: "{{ mode in ['Program', 'Hold'] }}"
           sequence:
             # Clearly over target: the heater has no business running
@@ -2435,14 +2436,12 @@
                   sequence:
                     - choose:
                         # Shore power gone or the A/C no longer allowed: off now
-                        - conditions: "{{ not shore or not use_ac }}"
+                        - conditions: "{{ not ac_ok }}"
                           sequence:
                             - action: script.night_climate_ac_off
-                        # Back under target, or cold enough outside for the fan:
-                        # off once the 30-min dwell is over
+                        # Back under target: off once the 30-min dwell is over
                         - conditions: >-
-                            {{ ac_settled and (fan_can_cool
-                                               or (room is not none and room < target - 0.5)) }}
+                            {{ ac_settled and room is not none and room < target - 0.5 }}
                           sequence:
                             - action: script.night_climate_ac_off
                       default:
@@ -2455,8 +2454,8 @@
                           data:
                             target: "{{ target }}"
 
-                # Too warm: the A/C when it is really warm and the fan cannot do
-                # it, else the roof fan while it is cooler outside
+                # Too warm: on shore power the A/C, off shore the roof fan while
+                # it is cooler outside
                 - conditions: "{{ room is not none and room > target + 2 }}"
                   sequence:
                     - choose:
@@ -2469,7 +2468,7 @@
                             - action: script.night_climate_ac_on
                               data:
                                 target: "{{ target }}"
-                        - conditions: "{{ use_fan and fan_ok }}"
+                        - conditions: "{{ use_fan and fan_ok and not ac_ok }}"
                           sequence:
                             - choose:
                                 # Its own thermostat sat idle: HA runs the fan from
@@ -2506,12 +2505,13 @@
                           then:
                             - action: script.night_climate_fan_off
 
-                # In band, fan run from the room sensor: off near the target, or
-                # when outside stops helping (1.5 °C of hysteresis, few beeps)
+                # In band, fan run from the room sensor: off near the target, when
+                # outside stops helping (1.5 °C of hysteresis, few beeps) or on
+                # shore power (the A/C's job there)
                 - conditions: "{{ fan_on and fan_by_room }}"
                   sequence:
                     - if:
-                        - "{{ not use_fan or not fan_keep or (room is not none and room <= target + 0.5) }}"
+                        - "{{ not use_fan or ac_ok or not fan_keep or (room is not none and room <= target + 0.5) }}"
                       then:
                         - action: script.night_climate_fan_off
                       else:
@@ -2519,11 +2519,12 @@
                           data:
                             speed: "{{ fan_settings.speed }}"
                             direction: "{{ fan_settings.direction }}"
-                # In band, fan on its thermostat: keep it in step; off when outside stops helping
+                # In band, fan on its thermostat: keep it in step; off when outside
+                # stops helping or on shore power
                 - conditions: "{{ fan_thermo }}"
                   sequence:
                     - if:
-                        - "{{ use_fan and fan_keep }}"
+                        - "{{ use_fan and fan_keep and not ac_ok }}"
                       then:
                         - action: script.night_climate_fan_auto
                           data:

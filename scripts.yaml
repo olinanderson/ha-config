@@ -1114,7 +1114,7 @@ night_climate_ac_on:
     - choose:
         # Off: one call sets cool + target; HA applies the mode first. The
         # firmware then walks the unit's own target one IR step at a time,
-        # so give it a moment before asking for the quiet fan level.
+        # so give it a moment before asking for the fan level.
         - conditions: "{{ not is_state('climate.ag_pro_24v_air_conditioner', 'cool') }}"
           sequence:
             - action: climate.set_temperature
@@ -1124,6 +1124,16 @@ night_climate_ac_on:
                 hvac_mode: cool
                 temperature: "{{ want }}"
             - delay: "00:00:20"
+            # Full fan (6L), the user's default since 2026-10-05 (it was 1L).
+            # Only when the A/C starts, so a level set by hand afterwards stays.
+            - if:
+                - "{{ states('number.ag_pro_24v_ac_fan_level') | int(0) != 6 }}"
+              then:
+                - action: number.set_value
+                  target:
+                    entity_id: number.ag_pro_24v_ac_fan_level
+                  data:
+                    value: 6
         # Already cooling: only nudge the target when it differs.
         - conditions: >
             {{ (state_attr('climate.ag_pro_24v_air_conditioner', 'temperature') | float(-99)
@@ -1135,14 +1145,6 @@ night_climate_ac_on:
               data:
                 temperature: "{{ want }}"
             - delay: "00:00:10"
-    - if:
-        - "{{ states('number.ag_pro_24v_ac_fan_level') | float(1) != 1 }}"
-      then:
-        - action: number.set_value
-          target:
-            entity_id: number.ag_pro_24v_ac_fan_level
-          data:
-            value: 1
 
 # Roof fan on its own thermostat (the remote's Auto mode): the AG Pro builds the
 # frame (esphome/a8-pro.yaml, roof_fan_send_frame). The fan then runs by itself
