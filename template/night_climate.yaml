@@ -60,8 +60,11 @@
 
     # ─── The target the program is holding right now ───
     # Hold mode: the hold target. Otherwise the night target until the warm-up
-    # starts, the wake target from then on. The wake time is "next": before
-    # 07:30 today's, after it tomorrow's.
+    # starts, the wake target from then on. The wake time is "next": until 5 min
+    # past today's, today's; after that tomorrow's. Those 5 min matter: the
+    # controller's 5-min tick fires in the same second as night_climate_wake,
+    # and with the target already back at the night value it switched the
+    # heater off and started cooling before the mode went Off (2026-09-26).
     - name: "Night Climate Target"
       unique_id: night_climate_target
       unit_of_measurement: "°C"
@@ -74,7 +77,7 @@
         {% set wake = wake if wake not in ['unknown', 'unavailable'] else '07:30:00' %}
         {% set warm = states('input_number.night_climate_warmup_minutes') | int(45) %}
         {% set t = today_at(wake) %}
-        {% set t = t if t > now() else t + timedelta(days=1) %}
+        {% set t = t if t + timedelta(minutes=5) > now() else t + timedelta(days=1) %}
         {% if now() >= t - timedelta(minutes=warm) %}
           {{ states('input_number.night_climate_wake_target') | float(23) }}
         {% else %}
@@ -88,7 +91,7 @@
           {% set wake = wake if wake not in ['unknown', 'unavailable'] else '07:30:00' %}
           {% set warm = states('input_number.night_climate_warmup_minutes') | int(45) %}
           {% set t = today_at(wake) %}
-          {% set t = t if t > now() else t + timedelta(days=1) %}
+          {% set t = t if t + timedelta(minutes=5) > now() else t + timedelta(days=1) %}
           {{ 'warmup' if now() >= t - timedelta(minutes=warm) else 'night' }}
           {% endif %}
         next_wake: >

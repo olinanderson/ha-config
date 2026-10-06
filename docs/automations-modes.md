@@ -28,7 +28,9 @@ Hooks: the Schedule page's **Night** preset (a scheduler entry, 00:30 daily by d
 the wake time and picks the mode, which starts the program; Sleep Mode on → Program (only if the mode was
 Off); Sleep Mode off → Off. The wake time sets the
 mode to Off (fan and A/C off; the heater is left where the warm-up put it) and runs
-`script.wake_up_routine`. The warm-up is the morning heat: the old daily 07:30 scheduler entry
+`script.wake_up_routine`. The target stays at the wake target until 5 min past the wake time: the controller's
+5-min tick fires in the same second, and until 2026-10-05 it saw the night target first and switched the
+heater off at the wake time (seen 2026-09-26). The warm-up is the morning heat: the old daily 07:30 scheduler entry
 (`switch.schedule_55e88d`, heater to 26 °C) was deleted from the Schedule page on 2026-09-17, and the heater
 simply stays at the wake target after the wake time. (History: that entry was paused for one night on
 2026-09-17 and, with Sleep Mode never switched on, nothing heated the van, 16.9 °C at 08:00. Do not switch
