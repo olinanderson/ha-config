@@ -223,7 +223,7 @@ export function TonightCard() {
               />
               A/C
             </label>
-            <label className="flex items-center gap-2 text-sm" title="Roof fan on its own thermostat while it is cooler outside">
+            <label className="flex items-center gap-2 text-sm" title="Off shore power: the roof fan, on its own thermostat, while it is cooler outside">
               <Switch
                 aria-label="Program may use roof fan"
                 checked={useFan?.state === 'on'}
@@ -233,7 +233,7 @@ export function TonightCard() {
               Fan
             </label>
           </div>
-          {/* Hold and Night cool with the roof fan; the A/C only joins above this */}
+          {/* Hold and Night cool with the A/C above this on shore power (full fan), with the roof fan off shore */}
           <Stepper label="A/C above" entityId={COOL_ABOVE_ID} unit="°" fallback={24} decimals={1} onChange={setNumber} />
           {!onShore && (
             <p className="text-[11px] text-muted-foreground">A/C only runs on shore power.</p>

@@ -19,6 +19,7 @@ import {
   LivingSpaceCard,
   ROOM_ID, OUTSIDE_ID, MODE_ID, HOLD_TARGET_ID, TARGET_ID, STATUS_ID,
   HEATER_ID, AC_ID, FAN_ID, FAN_THERMOSTAT_ID, FAN_POWER_ID, OFF_SCRIPT_ID,
+  SHORE_ID, USE_AC_ID, COOL_ABOVE_ID,
 } from './LivingSpaceCard';
 
 const simple = (id: string, state: string, attributes: Record<string, any> = {}) => ({ entity_id: id, state, attributes });
@@ -26,6 +27,7 @@ const simple = (id: string, state: string, attributes: Record<string, any> = {})
 function makeEntities({
   mode = 'Off', room = '21.4', outside = '7', hold = '22.0', target = '15.0', status = 'Off',
   heater = 'off', ac = 'off', fan = 'off', fanThermo = 'off', watts = '0',
+  shore = 'off', coolAbove = '24',
 } = {}) {
   return {
     [MODE_ID]: simple(MODE_ID, mode, { options: ['Off', 'Hold', 'Program', 'Fan all night', 'A/C all night', 'Heater'] }),
@@ -40,6 +42,9 @@ function makeEntities({
     [FAN_THERMOSTAT_ID]: simple(FAN_THERMOSTAT_ID, fanThermo),
     [FAN_POWER_ID]: simple(FAN_POWER_ID, watts),
     [OFF_SCRIPT_ID]: simple(OFF_SCRIPT_ID, 'off'),
+    [SHORE_ID]: simple(SHORE_ID, shore),
+    [USE_AC_ID]: simple(USE_AC_ID, 'on'),
+    [COOL_ABOVE_ID]: simple(COOL_ABOVE_ID, coolAbove),
   };
 }
 
@@ -155,6 +160,22 @@ describe('LivingSpaceCard — the van dashboard glance', () => {
     entityRef.current = makeEntities({ mode: 'Hold', room: '22.3', status: 'Hold · holding 22.0 °C · nothing running' });
     render(<LivingSpaceCard />);
     expect(status().textContent).toBe('At target 22.0°');
+  });
+
+  it('on shore power says when the A/C starts, since the roof fan stays off there', () => {
+    const st = 'Hold · holding 22.0 °C · room 23.0 °C · nothing running';
+    entityRef.current = makeEntities({ mode: 'Hold', room: '23.0', outside: '25', shore: 'on', status: st });
+    render(<LivingSpaceCard />);
+    expect(status().textContent).toBe('Warmer than 22.0° · A/C starts above 24.0°');
+    cleanup();
+    entityRef.current = makeEntities({ mode: 'Hold', room: '25.0', outside: '25', shore: 'on', status: st });
+    render(<LivingSpaceCard />);
+    expect(status().textContent).toBe('Warmer than 22.0° · cooling next');
+    cleanup();
+    // Off shore the roof fan is the tool, and only while it is cooler outside.
+    entityRef.current = makeEntities({ mode: 'Hold', room: '23.0', outside: '25', status: st });
+    render(<LivingSpaceCard />);
+    expect(status().textContent).toBe('Warmer than 22.0° · not cooler outside for the fan');
   });
 
   it('names a mode set from the Climate page and shows its target read-only', () => {

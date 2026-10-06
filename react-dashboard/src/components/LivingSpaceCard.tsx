@@ -31,6 +31,11 @@ export const AC_ID = 'climate.ag_pro_24v_air_conditioner';
 export const FAN_ID = 'fan.ag_pro_roof_fan';
 export const FAN_THERMOSTAT_ID = 'switch.ag_pro_roof_fan_thermostat';
 export const FAN_POWER_ID = 'sensor.roof_fan_power_12v';
+// On shore power the program cools with the A/C, above "A/C above", and leaves
+// the roof fan off; off shore the roof fan cools (the user's rule since 2026-10-05).
+export const SHORE_ID = 'binary_sensor.shore_power_present';
+export const USE_AC_ID = 'input_boolean.night_climate_use_ac';
+export const COOL_ABOVE_ID = 'input_number.night_climate_cool_above';
 // Ends the program, then the heater, fan and A/C (scripts.yaml). The fan and
 // A/C go through the program's own off scripts, which never send the A/C's
 // power toggle to a unit that is not really running.
@@ -144,6 +149,9 @@ export function LivingSpaceCard() {
   const fan = useEntity(FAN_ID);
   const fanThermo = useEntity(FAN_THERMOSTAT_ID);
   const { value: fanWatts } = useEntityNumeric(FAN_POWER_ID);
+  const shore = useEntity(SHORE_ID);
+  const useAc = useEntity(USE_AC_ID);
+  const { value: coolAbove } = useEntityNumeric(COOL_ABOVE_ID);
   const offScript = useEntity(OFF_SCRIPT_ID);
 
   const mode = modeEnt?.state ?? '';
@@ -207,7 +215,11 @@ export function LivingSpaceCard() {
     if (mode === 'A/C all night') return { text: `A/C all night · not running${tail}`, tone };
     if (aim == null || room == null) return { text: `Waiting for a reading${tail}`, tone };
     if (room > aim + AT_TARGET) {
-      const why = warning ?? (outside != null && outside >= room - 1 ? 'not cooler outside for the fan' : 'cooling next');
+      const acCools = shore?.state === 'on' && useAc?.state === 'on';
+      const why = warning ?? (
+        acCools
+          ? coolAbove != null && room <= coolAbove ? `A/C starts above ${deg(coolAbove)}` : 'cooling next'
+          : outside != null && outside >= room - 1 ? 'not cooler outside for the fan' : 'cooling next');
       return { text: `Warmer than ${deg(aim)} · ${why}`, tone };
     }
     if (room < aim - AT_TARGET) return { text: `Cooler than ${deg(aim)} · ${warning ?? 'heater next'}`, tone };
