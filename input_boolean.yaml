@@ -24,6 +24,12 @@ sleep_winddown_complete:
   name: "Sleep Wind-down Complete"
   icon: mdi:bed-clock
 
+# Whether the inverter was on when Sleep Mode started, so Sleep off (the
+# morning, or a cancel) switches it back on. sleep_mode_on_actions sets it.
+sleep_restore_inverter:
+  name: "Sleep Mode – inverter was on"
+  icon: mdi:power-plug-battery
+
 shower_mode:
   name: "Shower Mode"
   icon: mdi:shower

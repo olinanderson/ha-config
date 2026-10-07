@@ -20,7 +20,12 @@ export const FAN_SPEED_ID = 'input_number.night_climate_fan_speed';
 export const USE_HEATER_ID = 'input_boolean.night_climate_use_heater';
 export const USE_AC_ID = 'input_boolean.night_climate_use_ac';
 export const USE_FAN_ID = 'input_boolean.night_climate_use_fan';
+// The wake time is in HA's time zone, Mountain (America/Edmonton), wherever the
+// van is: the user wakes at 8:25 Mountain time (2026-10-07). The card says so
+// and shows the phone's own time beside it when that differs.
 export const WAKE_TIME_ID = 'input_datetime.night_climate_wake_time';
+// Its next_wake attribute is the next wake moment with HA's offset.
+export const TARGET_ID = 'sensor.night_climate_target';
 export const STATUS_ID = 'sensor.night_climate_status';
 export const ROOM_ID = 'sensor.living_space_temperature';
 // The charger drew power within the last 3 h (template/night_climate.yaml). Its
@@ -43,10 +48,23 @@ const num = (raw: string | undefined, fallback: number) => {
   return Number.isFinite(n) ? n : fallback;
 };
 
-/** "07:30:00" (input_datetime, time only) → "07:30" for the time input. */
+/** "08:25:00" (input_datetime, time only) → "08:25" for the time input. */
 export function wakeTimeValue(raw: string | undefined): string {
-  if (!raw || raw === 'unknown' || raw === 'unavailable') return '07:30';
+  if (!raw || raw === 'unknown' || raw === 'unavailable') return '08:25';
   return raw.slice(0, 5);
+}
+
+/**
+ * The next wake moment ("2026-10-08T08:25:00-06:00") in this device's time
+ * zone, "07:25" on a phone in Pacific time; null where it reads the same as
+ * HA's own wake time. `timeZone` is for tests.
+ */
+export function wakeHere(nextWake: unknown, haTime: string, timeZone?: string): string | null {
+  if (typeof nextWake !== 'string') return null;
+  const d = new Date(nextWake);
+  if (Number.isNaN(d.getTime())) return null;
+  const here = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', hour12: false, timeZone });
+  return here === haTime ? null : here;
 }
 
 function Stepper({
@@ -99,6 +117,7 @@ export function TonightCard() {
   const useAc = useEntity(USE_AC_ID);
   const useFan = useEntity(USE_FAN_ID);
   const wakeTime = useEntity(WAKE_TIME_ID);
+  const targetEnt = useEntity(TARGET_ID);
   const status = useEntity(STATUS_ID);
   const room = useEntity(ROOM_ID);
   const shore = useEntity(SHORE_ID);
@@ -120,6 +139,7 @@ export function TonightCard() {
     callService('input_number', 'set_value', { value }, { entity_id: entityId });
   const setAllowed = (entityId: string, on: boolean) =>
     callService('input_boolean', on ? 'turn_on' : 'turn_off', undefined, { entity_id: entityId });
+  const wakeHereText = wakeHere(targetEnt?.attributes?.next_wake, wakeTimeValue(wakeTime?.state));
   const setWakeTime = (hhmm: string) => {
     if (!/^\d{2}:\d{2}$/.test(hhmm)) return;
     callService('input_datetime', 'set_datetime', { time: `${hhmm}:00` }, { entity_id: WAKE_TIME_ID });
@@ -188,15 +208,22 @@ export function TonightCard() {
           <Stepper label="Night target" entityId={NIGHT_TARGET_ID} unit="°" fallback={15} decimals={1} onChange={setNumber} />
           <Stepper label="Wake target" entityId={WAKE_TARGET_ID} unit="°" fallback={23} decimals={1} onChange={setNumber} />
           <div className="flex items-center justify-between gap-2">
-            <span className="text-xs text-muted-foreground">Wake time</span>
-            <input
-              type="time"
-              aria-label="Wake time"
-              value={wakeTimeValue(wakeTime?.state)}
-              disabled={!wakeTime}
-              onChange={(e) => setWakeTime(e.target.value)}
-              className="rounded-md border bg-muted/50 px-2 py-1 text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-primary"
-            />
+            <span className="text-xs text-muted-foreground">Wake time (Mountain)</span>
+            <div className="flex items-center gap-2">
+              {wakeHereText && (
+                <span className="text-[11px] text-muted-foreground tabular-nums" data-testid="wake-here">
+                  {wakeHereText} here
+                </span>
+              )}
+              <input
+                type="time"
+                aria-label="Wake time"
+                value={wakeTimeValue(wakeTime?.state)}
+                disabled={!wakeTime}
+                onChange={(e) => setWakeTime(e.target.value)}
+                className="rounded-md border bg-muted/50 px-2 py-1 text-sm tabular-nums focus:outline-none focus:ring-1 focus:ring-primary"
+              />
+            </div>
           </div>
           <Stepper label="Warm-up before wake" entityId={WARMUP_ID} unit=" min" fallback={45} onChange={setNumber} />
         </div>

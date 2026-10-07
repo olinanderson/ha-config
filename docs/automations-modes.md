@@ -5,7 +5,7 @@
 | Mode | Script ON | Script OFF | Description |
 |---|---|---|---|
 | **Power Saving** | `script.power_saving_mode_on` | `script.power_saving_mode_off` | Lights off, monitors off, water off; auto on leaving/driving |
-| **Sleep Mode** | `script.sleep_mode_on` | `script.wake_up_routine` | Bedtime: monitors and every interior light off at once, and the Night climate program starts (if the mode was Off or Hold). Night on the Climate Program card turns it on too. Off within 5 min puts lights and monitors back as they were; later it runs the morning wake-up. Until 2026-10-05 it dimmed the lights for a 5-min wind-down first. Starlink: start +30 min, default 1 AM MST on off |
+| **Sleep Mode** | `script.sleep_mode_on` | `script.wake_up_routine` | Bedtime: monitors and every interior light off at once, the water system off (not during a shower), the inverter off, and the Night climate program starts (if the mode was Off or Hold). Night on the Climate Program card turns it on too. Off within 5 min puts everything back as it was. Later (the wake time, "good morning" or by hand) monitors, water and inverter go back as they were (`scene.pre_sleep_mode_devices`, `input_boolean.sleep_restore_inverter`; after a restart in the night monitors and water simply come on) and the main, under-cabinet and skylight lights fade up bright (100 %, 5000 K, 20 s). Bedtime also clears a stale `input_boolean.inverter_manual_lock`, which would refuse the morning restore. Until 2026-10-05 it dimmed the lights for a 5-min wind-down first; until 2026-10-07 it left the water and inverter alone. Starlink: start +30 min, default 1 AM MST on off |
 | **Shower Mode** | `script.shower_mode_on` | `script.shower_mode_off` | Lights 100%, water recirc, roof fan exhaust 60% |
 | **Cook Mode** | `script.cook_mode` | `script.cook_mode_off` | LPG valve open, lights 100%, roof fan exhaust 60% |
 | **Bedtime** | `script.bedtime_routine` | — | Progressive 10-min shutdown |
@@ -14,11 +14,14 @@
 ### Night Climate (Tonight card)
 
 `input_select.night_climate_mode` is what runs tonight; anything but **Off** is live until the wake time
-(`input_datetime.night_climate_wake_time`, 07:30). Built 2026-09-17.
+(`input_datetime.night_climate_wake_time`, 08:25). Built 2026-09-17. The wake time is in HA's time zone,
+Mountain (`America/Edmonton`), wherever the van is: the user wakes at 8:25 Mountain, which is 7:25 on the
+coast. The card labels it "Wake time (Mountain)" and shows the phone's own time beside it when that differs.
+(On 2026-10-07 a 07:30 meant as local time ended Sleep Mode at 06:30 Pacific.)
 
 | Mode | What it does |
 |---|---|
-| **Program** | Holds `sensor.night_climate_target`: the night target (`input_number.night_climate_night_target`, 15 °C) until *wake time − warm-up* (`input_number.night_climate_warmup_minutes`, 45), the wake target (`input_number.night_climate_wake_target`, 23 °C) from then on. Heater when the room is below target − 1 °C, off again above target + 2 °C. Above target + 2 °C, **on shore power** (`binary_sensor.shore_power_present`, with the A/C allowed) the **A/C** cools and the roof fan stays off: it starts above `input_number.night_climate_cool_above` ("A/C above" on the card), cools to the target (unit minimum 16 °C) at full fan (6L, set when it starts, so a level changed by hand stays), 30-min dwell between on/off, off below target − 0.5 °C or at once when shore power or the permission goes; the warm-up switches it off. **Off shore** the **roof fan** cools instead, while the underneath-van sensor reads at least 1 °C cooler than the room (kept until it is within 0.3 °C): first on its own thermostat (set point = target in °F, lid open, direction and speed from the card; only the set point gets re-sent when the target changes). If that thermostat has been armed 20 min and the motor has not turned for 10 (`binary_sensor.roof_fan_running`), HA runs the fan itself from the room sensor for the rest of the program (`input_boolean.night_climate_fan_by_room`): manual at the card's speed, off and lid closed at target + 0.5 °C. (Until 2026-10-05 the fan came first and the A/C was kept off whenever it was more than 3 °C colder outside; the user asked for the A/C on shore power, the fan off shore.) Fan and A/C never run together. Between the bands whatever runs holds its own thermostat. `input_boolean.night_climate_use_heater` / `_use_ac` / `_use_fan` allow each |
+| **Program** | Holds `sensor.night_climate_target`: the night target (`input_number.night_climate_night_target`, 15 °C) until *wake time − warm-up* (`input_number.night_climate_warmup_minutes`, 70), the wake target (`input_number.night_climate_wake_target`, 23 °C) from then on. Heater when the room is below target − 1 °C, off again above target + 2 °C. Above target + 2 °C, **on shore power** (`binary_sensor.shore_power_present`, with the A/C allowed) the **A/C** cools and the roof fan stays off: it starts above `input_number.night_climate_cool_above` ("A/C above" on the card), cools to the target (unit minimum 16 °C) at full fan (6L, set when it starts, so a level changed by hand stays), 30-min dwell between on/off, off below target − 0.5 °C or at once when shore power or the permission goes. When the warm-up starts the heater, an A/C that is running stays on as a fan: its set point goes to the unit's top (32 °C, about 17 IR beeps) so the compressor stops, the roof fan stays off, and the wake time switches it off (until 2026-10-07 the warm-up switched it off). **Off shore** the **roof fan** cools instead, while the underneath-van sensor reads at least 1 °C cooler than the room (kept until it is within 0.3 °C): first on its own thermostat (set point = target in °F, lid open, direction and speed from the card; only the set point gets re-sent when the target changes). If that thermostat has been armed 20 min and the motor has not turned for 10 (`binary_sensor.roof_fan_running`), HA runs the fan itself from the room sensor for the rest of the program (`input_boolean.night_climate_fan_by_room`): manual at the card's speed, off and lid closed at target + 0.5 °C. (Until 2026-10-05 the fan came first and the A/C was kept off whenever it was more than 3 °C colder outside; the user asked for the A/C on shore power, the fan off shore.) Fan and A/C never run together. Between the bands whatever runs holds its own thermostat. `input_boolean.night_climate_use_heater` / `_use_ac` / `_use_fan` allow each |
 | **Hold** | The Program's logic at `input_number.night_climate_hold_target` (22 °C) with no end: for daytime use from the card. Sleep Mode turns a Hold into the night Program; the wake time leaves it alone |
 | **Fan all night** | Roof fan at `input_number.night_climate_fan_speed` (30 %) in `input_select.night_climate_fan_direction` (Intake), lid open (ceiling-fan mode left first); A/C off; heater untouched |
 | **A/C all night** | A/C on its own thermostat at the target (clamped to the unit's 16–32 °C), full fan (6L) when it starts; shore power only, switched off if shore drops; roof fan off; heater untouched |
@@ -28,8 +31,8 @@ Hooks: the Schedule page's **Night** preset (a scheduler entry, 00:30 daily by d
 the wake time and picks the mode, which starts the program; Sleep Mode on → Program (only if the mode was
 Off or Hold); Night picked on the card by a person → Sleep Mode on (`night_climate_night_starts_sleep`, not
 for the schedule, so it never switches the lights off by itself); Sleep Mode off → Off. The wake time sets the
-mode to Off (fan and A/C off; the heater is left where the warm-up put it) and runs
-`script.wake_up_routine`. The target stays at the wake target until 5 min past the wake time: the controller's
+mode to Off unless it is Off or Hold already (fan and A/C off; the heater is left where the warm-up put it)
+and, whatever the mode, ends Sleep Mode through `script.wake_up_routine`. The target stays at the wake target until 5 min past the wake time: the controller's
 5-min tick fires in the same second, and until 2026-10-05 it saw the night target first and switched the
 heater off at the wake time (seen 2026-09-26). The warm-up is the morning heat: the old daily 07:30 scheduler entry
 (`switch.schedule_55e88d`, heater to 26 °C) was deleted from the Schedule page on 2026-09-17, and the heater
@@ -110,7 +113,7 @@ with the 1200-baud rule above.
 
 ### Dynamic Scenes (runtime via `scene.create`)
 - `scene.last_active_state` — rolling 1Hz snapshot
-- `scene.pre_cook_mode` / `scene.pre_sleep_mode_lights` / `scene.pre_shower_mode_state`
+- `scene.pre_cook_mode` / `scene.pre_sleep_mode_lights` / `scene.pre_sleep_mode_devices` / `scene.pre_shower_mode_state`
 
 ## Key Automations
 

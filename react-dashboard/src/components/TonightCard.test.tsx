@@ -13,8 +13,8 @@ vi.mock('@/hooks/useEntity', () => ({
 import {
   TonightCard,
   MODE_ID, FAN_DIRECTION_ID, NIGHT_TARGET_ID, HOLD_TARGET_ID, WAKE_TARGET_ID, WARMUP_ID, COOL_ABOVE_ID, FAN_SPEED_ID,
-  USE_HEATER_ID, USE_AC_ID, USE_FAN_ID, WAKE_TIME_ID, STATUS_ID, ROOM_ID, SHORE_ID, SLEEP_MODE_ID,
-  wakeTimeValue,
+  USE_HEATER_ID, USE_AC_ID, USE_FAN_ID, WAKE_TIME_ID, STATUS_ID, ROOM_ID, SHORE_ID, SLEEP_MODE_ID, TARGET_ID,
+  wakeTimeValue, wakeHere,
 } from './TonightCard';
 
 const simple = (id: string, state: string, attributes: Record<string, any> = {}) => ({ entity_id: id, state, attributes });
@@ -33,6 +33,7 @@ function makeEntities({ mode = 'Off', shore = true, status = 'Off', sleep = 'off
     [USE_AC_ID]: simple(USE_AC_ID, useAc),
     [USE_FAN_ID]: simple(USE_FAN_ID, 'off'),
     [WAKE_TIME_ID]: simple(WAKE_TIME_ID, '07:30:00', { has_time: true, has_date: false }),
+    [TARGET_ID]: simple(TARGET_ID, '15.0', { phase: 'night', next_wake: 'not a date' }),
     [STATUS_ID]: simple(STATUS_ID, status),
     [ROOM_ID]: simple(ROOM_ID, '22.5'),
     [SHORE_ID]: simple(SHORE_ID, shore ? 'on' : 'off'),
@@ -100,7 +101,18 @@ describe('TonightCard', () => {
     expect(input.value).toBe('07:30');
     fireEvent.change(input, { target: { value: '06:45' } });
     expect(callService).toHaveBeenCalledWith('input_datetime', 'set_datetime', { time: '06:45:00' }, { entity_id: WAKE_TIME_ID });
-    expect(wakeTimeValue('unknown')).toBe('07:30');
+    expect(wakeTimeValue('unknown')).toBe('08:25');
+    // No usable next_wake: no "here" time
+    expect(screen.queryByTestId('wake-here')).toBeNull();
+  });
+
+  it('says the wake time is Mountain time and gives the phone its own time', () => {
+    render(<TonightCard />);
+    expect(screen.getByText('Wake time (Mountain)')).toBeTruthy();
+    // 08:25 Mountain (MDT) is 07:25 in Pacific time, and reads the same in Mountain.
+    expect(wakeHere('2026-10-08T08:25:00-06:00', '08:25', 'America/Vancouver')).toBe('07:25');
+    expect(wakeHere('2026-10-08T08:25:00-06:00', '08:25', 'America/Edmonton')).toBeNull();
+    expect(wakeHere(undefined, '08:25')).toBeNull();
   });
 
   it('toggles what the Program may use', () => {

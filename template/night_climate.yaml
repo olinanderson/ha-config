@@ -60,7 +60,8 @@
 
     # ─── The target the program is holding right now ───
     # Hold mode: the hold target. Otherwise the night target until the warm-up
-    # starts, the wake target from then on. The wake time is "next": until 5 min
+    # starts, the wake target from then on. The wake time is in HA's time zone,
+    # Mountain, wherever the van is (the user's 8:25). It is "next": until 5 min
     # past today's, today's; after that tomorrow's. Those 5 min matter: the
     # controller's 5-min tick fires in the same second as night_climate_wake,
     # and with the target already back at the night value it switched the
@@ -74,7 +75,7 @@
           {{ states('input_number.night_climate_hold_target') | float(22) }}
         {% else %}
         {% set wake = states('input_datetime.night_climate_wake_time') %}
-        {% set wake = wake if wake not in ['unknown', 'unavailable'] else '07:30:00' %}
+        {% set wake = wake if wake not in ['unknown', 'unavailable'] else '08:25:00' %}
         {% set warm = states('input_number.night_climate_warmup_minutes') | int(45) %}
         {% set t = today_at(wake) %}
         {% set t = t if t + timedelta(minutes=5) > now() else t + timedelta(days=1) %}
@@ -88,7 +89,7 @@
         phase: >
           {% if is_state('input_select.night_climate_mode', 'Hold') %}hold{% else %}
           {% set wake = states('input_datetime.night_climate_wake_time') %}
-          {% set wake = wake if wake not in ['unknown', 'unavailable'] else '07:30:00' %}
+          {% set wake = wake if wake not in ['unknown', 'unavailable'] else '08:25:00' %}
           {% set warm = states('input_number.night_climate_warmup_minutes') | int(45) %}
           {% set t = today_at(wake) %}
           {% set t = t if t + timedelta(minutes=5) > now() else t + timedelta(days=1) %}
@@ -96,7 +97,7 @@
           {% endif %}
         next_wake: >
           {% set wake = states('input_datetime.night_climate_wake_time') %}
-          {% set wake = wake if wake not in ['unknown', 'unavailable'] else '07:30:00' %}
+          {% set wake = wake if wake not in ['unknown', 'unavailable'] else '08:25:00' %}
           {% set t = today_at(wake) %}
           {{ (t if t > now() else t + timedelta(days=1)).isoformat() }}
 

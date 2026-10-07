@@ -1046,18 +1046,21 @@
         entity_id: scene.pre_shower_mode_state
 
 # ────────────────────────────────────────────────────────────────
-# Sleep Mode – lights and monitors off at once, the night climate starts
+# Sleep Mode – lights, monitors, inverter and water off at once, the night
+# climate starts
 #   Triggered by input_boolean.sleep_mode so the dashboard toggle,
 #   voice "goodnight", script.sleep_mode_on and Night on the Climate
 #   Program card (night_climate_night_starts_sleep) all run this routine.
 #   The Night program itself is started by night_climate_start_on_sleep.
 #   Until 2026-10-05 this dimmed the lights for a 5-min wind-down; the
-#   user asked for everything off when they press Sleep. Turning Sleep off
-#   within those 5 min still just puts the lights and monitors back (see
-#   sleep_mode_off_restore).
+#   user asked for everything off when they press Sleep. Since 2026-10-07
+#   the inverter and the water system go off too (the user had been
+#   switching both off by hand after Sleep). What was on is remembered
+#   first: Sleep off puts it back (sleep_mode_off_restore), within the
+#   first 5 min the lights as well.
 # ────────────────────────────────────────────────────────────────
 - id: sleep_mode_on_actions
-  alias: "Sleep Mode – lights off on toggle ON"
+  alias: "Sleep Mode – lights, inverter and water off on toggle ON"
   # restart: re-pressing (off→on) starts a fresh cycle with a new snapshot
   mode: restart
   trigger:
@@ -1086,13 +1089,22 @@
           - light.led_controller_sc_1
           - light.led_controller_sc_2
 
-    # Snapshot current monitor states so we can restore them on cancel
+    # Snapshot the monitors and the water system. The master alone is
+    # enough: switching it on brings back the last state (Main, shower...).
     - action: scene.create
       data:
-        scene_id: pre_sleep_mode_monitors
+        scene_id: pre_sleep_mode_devices
         snapshot_entities:
           - switch.a32_pro_do8_switch06_top_monitor
           - switch.a32_pro_do8_switch07_bottom_monitor
+          - switch.a32_pro_water_system_master_switch
+
+    # The inverter is a toggle button and a ping, which a scene cannot hold.
+    # A helper, so it also survives a restart in the night.
+    - action: >-
+        input_boolean.turn_{{ 'on' if is_state('binary_sensor.192_168_10_174', 'on') else 'off' }}
+      target:
+        entity_id: input_boolean.sleep_restore_inverter
 
     # Turn off both monitors
     - action: switch.turn_off
@@ -1111,6 +1123,29 @@
           - light.led_controller_sc_2
           - light.main_lighting_switch
           - light.under_cabinet_lighting_switch
+
+    # Water system off, unless someone is in the shower (as power saving)
+    - if:
+        - condition: state
+          entity_id: input_boolean.shower_mode
+          state: "off"
+      then:
+        - action: switch.turn_off
+          target:
+            entity_id: switch.a32_pro_water_system_master_switch
+
+    # Inverter off. A manual lock left over from an earlier hand "off" means
+    # nothing while it is on (2026-10-07 it was still set from 10-06 04:58),
+    # and script.inverter_ensure_on would refuse the morning restore.
+    - if:
+        - condition: state
+          entity_id: binary_sensor.192_168_10_174
+          state: "on"
+      then:
+        - action: input_boolean.turn_off
+          target:
+            entity_id: input_boolean.inverter_manual_lock
+        - action: script.inverter_ensure_off
 
     # Schedule Starlink sleep start (+30 min). continue_on_error so a Starlink
     # hiccup (e.g. time entity unavailable) can never abort the routine
@@ -1136,9 +1171,8 @@
                   {% set hour = (8 + delta) % 24 %}
                   {{ '%02d:%02d:%02d' % (hour, 15, 0) }}
 
-    # 5 min in which Sleep off is a cancel (lights and monitors back as they
-    # were); after that mark as asleep so the next OFF runs the morning
-    # wake-up routine instead of a plain restore.
+    # 5 min in which Sleep off is a cancel (everything back as it was, the
+    # lights too); after that mark as asleep so the next OFF is the morning.
     - delay: "00:05:00"
     - if:
         - condition: state
@@ -1150,10 +1184,17 @@
             entity_id: input_boolean.sleep_winddown_complete
 
 # ────────────────────────────────────────────────────────────────
-# Sleep Mode – cancel (restore) vs morning wake (toggle OFF)
-#   Branches on input_boolean.sleep_winddown_complete:
-#     • cancelled mid wind-down      → just restore the pre-sleep state
-#     • wind-down completed (asleep) → full morning wake-up routine
+# Sleep Mode – cancel or morning (toggle OFF)
+#   The monitors, the water system and the inverter go back to how they were
+#   before Sleep. The lights:
+#     • within 5 min of Sleep on (a cancel) → back as they were
+#     • later (the wake time, or by hand)   → on bright for the morning:
+#       main and under-cabinet 100 % at 5000 K, the skylight 100 %
+#   The user's wish 2026-10-07. Until then the morning restored the
+#   pre-sleep lights plus the under-cabinet at 30 %, forced the water on to
+#   Main, and re-applied scene.last_active_state, which
+#   rolling_last_active_snapshot_1hz rewrites every second, so it held the
+#   sleeping state.
 #   Always clears the flag and resets the Starlink schedule (1 AM MST).
 # ────────────────────────────────────────────────────────────────
 - id: sleep_mode_off_restore
@@ -1165,58 +1206,50 @@
       from: "on"
       to: "off"
   action:
+    # Monitors and water system as before Sleep. scene.create scenes live in
+    # memory only: after a restart in the night both simply come back on.
+    - if:
+        - "{{ states.scene.pre_sleep_mode_devices is not none }}"
+      then:
+        - action: scene.turn_on
+          target:
+            entity_id: scene.pre_sleep_mode_devices
+      else:
+        - action: switch.turn_on
+          target:
+            entity_id:
+              - switch.a32_pro_do8_switch06_top_monitor
+              - switch.a32_pro_do8_switch07_bottom_monitor
+              - switch.a32_pro_water_system_master_switch
+
     - choose:
-        # ── Morning wake: the wind-down completed (lights had auto-off'd) ──
+        # ── Morning: lights on bright ──
         - conditions:
             - condition: state
               entity_id: input_boolean.sleep_winddown_complete
               state: "on"
           sequence:
-            # Ensure inverter is ON before restoring anything AC-dependent
-            - action: script.inverter_ensure_on
-
-            # Restore pre-sleep LIGHT states
-            - action: scene.turn_on
-              target:
-                entity_id: scene.pre_sleep_mode_lights
-
-            # Turn water system back ON to Main
-            - action: switch.turn_on
-              target:
-                entity_id: switch.a32_pro_water_system_master_switch
-            - action: switch.turn_on
-              target:
-                entity_id: switch.a32_pro_water_system_state_main
-
-            # Restore monitors to their pre-sleep state
-            - action: scene.turn_on
-              target:
-                entity_id: scene.pre_sleep_mode_monitors
-
-            # Gentle lights: under-cabinet to 30 % for a soft wake
+            # Controllers only: the wall switches follow them (blueprint).
             - action: light.turn_on
               target:
-                entity_id: light.under_cabinet_lighting_switch
+                entity_id:
+                  - light.led_controller_cct_1   # main
+                  - light.led_controller_cct_2   # under-cabinet
               data:
-                brightness_pct: 30
-
-            # Optionally restore last active scene if not in power-saving
-            - choose:
-                - conditions:
-                    - condition: state
-                      entity_id: input_boolean.power_saving_mode
-                      state: "off"
-                  sequence:
-                    - action: scene.turn_on
-                      target:
-                        entity_id: scene.last_active_state
-      # ── Cancel: turned off mid wind-down → just restore prior state ──
+                brightness_pct: 100
+                color_temp_kelvin: 5000
+                transition: 20
+            - action: light.turn_on
+              target:
+                entity_id: light.led_controller_sc_2   # skylight (Accent)
+              data:
+                brightness_pct: 100
+                transition: 20
+      # ── Cancel: lights back as they were ──
       default:
         - action: scene.turn_on
           target:
-            entity_id:
-              - scene.pre_sleep_mode_lights
-              - scene.pre_sleep_mode_monitors
+            entity_id: scene.pre_sleep_mode_lights
 
     # Clear the wind-down flag for the next cycle
     - action: input_boolean.turn_off
@@ -1227,6 +1260,20 @@
     # (1 AM MST), undoing the +30 min override set on sleep-on.
     - action: script.starlink_sleep_start_default
       continue_on_error: true
+
+    # Inverter last. After a quick cancel it may still be finishing the
+    # shutdown Sleep started (about 25 s, the ping still on), and ensure_on
+    # only presses the button while it reads off, so give the last press
+    # 45 s. ensure_on still respects a manual lock set during the night.
+    - if:
+        - condition: state
+          entity_id: input_boolean.sleep_restore_inverter
+          state: "on"
+      then:
+        - delay: >-
+            {% set b = states.button.a32_pro_inverter_on_off_toggle %}
+            {{ [0, 45 - ((now() - b.last_changed).total_seconds() if b is not none else 45)] | max | int }}
+        - action: script.inverter_ensure_on
 
 # ───────────────────────────────────────────────
 #  Heater low-fuel lockout – auto-clear when fuel recovers
@@ -2274,23 +2321,31 @@
       target:
         entity_id: input_boolean.night_climate_fan_by_room
 
+# The wake time is in HA's time zone, Mountain (America/Edmonton), wherever
+# the van is: the user wakes at 8:25 Mountain time (2026-10-07; the 07:30 they
+# had set read as Pacific to them and ended Sleep at 06:30 their time).
 - id: night_climate_wake
   alias: "Night Climate – wake time"
   mode: single
   trigger:
     - trigger: time
       at: input_datetime.night_climate_wake_time
-  condition:
-    # Hold has no end; the night modes stop here.
-    - "{{ states('input_select.night_climate_mode') not in ['Off', 'Hold'] }}"
   action:
-    # No heater call here on purpose: the warm-up already put the heater at
-    # the wake target, and it stays there until someone changes it.
-    - action: input_select.select_option
-      target:
-        entity_id: input_select.night_climate_mode
-      data:
-        option: "Off"
+    # Hold has no end; the night modes stop here. Mode Off also switches the
+    # roof fan and the A/C off (night_climate_mode_off), the A/C the warm-up
+    # left running as a fan included.
+    - if:
+        - "{{ states('input_select.night_climate_mode') not in ['Off', 'Hold'] }}"
+      then:
+        # No heater call here on purpose: the warm-up already put the heater
+        # at the wake target, and it stays there until someone changes it.
+        - action: input_select.select_option
+          target:
+            entity_id: input_select.night_climate_mode
+          data:
+            option: "Off"
+    # Sleep Mode ends at the wake time whatever the climate mode is (until
+    # 2026-10-07 only while a night mode was running).
     - if:
         - condition: state
           entity_id: input_boolean.sleep_mode
@@ -2339,6 +2394,14 @@
         cool_above: "{{ states('input_number.night_climate_cool_above') | float(24) }}"
         heater_on: "{{ is_state('climate.a32_pro_van_hydronic_heating_pid', 'heat') }}"
         ac_on: "{{ is_state('climate.ag_pro_24v_air_conditioner', 'cool') }}"
+        # The Night program's warm-up (template/night_climate.yaml)
+        warmup: >-
+          {{ mode == 'Program' and state_attr('sensor.night_climate_target', 'phase') == 'warmup' }}
+        # Cooling at its top set point the A/C only runs its fan: the
+        # compressor never starts (the room never reaches 32 °C).
+        ac_fan_only: >-
+          {{ ac_on and state_attr('climate.ag_pro_24v_air_conditioner', 'temperature') | float(0)
+             >= state_attr('climate.ag_pro_24v_air_conditioner', 'max_temp') | float(32) - 0.5 }}
         ac_settled: >-
           {{ states.climate.ag_pro_24v_air_conditioner is none
              or (now() - states.climate.ag_pro_24v_air_conditioner.last_changed).total_seconds() > 1800 }}
@@ -2414,8 +2477,9 @@
 
         # ── Program / Hold: heater below target−1. Above target+2: on shore
         #    power the A/C, from the "A/C above" temperature, cooling to the
-        #    target (16 °C at the least, full fan) until the warm-up; off shore
-        #    the roof fan while it is cooler outside: on its own thermostat
+        #    target (16 °C at the least, full fan); when the warm-up's heater
+        #    takes over it stays on as a fan (top set point) until the wake
+        #    time. Off shore the roof fan while it is cooler outside: on its own thermostat
         #    first, and if that sits idle (its sensor is in the incoming air)
         #    HA runs the fan from the room sensor instead. Fan and A/C never
         #    run together. Between the bands whatever is running holds its
@@ -2432,13 +2496,25 @@
                   data:
                     hvac_mode: "off"
             - choose:
-                # Too cold: fan and A/C off, heater to target
+                # Too cold: heater to target, roof fan and A/C off. In the
+                # warm-up a running A/C stays on as a fan instead (top set
+                # point, no compressor) until the wake time ends the program:
+                # the user's wish 2026-10-07, after it went off at 06:20.
                 - conditions: "{{ room is not none and use_heater and room < target - 1 }}"
                   sequence:
-                    - action: script.night_climate_actuators_off
-                    - action: script.night_climate_heater_to
-                      data:
-                        target: "{{ target }}"
+                    - if:
+                        - "{{ warmup and ac_on and ac_ok }}"
+                      then:
+                        - action: script.night_climate_heater_to
+                          data:
+                            target: "{{ target }}"
+                        - action: script.night_climate_fan_off
+                        - action: script.night_climate_ac_fan_only
+                      else:
+                        - action: script.night_climate_actuators_off
+                        - action: script.night_climate_heater_to
+                          data:
+                            target: "{{ target }}"
 
                 # A/C running: keep it only while it is still the right tool
                 - conditions: "{{ ac_on }}"
@@ -2448,6 +2524,14 @@
                         - conditions: "{{ not ac_ok }}"
                           sequence:
                             - action: script.night_climate_ac_off
+                        # Warm-up, A/C as a fan: leave it so until the wake
+                        # time, even with the heater off for a while
+                        - conditions: "{{ warmup and ac_fan_only }}"
+                          sequence:
+                            - if:
+                                - "{{ fan_thermo or fan_on }}"
+                              then:
+                                - action: script.night_climate_fan_off
                         # Back under target: off once the 30-min dwell is over
                         - conditions: >-
                             {{ ac_settled and room is not none and room < target - 0.5 }}
