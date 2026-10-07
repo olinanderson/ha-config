@@ -65,8 +65,10 @@ inline int xl9535_fix_pair(esphome::xl9535::XL9535Component *chip, uint8_t reg, 
 // inputs read inverted, pressed = off and released = on: Bed Up (DI24)
 // started on release and ran until Bed Down cut it, and the monitor and
 // water buttons acted on release. A board restart doesn't power the
-// expanders down, so nothing cleared it. This puts polarity back to 00 and,
-// for `inputs` (all 16 pins are inputs), direction back to FF.
+// expanders down, so nothing cleared it. The first boot with this check
+// (2026-10-07) found polarity D1 FF on 0x24 and EC 2F on 0x25, the exact
+// inverted inputs, and garbage on both output chips too. This puts polarity
+// back to 00 and, for `inputs` (all 16 pins are inputs), direction to FF.
 inline int xl9535_check(esphome::xl9535::XL9535Component *chip, bool inputs, std::string &report) {
   if (chip->is_failed()) {
     char note[32];
