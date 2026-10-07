@@ -3,26 +3,41 @@ esphome:
   friendly_name: a32-Pro
   platformio_options:
     board_build.flash_mode: dio
-  # C++ helpers shared by the lambdas below (DI33-40 expander sanity check).
+  # C++ helpers shared by the lambdas below (DI33-40 expander sanity check,
+  # DI01-32 expander register check).
   includes:
     - a32_helpers.h
-  # Bring the water system back as it was before a reboot: every water relay
-  # comes up off, and set_water_state (a no-op when the water was off) sets
-  # the valves, waits and starts the pumps last. Nothing in this config holds
-  # up setup, so -100 still runs a second or two after power-up, WiFi or not.
   on_boot:
-    priority: -100
-    then:
-      # Heater: the relay keeps its restored state (Switch24/32 are DISABLED).
-      # Like the old boot-time Switch24 off, count the boot as a heater-off
-      # for the power supply's 180 s guard, and keep a manual request only
-      # if its relay came back on.
-      - lambda: |-
-          id(hydronic_heater_last_off_timestamp) = id(real_time_clock).now().timestamp;
-          if (!id(hydronic_heater_on_off_physical).state) id(heater_manual_request) = false;
-      - script.execute:
-          id: set_water_state
-          state: !lambda 'return id(last_water_state);'
+    # DI01-32 expander registers (a32::xl9535_check), after the XL9535s are
+    # set up (IO, 900) and before the DI binary sensors read their first
+    # state (HARDWARE, 800). The restored fix count isn't loaded yet (also
+    # 800), so the 1 s check under `interval:` adds this boot's fixes to it.
+    - priority: 850
+      then:
+        - lambda: |-
+            std::string r;
+            int n = a32::xl9535_check(id(xl9535_hub_in1), true, r) +
+                    a32::xl9535_check(id(xl9535_hub_in2), true, r) +
+                    a32::xl9535_check(id(xl9535_hub_out1), false, r) +
+                    a32::xl9535_check(id(xl9535_hub_out2), false, r);
+            id(xl_reg_boot_fixes) = n;
+            id(xl_reg_report) = r.empty() ? std::string("boot: all clear") : "boot: " + r;
+    # Bring the water system back as it was before a reboot: every water relay
+    # comes up off, and set_water_state (a no-op when the water was off) sets
+    # the valves, waits and starts the pumps last. Nothing in this config holds
+    # up setup, so -100 still runs a second or two after power-up, WiFi or not.
+    - priority: -100
+      then:
+        # Heater: the relay keeps its restored state (Switch24/32 are DISABLED).
+        # Like the old boot-time Switch24 off, count the boot as a heater-off
+        # for the power supply's 180 s guard, and keep a manual request only
+        # if its relay came back on.
+        - lambda: |-
+            id(hydronic_heater_last_off_timestamp) = id(real_time_clock).now().timestamp;
+            if (!id(hydronic_heater_on_off_physical).state) id(heater_manual_request) = false;
+        - script.execute:
+            id: set_water_state
+            state: !lambda 'return id(last_water_state);'
 
 # Hydronic heater monitor / blower gate constants that aren't worth a HA
 # entity. The user-tunable thresholds (blower start temp, heater OK temp, max
@@ -1592,6 +1607,16 @@ text_sensor:
       // Relay on, monitor not armed yet (first 30 s tick pending).
       return {"Heater running."};
 
+  # What the DI01-32 expander register check (a32::xl9535_check) last found
+  # wrong, e.g. "boot: 0x24 pol D1 FF"; "boot: all clear" if nothing.
+  - platform: template
+    name: "DI01-32 Expander Registers"
+    id: xl_reg_text
+    icon: mdi:chip
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: 'return id(xl_reg_report);'
+
 gp8403:
   id: my_gp8403
   voltage: 5V
@@ -1728,6 +1753,22 @@ globals:
     restore_value: yes
     initial_value: '0'
 
+  # DI01-32 expander register check (on_boot 850, interval:): what it last
+  # found wrong; register bytes fixed at this boot, waiting to be added to
+  # the count; register bytes fixed since flash (kept across reboots).
+  - id: xl_reg_report
+    type: std::string
+    restore_value: no
+    initial_value: '""'
+  - id: xl_reg_boot_fixes
+    type: int
+    restore_value: no
+    initial_value: '0'
+  - id: xl_reg_fix_count
+    type: int
+    restore_value: yes
+    initial_value: '0'
+
 number:
   # Hydronic heater / blower tuning. Restored across reboots. Defaults come
   # from the 2026-09 history: a lit burner lifts the HX#1 sensor ~12 °C/min,
@@ -1833,6 +1874,31 @@ interval:
             id(pcf_fault) = false;
             id(pcf_fault_sensor).publish_state(false);
           }
+
+  ########################################################################
+  #  DI01-32 expander registers (XL9535 @0x24, @0x25)                    #
+  #                                                                      #
+  #  After the 2026-09-30 power-off 22 of these inputs read inverted     #
+  #  (a32::xl9535_check). on_boot puts the registers back before the     #
+  #  inputs are first read; this checks them every 1 s so a change while #
+  #  running is put back too, logged, and counted in HA.                 #
+  ########################################################################
+  - interval: 1s
+    then:
+      - lambda: |-
+          if (id(xl_reg_boot_fixes) > 0) {
+            id(xl_reg_fix_count) += id(xl_reg_boot_fixes);
+            id(xl_reg_boot_fixes) = 0;
+            id(xl_reg_fix_count_sensor).publish_state(id(xl_reg_fix_count));
+          }
+          std::string r;
+          int n = a32::xl9535_check(id(xl9535_hub_in1), true, r) +
+                  a32::xl9535_check(id(xl9535_hub_in2), true, r);
+          if (n == 0) return;
+          id(xl_reg_fix_count) += n;
+          id(xl_reg_report) = r;
+          id(xl_reg_text).publish_state(r);
+          id(xl_reg_fix_count_sensor).publish_state(id(xl_reg_fix_count));
 
   ########################################################################
   #  Hydronic heater warm-up / health monitor                            #
@@ -3025,6 +3091,17 @@ sensor:
     entity_category: diagnostic
     update_interval: 60s
     lambda: 'return id(pcf_fault_count);'
+
+  # Register bytes the DI01-32 expander check had to rewrite, since flash.
+  - platform: template
+    name: "DI01-32 Expander Fixes"
+    id: xl_reg_fix_count_sensor
+    icon: mdi:chip
+    state_class: total_increasing
+    accuracy_decimals: 0
+    entity_category: diagnostic
+    update_interval: 60s
+    lambda: 'return id(xl_reg_fix_count);'
 
 
 web_server:
