@@ -804,6 +804,7 @@
   alias: "Auto Power Saving When Driving"
   description: "Turn on power saving mode when driving, turn off when stopped"
   mode: single
+  max_exceeded: silent # stop_driving landing inside engine_off's 30 s radar wait
   trigger:
     # When vehicle starts moving
     - id: start_driving
@@ -823,6 +824,21 @@
       entity_id: binary_sensor.vehicle_is_moving
       to: "off"
       for: "00:05:00"
+
+    # Engine off and still inside. van_occupied never drops during a drive
+    # (you are in the van), so return_van in the away rule can't fire and
+    # without this you waited the full 5 min above, or pressed the monitor
+    # rockers (2026-10-05 to 10-06: 75-146 s after the van stopped).
+    # 45 s lets most errand stops empty the van first. Replayed on 09-23 to
+    # 10-07 history it fired in 12 of the 14 stays where power saving was
+    # still on at 45 s, and in 9 of 28 errand stops (things on until the
+    # away rule switches back ~4 min later).
+    - id: engine_off
+      trigger: state
+      entity_id: binary_sensor.engine_is_running
+      from: "on"
+      to: "off"
+      for: "00:00:45"
 
   action:
     - choose:
@@ -851,6 +867,42 @@
               state: "on"
           sequence:
             - action: script.power_saving_mode_off
+
+        # Turn OFF power saving 45 s after the engine stops if the radar sees
+        # someone now or within 30 s. van_occupied alone isn't enough: it
+        # holds "on" for 3 min after you leave.
+        - conditions:
+            - condition: trigger
+              id: engine_off
+            - condition: state
+              entity_id: input_boolean.power_saving_mode
+              state: "on"
+            - condition: state
+              entity_id: binary_sensor.vehicle_is_moving
+              state: "off"
+            - condition: state
+              entity_id: input_boolean.sleep_mode
+              state: "off"
+            - condition: state
+              entity_id: binary_sensor.van_occupied
+              state: "on"
+          sequence:
+            - wait_template: "{{ is_state('binary_sensor.apollo_msr_2_1731d8_radar_target', 'on') }}"
+              timeout: "00:00:30"
+              continue_on_timeout: false
+            # Still parked and still saving after the wait
+            - condition: state
+              entity_id: input_boolean.power_saving_mode
+              state: "on"
+            - condition: state
+              entity_id: binary_sensor.engine_is_running
+              state: "off"
+            - action: script.power_saving_mode_off
+            - action: system_log.write
+              data:
+                level: info
+                logger: automation.power_saving
+                message: "Power saving mode disabled – engine off and someone inside"
 
 # ────────────────────────────────────────────────────────────────
 # Ducking in pulseaudio

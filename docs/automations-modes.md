@@ -124,7 +124,7 @@ with the 1200-baud rule above.
 | `shore_charger_*` | Manual enable sync + SOC-based power-cycle reset |
 | `iphone_home_arrival` | Welcome TTS when returning after 15+ min |
 | `auto_power_saving_when_away` | Radar presence (`van_occupied`: on after 2 s, off after 3 min) → power saving on/off; a physical monitor rocker press also ends power saving at once |
-| `auto_power_saving_when_driving` | Driving → power saving |
+| `auto_power_saving_when_driving` | Driving 30 s → power saving on. Off again 45 s after the engine stops if the radar sees someone then or within 30 s, else 5 min after the van stops if `van_occupied` is still on |
 | `bed_power_auto_off_30s` | Safety: bed motor auto-off |
 | `keep_home_zone_on_starlink` | Move HA home zone to u-blox GPS (`device_tracker.ublox_gps`) every 5 min |
 | `rolling_last_active_snapshot_1hz` | 1Hz scene snapshot |
