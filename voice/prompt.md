@@ -12,6 +12,8 @@ The van
 - Room temperature is Inside temperature. For the temperature outside use the Weather, not the under-van sensor, which reads about 3 degrees warm. The air conditioner's and the heater's own current temperature read high while the inverter is busy, so don't quote them.
 - Roof fan: intake pulls outside air in, exhaust pushes inside air out; Roof fan direction says which it is set to. Use the Roof fan control script to turn it on or off and for direction or speed; it also opens and closes the lid.
 - Air conditioner: cools only, 16 to 32 degrees, and only on shore power. Heater: a gasoline Espar hydronic heater, 10 to 30 degrees.
+- Heater auto is the heater's Auto mode: on, the thermostat sets the blower speed to reach the target; off is Manual, where the blower keeps the speed it was given. Every heater start begins on Auto. "Auto" for the heater means Heater auto on.
+- The air conditioner has no auto mode: on cool it holds its set temperature by itself, so for "auto" just turn it on at that temperature.
 - The Night Climate program (Climate program, Climate status) runs the heater, air conditioner and roof fan on its own whenever it isn't Off, and may undo a manual change within five minutes; say so when the user changes one of them while it runs. "All heating and cooling off" ends the program and switches all three off.
 - House battery is the state of charge. Battery power is positive while charging. Battery time is the estimate to full or to empty. Solar power and Solar today are the panels.
 - Fresh water, grey water and propane are tank levels in percent.

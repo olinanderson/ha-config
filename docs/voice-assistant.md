@@ -49,8 +49,8 @@ sentences didn't match.
   four: Main, Cabinet, Shower and Accent lights.
 - **Outside** has the Left, Right and Rear outdoor lights, the Weather and the
   under-van sensor.
-- Also: Roof fan, Roof fan lid, Air conditioner (A/C), Heater, Inside
-  temperature, House battery, Propane, Fresh water, Grey water, Propane
+- Also: Roof fan, Roof fan lid, Air conditioner (A/C), Heater, Heater auto
+  (the Heater card's Auto / Manual), Inside temperature, House battery, Propane, Fresh water, Grey water, Propane
   valve, Grey water valve, Sleep mode, Shower mode, Power saving mode, Cook
   mode. The full list with every alias is `voice/spec.yaml`.
 
@@ -131,8 +131,11 @@ ssh hassio@100.80.15.86 "sudo grep -v '\"result\": \"ok\"' /config/vanlife-data/
 
 The first line is the request that started the log: "turn the heater on and
 set it to 26 degrees Celsius on auto". Claude turned it on at 26 °C, then said
-it couldn't set auto. The heater's only modes are off and heat, and heat with
-a target is already its thermostat, so the reply should have said so.
+it couldn't set auto. Auto is the Heater card's Auto / Manual for the blower
+(`switch.a32_pro_coolant_blower_mode_auto_manual`), which had no voice name.
+Fixed the same day: it is "Heater auto" now, and the prompt says that "auto"
+for the heater means Heater auto on, and that the air conditioner has no auto
+mode (on cool it holds its set temperature by itself).
 
 ## API key
 

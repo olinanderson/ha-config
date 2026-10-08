@@ -70,6 +70,10 @@ expose:
   climate.a32_pro_van_hydronic_heating_pid:
     aliases: [Heater, Heat, Espar, Hydronic heater, null]
     area: Van
+  # The Heater card's Auto / Manual: on = the thermostat sets the blower
+  # speed. Without a name Claude didn't link "on auto" to it (2026-10-08).
+  switch.a32_pro_coolant_blower_mode_auto_manual:
+    aliases: [Heater auto, Heater auto mode, null]
   input_select.night_climate_mode:
     aliases: [Night climate program, Climate program, null]
     area: Van
@@ -171,7 +175,6 @@ expose:
   switch.a32_pro_do8_switch07_bottom_monitor:
     aliases: [Bottom monitor, null]
     area: Van
-  switch.a32_pro_coolant_blower_mode_auto_manual: {}
   switch.starlink_sleep_schedule: {}
   switch.starlink_stowed: {}
   sensor.speedtest_download: {}
