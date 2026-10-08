@@ -12,7 +12,7 @@ vi.mock('@/hooks/useEntity', () => ({
 
 import {
   TonightCard,
-  MODE_ID, FAN_DIRECTION_ID, NIGHT_TARGET_ID, HOLD_TARGET_ID, WAKE_TARGET_ID, WARMUP_ID, COOL_ABOVE_ID, FAN_SPEED_ID,
+  MODE_ID, FAN_DIRECTION_ID, NIGHT_TARGET_ID, HOLD_TARGET_ID, WAKE_TARGET_ID, WARMUP_ID, COOL_ABOVE_ID, AC_FAN_LEVEL_ID, FAN_SPEED_ID,
   USE_HEATER_ID, USE_AC_ID, USE_FAN_ID, WAKE_TIME_ID, STATUS_ID, ROOM_ID, SHORE_ID, SLEEP_MODE_ID, TARGET_ID,
   wakeTimeValue, wakeHere,
 } from './TonightCard';
@@ -28,6 +28,7 @@ function makeEntities({ mode = 'Off', shore = true, status = 'Off', sleep = 'off
     [WAKE_TARGET_ID]: simple(WAKE_TARGET_ID, '23.0', { min: 10, max: 30, step: 0.5 }),
     [WARMUP_ID]: simple(WARMUP_ID, '45.0', { min: 0, max: 180, step: 5 }),
     [COOL_ABOVE_ID]: simple(COOL_ABOVE_ID, '24.0', { min: 18, max: 35, step: 0.5 }),
+    [AC_FAN_LEVEL_ID]: simple(AC_FAN_LEVEL_ID, '5.0', { min: 1, max: 6, step: 1 }),
     [FAN_SPEED_ID]: simple(FAN_SPEED_ID, '30.0', { min: 10, max: 100, step: 10 }),
     [USE_HEATER_ID]: simple(USE_HEATER_ID, 'on'),
     [USE_AC_ID]: simple(USE_AC_ID, useAc),
@@ -132,6 +133,19 @@ describe('TonightCard', () => {
     render(<TonightCard />);
     fireEvent.click(screen.getByRole('button', { name: 'Decrease a/c above' }));
     expect(callService).toHaveBeenCalledWith('input_number', 'set_value', { value: 23.5 }, { entity_id: COOL_ABOVE_ID });
+  });
+
+  it('sets the A/C fan level the program uses, 1L to 6L', () => {
+    render(<TonightCard />);
+    expect(screen.getByText('5L')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Decrease a/c fan' }));
+    expect(callService).toHaveBeenCalledWith('input_number', 'set_value', { value: 4 }, { entity_id: AC_FAN_LEVEL_ID });
+    cleanup();
+    entityRef.current = makeEntities();
+    entityRef.current[AC_FAN_LEVEL_ID].state = '6.0';
+    render(<TonightCard />);
+    expect(screen.getByText('6L')).toBeTruthy();
+    expect((screen.getByRole('button', { name: 'Increase a/c fan' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('sets the fan direction and speed for Fan all night', () => {

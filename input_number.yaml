@@ -242,6 +242,15 @@ night_climate_cool_above:
   step: 0.5
   unit_of_measurement: "°C"
   icon: mdi:snowflake-thermometer
+# The A/C's fan level (1L–6L) when the program starts it; a change while the
+# program's A/C runs goes to the unit (automation night_climate_ac_fan_level).
+# Seeded 5 on 2026-10-08 (the user's pick; it was a fixed 6L).
+night_climate_ac_fan_level:
+  name: "Night Climate A/C Fan Level"
+  min: 1
+  max: 6
+  step: 1
+  icon: mdi:fan
 night_climate_warmup_minutes:
   name: "Night Climate Warm-up Minutes"
   min: 0

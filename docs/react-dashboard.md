@@ -116,7 +116,9 @@ front end for the Night Climate program (`docs/automations-modes.md` → Night C
 helpers: the mode buttons (`input_select.night_climate_mode`: Off / Hold / Night / Fan / A/C / Heater;
 **A/C** is disabled without shore power), the hold target (Hold = the same logic right now, no end), night and wake targets,
 the wake time (`input_datetime.set_datetime` with `time: HH:MM:00`), the warm-up, which appliances the
-Program may use, "A/C above" (`input_number.night_climate_cool_above`: the A/C only joins above it) and the
+Program may use, "A/C above" (`input_number.night_climate_cool_above`: the A/C only joins above it), "A/C fan"
+(`input_number.night_climate_ac_fan_level`, 1L–6L: the level the program starts the A/C at; HA sends a change to an
+A/C the program is running 5 s after the last tap, so a run of taps is one IR change) and the
 fan speed and direction (used by Fan all night and by the Program's fan). Shore power for the A/C button and
 hint is `binary_sensor.shore_power_present`, not the charger's live draw, which reads 0 W on a full battery. The status line is `sensor.night_climate_status`, built by the template so
 the card and HA say the same thing. Tests: `src/components/TonightCard.test.tsx`. The Roof Fan card

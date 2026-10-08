@@ -1130,16 +1130,19 @@ night_climate_ac_on:
                 hvac_mode: cool
                 temperature: "{{ want }}"
             - delay: "00:00:20"
-            # Full fan (6L), the user's default since 2026-10-05 (it was 1L).
-            # Only when the A/C starts, so a level set by hand afterwards stays.
+            # The card's A/C fan level (5L since 2026-10-08, 6L from 10-05,
+            # 1L before). Only when the A/C starts, so a level set by hand
+            # afterwards stays.
+            - variables:
+                level: "{{ states('input_number.night_climate_ac_fan_level') | int(5) }}"
             - if:
-                - "{{ states('number.ag_pro_24v_ac_fan_level') | int(0) != 6 }}"
+                - "{{ states('number.ag_pro_24v_ac_fan_level') | int(0) != level }}"
               then:
                 - action: number.set_value
                   target:
                     entity_id: number.ag_pro_24v_ac_fan_level
                   data:
-                    value: 6
+                    value: "{{ level }}"
         # Already cooling: only nudge the target when it differs.
         - conditions: >
             {{ (state_attr('climate.ag_pro_24v_air_conditioner', 'temperature') | float(-99)

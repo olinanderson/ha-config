@@ -16,6 +16,10 @@ export const HOLD_TARGET_ID = 'input_number.night_climate_hold_target';
 export const WAKE_TARGET_ID = 'input_number.night_climate_wake_target';
 export const WARMUP_ID = 'input_number.night_climate_warmup_minutes';
 export const COOL_ABOVE_ID = 'input_number.night_climate_cool_above';
+// The A/C's fan level (1L–6L) the program starts it at. HA sends a change to an
+// A/C the program is running 5 s after the last tap (automation
+// night_climate_ac_fan_level), so a run of taps is one IR change.
+export const AC_FAN_LEVEL_ID = 'input_number.night_climate_ac_fan_level';
 export const FAN_SPEED_ID = 'input_number.night_climate_fan_speed';
 export const USE_HEATER_ID = 'input_boolean.night_climate_use_heater';
 export const USE_AC_ID = 'input_boolean.night_climate_use_ac';
@@ -260,8 +264,9 @@ export function TonightCard() {
               Fan
             </label>
           </div>
-          {/* Hold and Night cool with the A/C above this on shore power (full fan), with the roof fan off shore */}
+          {/* Hold and Night cool with the A/C above this on shore power, at the A/C fan level; with the roof fan off shore */}
           <Stepper label="A/C above" entityId={COOL_ABOVE_ID} unit="°" fallback={24} decimals={1} onChange={setNumber} />
+          <Stepper label="A/C fan" entityId={AC_FAN_LEVEL_ID} unit="L" fallback={5} onChange={setNumber} />
           {!onShore && (
             <p className="text-[11px] text-muted-foreground">A/C only runs on shore power.</p>
           )}

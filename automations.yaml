@@ -2314,7 +2314,7 @@
 # Night Climate – hold a night target, warm up for the wake time
 #   Mode (input_select.night_climate_mode) is what runs now:
 #     Program       heater when cold; when warm, on shore power the A/C
-#                   (above "A/C above", full fan), off shore the roof fan while
+#                   (above "A/C above", at the card's A/C fan level), off shore the roof fan while
 #                   it is cooler outside (its own thermostat, or HA from the
 #                   room sensor when that sits idle); night target, then the
 #                   wake target from the warm-up
@@ -2556,7 +2556,7 @@
 
         # ── Program / Hold: heater below target−1. Above target+2: on shore
         #    power the A/C, from the "A/C above" temperature, cooling to the
-        #    target (16 °C at the least, full fan); when the warm-up's heater
+        #    target (16 °C at the least, the card's A/C fan level); when the warm-up's heater
         #    takes over it stays on as a fan (top set point) until the wake
         #    time. Off shore the roof fan while it is cooler outside: on its own thermostat
         #    first, and if that sits idle (its sensor is in the incoming air)
@@ -2711,6 +2711,40 @@
                     - action: script.night_climate_heater_to
                       data:
                         target: "{{ target }}"
+
+# The A/C fan level on the Climate Program card: the program starts the A/C at
+# it (script.night_climate_ac_on), and a change while a program mode has the
+# A/C on goes to the unit as well, the warm-up's fan-only A/C included. 5 s
+# after the last change, so a run of taps sends one level (the firmware walks
+# the level one IR press at a time and every press beeps). Not when the helper
+# first appears (it starts at 1) or comes back from unavailable.
+- id: night_climate_ac_fan_level
+  alias: "Night Climate – A/C fan level to the running A/C"
+  mode: single
+  max_exceeded: silent
+  trigger:
+    - trigger: state
+      entity_id: input_number.night_climate_ac_fan_level
+      to:
+      for: "00:00:05"
+  condition:
+    - >-
+      {{ trigger.from_state is not none
+         and trigger.from_state.state not in ['unknown', 'unavailable']
+         and trigger.to_state.state not in ['unknown', 'unavailable'] }}
+    - "{{ states('input_select.night_climate_mode') in ['Program', 'Hold', 'A/C all night'] }}"
+    - condition: state
+      entity_id: climate.ag_pro_24v_air_conditioner
+      state: cool
+    - >-
+      {{ states('number.ag_pro_24v_ac_fan_level') | int(0)
+         != states('input_number.night_climate_ac_fan_level') | int(0) }}
+  action:
+    - action: number.set_value
+      target:
+        entity_id: number.ag_pro_24v_ac_fan_level
+      data:
+        value: "{{ states('input_number.night_climate_ac_fan_level') | int }}"
 
 # The roof fan hears one-way IR, so HA only assumes a frame landed. If the motor
 # draws power while HA has it off (fan off, thermostat off) during a program or
