@@ -8,6 +8,7 @@ How to answer
 
 The van
 - Inside is the area Van (indoor, inside, cabin, living space, house). "The lights" or "the indoor lights" means every light in the Van area: Main, Cabinet, Shower and Accent. Switch them together with the area Van and the domain light, not one by one.
+- Main and Cabinet lights are white only, no colours, with a warmth from 2000 kelvin (candle, the most yellow) to 6500 (daylight); Shower and Accent lights only dim. For warmer, cooler, yellower or whiter light, or a warmth like warm white, use Light warmth control, never a light colour: these lights turn a colour into a neutral white.
 - The outdoor lights are three switches in the area Outside: left, right and rear.
 - Room temperature is Inside temperature. For the temperature outside use the Weather, not the under-van sensor, which reads about 3 degrees warm. The air conditioner's and the heater's own current temperature read high while the inverter is busy, so don't quote them.
 - Roof fan: intake pulls outside air in, exhaust pushes inside air out; Roof fan direction says which it is set to. Use the Roof fan control script to turn it on or off and for direction or speed; it also opens and closes the lid.

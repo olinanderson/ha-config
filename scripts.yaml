@@ -1402,3 +1402,113 @@ voice_roof_fan:
           {%- endif -%}
     - stop: "done"
       response_variable: result
+
+########################################################################
+#  Voice – warmth of the Main and Cabinet lights, the two white-only    #
+#  LED strips (2000-6535 K; Shower and Accent only dim). HA's           #
+#  HassLightSet takes a colour name, which these lights turn into the   #
+#  nearest white ("yellow" is about 3600 K, a neutral white), and its   #
+#  kelvin slot has no description, so "mostly yellow" didn't work      #
+#  (2026-10-08). Claude gets this as a tool; the LightWarmth sentences  #
+#  use it too. Steps are 70 mireds, about five from warmest to coolest: #
+#  equal mired steps look equal, equal kelvin steps don't.              #
+########################################################################
+voice_light_warmth:
+  alias: "Light warmth (voice)"
+  description: >-
+    Make the Main and Cabinet lights warmer (more yellow) or cooler (whiter,
+    bluer), or set their warmth. They are white only, from 2000 kelvin
+    (candle) to 6500 (daylight). Leave lights out for whichever are on.
+  mode: queued
+  fields:
+    lights:
+      description: "main, cabinet or both; leave out for whichever of them are on"
+      selector:
+        select:
+          options: [main, cabinet, both]
+    warmth:
+      description: >-
+        warmer or cooler: a step from where they are now; or warmest (2000 K,
+        candle), warm (2700, warm white), neutral (4000), cool (5000) or
+        coolest (6500, daylight)
+      selector:
+        select:
+          options: [warmer, cooler, warmest, warm, neutral, cool, coolest]
+    kelvin:
+      description: "An exact colour temperature, 2000 to 6500, instead of warmth"
+      selector:
+        number:
+          min: 2000
+          max: 6500
+          step: 100
+  sequence:
+    - variables:
+        w: "{{ warmth | default('', true) | string | lower | trim }}"
+        want: >-
+          {{ kelvin | int(0) if kelvin is defined else
+             {'warmest': 2000, 'warm': 2700, 'neutral': 4000, 'cool': 5000, 'coolest': 6500}.get(w, 0) }}
+    - if:
+        - "{{ not want and w not in ['warmer', 'cooler'] }}"
+      then:
+        - stop: "Give warmth (warmer, cooler, warmest, warm, neutral, cool or coolest) or kelvin."
+          error: true
+    - variables:
+        # Both, or no lights given: whichever are on, or both if neither is.
+        # A step starts from where a light is now, so it skips lights that
+        # are off; a set warmth turns them on.
+        plan: >-
+          {%- set ids = {'main': 'light.led_controller_cct_1', 'cabinet': 'light.led_controller_cct_2'} -%}
+          {%- set names = {ids.main: 'Main lights', ids.cabinet: 'Cabinet lights'} -%}
+          {%- set p = lights | default('', true) | string | lower -%}
+          {%- set pick = 'main' if 'main' in p else 'cabinet' if 'cabinet' in p else 'both' -%}
+          {%- set lit = ids.values() | select('is_state', 'on') | list -%}
+          {%- set chosen = [ids[pick]] if pick in ids else (lit if lit else ids.values() | list) -%}
+          {%- set ns = namespace(go=[], off=[], limit=[]) -%}
+          {%- for id in chosen -%}
+            {%- set lo = state_attr(id, 'min_color_temp_kelvin') | int(2000) -%}
+            {%- set hi = state_attr(id, 'max_color_temp_kelvin') | int(6535) -%}
+            {%- set was = state_attr(id, 'color_temp_kelvin') | int(0) if is_state(id, 'on') else 0 -%}
+            {%- if want -%}
+              {%- set k = want -%}
+            {%- elif was -%}
+              {%- set k = 1000000 / (1000000 / was + (70 if w == 'warmer' else -70)) -%}
+            {%- else -%}
+              {%- set k = 0 -%}
+            {%- endif -%}
+            {%- set k = [lo, [hi, ((k / 50) | round(0) * 50) | int] | min] | max if k else 0 -%}
+            {%- if not k -%}
+              {%- set ns.off = ns.off + [names[id]] -%}
+            {%- elif not want and (k - was) | abs < 30 -%}
+              {%- set ns.limit = ns.limit + [names[id]] -%}
+            {%- else -%}
+              {%- set ns.go = ns.go + [{'id': id, 'light': names[id], 'kelvin': k, 'was': was or 'off'}] -%}
+            {%- endif -%}
+          {%- endfor -%}
+          {{ {'go': ns.go, 'off': ns.off, 'limit': ns.limit} }}
+    - repeat:
+        for_each: "{{ plan.go }}"
+        sequence:
+          - action: light.turn_on
+            target:
+              entity_id: "{{ repeat.item.id }}"
+            data:
+              color_temp_kelvin: "{{ repeat.item.kelvin }}"
+    # What Claude gets back; say is also the local sentences' answer
+    - variables:
+        result: >-
+          {%- set words = {'warmer': 'warmer', 'cooler': 'cooler', 'warmest': 'as warm as they go',
+                           'warm': 'warm white', 'neutral': 'neutral white', 'cool': 'cool white',
+                           'coolest': 'daylight white'} -%}
+          {%- set what = (want ~ ' kelvin') if kelvin is defined else words[w] -%}
+          {%- macro who(l) -%}{{ 'Lights' if l | count > 1 else l[0] }}{%- endmacro -%}
+          {%- set go = plan.go | map(attribute='light') | list -%}
+          {%- set s = namespace(t='') -%}
+          {%- if go -%}{%- set s.t = who(go) ~ ' ' ~ what ~ '.' -%}{%- endif -%}
+          {%- if plan.limit -%}
+            {%- set s.t = s.t ~ ' ' ~ who(plan.limit) ~ ' already as ' ~ ('warm' if w == 'warmer' else 'cool') ~ ' as they go.' -%}
+          {%- endif -%}
+          {%- if plan.off -%}{%- set s.t = s.t ~ ' ' ~ who(plan.off) ~ ' are off.' -%}{%- endif -%}
+          {{ {'changed': plan.go, 'already_at_limit': plan.limit, 'off_unchanged': plan.off,
+              'say': s.t | trim} }}
+    - stop: "done"
+      response_variable: result

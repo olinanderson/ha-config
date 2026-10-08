@@ -40,13 +40,15 @@ sentences didn't match.
 | `custom_sentences/en/van.yaml` | Local sentences |
 | `intent_scripts.yaml` | What the local sentences do |
 | `scripts.yaml` → `voice_roof_fan` | Claude's roof fan tool (power, intake/exhaust, speed); the local roof fan sentences use it too |
+| `scripts.yaml` → `voice_light_warmth` | Claude's tool for the Main and Cabinet lights' warmth (warmer/cooler steps, warm white … daylight, kelvin); the `LightWarmth` sentences use it too |
 | `custom_components/voice_log/` | Writes every run to the voice log (below) |
 
 ## What things are called
 
 - **Van** is inside (aliases Indoor, Indoors, Inside, Interior, Cabin, Living
   space, House, Coach, Camper). "The lights" and "the indoor lights" are all
-  four: Main, Cabinet, Shower and Accent lights.
+  four: Main, Cabinet, Shower and Accent lights. Main and Cabinet are white
+  only with a warmth, 2000 K (candle) to 6535 K; Shower and Accent only dim.
 - **Outside** has the Left, Right and Rear outdoor lights, the Weather and the
   under-van sensor.
 - Also: Roof fan, Roof fan lid, Air conditioner (A/C), Heater, Heater auto
@@ -63,6 +65,7 @@ for the same jobs.
 | Intent | Say | Does |
 |---|---|---|
 | `IndoorDimmersOff/On` | "turn off the (indoor) lights", "lights on" | `light.turn_off/on`, area Van |
+| `LightWarmth` | "make the (main/cabinet) lights warmer", "cooler", "set the lights to warm white", "mostly yellow", "daylight" | `script.voice_light_warmth`; "the lights" is whichever of Main and Cabinet are on. A step is 70 mireds (about five from warmest to coolest) and skips lights that are off |
 | `OutdoorLightsOff/On` | "outdoor lights off" | The three outdoor switches |
 | `RoofFanTurnOn` | "turn the roof fan on (to intake) (at 50 percent)" | `script.voice_roof_fan`; left-out direction/speed stay as they are |
 | `RoofFanTurnOff` | "roof fan off" | Same script, off; the lid closes |
@@ -137,6 +140,12 @@ Fixed the same day: it is "Heater auto" now, and the prompt says that "auto"
 for the heater means Heater auto on, and that the air conditioner has no auto
 mode (on cool it holds its set temperature by itself).
 
+`ok` only means nothing reported an error. At 11:23 that day "set the
+undercabinet lighting to 20% and then make it mostly yellow light" was `ok`:
+Claude sent the colour yellow, which the white-only Cabinet lights turned into
+about 3600 K, a neutral white, and said "set to yellow". Fixed the same day
+with `script.voice_light_warmth` (Things to know).
+
 ## API key
 
 The Anthropic integration uses the key from the OpenClaw config on asylum.
@@ -186,6 +195,17 @@ the model think when a request needs it.
   it how far the van's zone is from Mountain and to name the zone.
 - The roof fan's direction comes from `sensor.roof_fan_direction`; the fan
   entity's own direction attribute isn't in what Claude is shown.
+- Light warmth goes through `script.voice_light_warmth` (Light warmth
+  control), not HA's HassLightSet. That tool's description says only
+  "brightness or color" and its `temperature` (kelvin) slot has no
+  description, and Claude isn't shown which lights have a warmth or where it
+  is. Its `color` on the white-only Main and Cabinet lights becomes the
+  nearest white by HA's conversion: yellow 3591 K (neutral), orange 1825 K
+  (so the warmest, 2000), red 6279 K (a cool white); amber isn't a colour
+  name at all. HA's own local sentences do colour
+  temperature only with those words ("set the main lights color temperature
+  to warm white"), and "set the lights to yellow" matched its colour
+  sentence; `LightWarmth` takes those now (a custom sentence wins a tie).
 - The propane and grey water valves stay exposed on purpose; the prompt tells
   Claude to open them only when the user names that valve.
 - Hidden from Assist: `script.all_lights_toggle` (it toggles, so "turn off"

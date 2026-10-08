@@ -791,7 +791,7 @@ against measured power every minute; the fan's off is sent twice (`button.ag_pro
 
 ## Voice Assistant
 
-Since 2026-10-07: Whisper → local sentences (`custom_sentences/en/van.yaml` → `intent_scripts.yaml`) → anything else to Claude Haiku 5.5 (Anthropic integration) → OpenAI TTS. Names, areas, what Assist may see, the model and the pipeline are in `voice/spec.yaml`; Claude's instructions in `voice/prompt.md`; `deploy.sh` applies both. Whole setup, the local sentence list and the model benchmark: `docs/voice-assistant.md`. Every run (what was heard, what Claude or the sentence did, the reply, `ok`/`unable`/`failed`/`error`/`no_speech`) is logged to `/config/vanlife-data/voice_log.jsonl` by `custom_components/voice_log` since 2026-10-08.
+Since 2026-10-07: Whisper → local sentences (`custom_sentences/en/van.yaml` → `intent_scripts.yaml`) → anything else to Claude Haiku 5.5 (Anthropic integration) → OpenAI TTS. Names, areas, what Assist may see, the model and the pipeline are in `voice/spec.yaml`; Claude's instructions in `voice/prompt.md`; `deploy.sh` applies both. Whole setup, the local sentence list and the model benchmark: `docs/voice-assistant.md`. Every run (what was heard, what Claude or the sentence did, the reply, `ok`/`unable`/`failed`/`error`/`no_speech`) is logged to `/config/vanlife-data/voice_log.jsonl` by `custom_components/voice_log` since 2026-10-08. Things HA's intents can't do well have voice scripts that Claude and the local sentences share: `script.voice_roof_fan` (direction, speed) and `script.voice_light_warmth` (Main and Cabinet lights' warmth; HassLightSet's colour turns into a neutral white on them).
 
 ---
 

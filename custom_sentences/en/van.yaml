@@ -71,6 +71,16 @@ intents:
           - "(turn|switch) [all] [the] [{indoor_word}] (lights|lighting) on"
           - "[all] [the] [{indoor_word}] lights on"
 
+  # Warmth of the Main and Cabinet lights, the white-only strips. HA's own
+  # sentences take "yellow" as a colour, which these lights turn into a
+  # neutral white; a custom sentence wins when both match.
+  LightWarmth:
+    data:
+      - sentences:
+          - "(make|turn|set|change|put|switch) [the] {warm_lights:lights} [to] [a] [bit|little|lot] {light_warmth:warmth} [light|lighting|color|colour]"
+          - "[the] {warm_lights:lights} [a] [bit|little|lot] {light_warmth:warmth}"
+          - "{light_warmth:warmth} {warm_lights:lights}"
+
   OutdoorLightsOff:
     data:
       - sentences:
@@ -124,6 +134,32 @@ lists:
     range:
       from: 10
       to: 100
+  # Only the Main and Cabinet lights have a warmth; plain "lights" is
+  # whichever of the two are on (script.voice_light_warmth)
+  warm_lights:
+    values:
+      - in: "(main|overhead|roof) (light|lights|lighting)"
+        out: main
+      - in: "(under[ ]cabinet|cabinet|kitchen) (light|lights|lighting)"
+        out: cabinet
+      - in: "[indoor|inside|interior|cabin|house|coach|van] (lights|lighting)"
+        out: both
+  light_warmth:
+    values:
+      - in: "(warmer|yellower|more (yellow|orange|warm)|less (blue|white))"
+        out: warmer
+      - in: "(cooler|colder|whiter|bluer|more (white|blue)|less (yellow|orange|warm))"
+        out: cooler
+      - in: "(warmest|candle[ ]light|fully warm)"
+        out: warmest
+      - in: "(warm|warm white|[mostly] (yellow|orange|amber))"
+        out: warm
+      - in: "(neutral|neutral white|natural white)"
+        out: neutral
+      - in: "(cool|cool white|cold white)"
+        out: cool
+      - in: "(coolest|day[ ]light|fully cool)"
+        out: coolest
   # Words only, no value: these lists just keep the sentences short
   indoor_word:
     values: [indoor, inside, interior, cabin, house, coach, van]

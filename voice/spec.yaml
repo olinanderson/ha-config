@@ -50,6 +50,10 @@ expose:
   switch.a32_pro_switch23_rear_outdoor_lights:
     aliases: [Rear Outdoor Lights, Back outdoor lights, null]
     area: Outside
+  # Warmth of the Main and Cabinet lights. HassLightSet's colour becomes a
+  # neutral white on them and Claude didn't use its kelvin (2026-10-08).
+  script.voice_light_warmth:
+    aliases: [Light warmth control]
 
   # ── Climate. Changes go through the scripts' own guards where they have
   #    them (voice_roof_fan, living_space_off); the Night Climate program

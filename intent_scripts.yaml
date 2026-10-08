@@ -86,6 +86,21 @@ IndoorDimmersOn:
       target:
         area_id: van
 
+# Main and Cabinet lights' warmth through script.voice_light_warmth, which
+# Claude uses too; "lights" alone is whichever of the two are on
+LightWarmth:
+  platforms: *local_only
+  action:
+    - action: script.voice_light_warmth
+      data:
+        lights: "{{ lights | default('both') }}"
+        warmth: "{{ warmth }}"
+      response_variable: result
+    - stop: ""
+      response_variable: result
+  speech:
+    text: "{{ action_response.say }}"
+
 OutdoorLightsOff:
   platforms: *local_only
   speech:
