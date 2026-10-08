@@ -17,7 +17,7 @@ vehicle's OBD data, GPS and trips, cameras and a voice assistant.
 | `integrations/` | YAML sensor platforms (statistics, history stats, integrals) |
 | `shell_commands.yaml` | Shell commands, including starting the van services kept in `www/` |
 | `custom_sentences/`, `intent_scripts.yaml`, `voice/` | Voice assistant: local sentences and what they do; names, areas and Claude's prompt (`voice/`, applied by `deploy.sh`) |
-| `custom_components/` | Integrations written for the van; those installed from HACS aren't in git |
+| `custom_components/` | Integrations written for the van (`vanlife_api` is only on HA so far); those installed from HACS aren't in git |
 | `esphome/` | ESPHome configs: the I/O controllers, the radar presence sensor and the voice satellite |
 | `react-dashboard/` | Source of the React dashboard, a sidebar panel at `/dashboard`; its build goes to `www/react-dashboard/` |
 | `www/` | Served at `/local/` **without login**, so nothing private goes here: the dashboard build and the GPS, routing and camera services |
