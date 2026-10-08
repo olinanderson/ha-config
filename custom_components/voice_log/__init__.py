@@ -138,6 +138,8 @@ def _summary(pipeline: str, events: list[dict[str, Any]]) -> dict[str, Any]:
 
     if error:
         result = "no_speech" if error.get("code") == "stt-no-text-recognized" else "error"
+    elif not (heard or "").strip():  # ended before any words, e.g. cut off after the wake word
+        result = "no_speech"
     elif (
         response.get("response_type") == "error"
         or targets.get("failed")
@@ -146,6 +148,8 @@ def _summary(pipeline: str, events: list[dict[str, Any]]) -> dict[str, Any]:
         result = "failed"
     elif reply and UNABLE.search(reply):
         result = "unable"
+    elif output.get("continue_conversation"):  # it asked something back, so maybe half done
+        result = "asked"
     else:
         result = "ok"
 

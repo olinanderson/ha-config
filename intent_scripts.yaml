@@ -94,7 +94,9 @@ LightWarmth:
     - action: script.voice_light_warmth
       data:
         lights: "{{ lights | default('both') }}"
-        warmth: "{{ warmth }}"
+        warmth: "{{ warmth | default('') }}"
+        # "90% warm" is 90, "30% cool" is 70; '' when no percent was said
+        percent: "{{ warm_pct if warm_pct is defined else 100 - cool_pct | int if cool_pct is defined else '' }}"
       response_variable: result
     - stop: ""
       response_variable: result

@@ -1411,7 +1411,10 @@ voice_roof_fan:
 #  kelvin slot has no description, so "mostly yellow" didn't work      #
 #  (2026-10-08). Claude gets this as a tool; the LightWarmth sentences  #
 #  use it too. Steps are 70 mireds, about five from warmest to coolest: #
-#  equal mired steps look equal, equal kelvin steps don't.              #
+#  equal mired steps look equal, equal kelvin steps don't. A percent is #
+#  the dashboard's warmth slider (LightControl.tsx): linear in kelvin   #
+#  over the light's range, 100 the warmest; "90% warm" got a question   #
+#  back before it had one (2026-10-08).                                 #
 ########################################################################
 voice_light_warmth:
   alias: "Light warmth (voice)"
@@ -1434,6 +1437,16 @@ voice_light_warmth:
       selector:
         select:
           options: [warmer, cooler, warmest, warm, neutral, cool, coolest]
+    percent:
+      description: >-
+        How warm in percent, as on the dashboard's warmth slider: 100 is the
+        warmest (2000 K), 0 the coolest (6535 K). "90% warm" is 90, "30% cool"
+        is 70. Never brightness.
+      selector:
+        number:
+          min: 0
+          max: 100
+          step: 1
     kelvin:
       description: "An exact colour temperature, 2000 to 6500, instead of warmth"
       selector:
@@ -1444,13 +1457,18 @@ voice_light_warmth:
   sequence:
     - variables:
         w: "{{ warmth | default('', true) | string | lower | trim }}"
+        # 0-100, or -1 for none (the local sentences pass '' then).
+        # Kelvin wins over a percent, a percent over a warmth word.
+        pct: >-
+          {{ [100, percent | float] | min
+             if percent | default('', true) | string | trim | is_number and percent | float >= 0 else -1 }}
         want: >-
-          {{ kelvin | int(0) if kelvin is defined else
+          {{ kelvin | int(0) if kelvin is defined else 0 if pct >= 0 else
              {'warmest': 2000, 'warm': 2700, 'neutral': 4000, 'cool': 5000, 'coolest': 6500}.get(w, 0) }}
     - if:
-        - "{{ not want and w not in ['warmer', 'cooler'] }}"
+        - "{{ not want and pct < 0 and w not in ['warmer', 'cooler'] }}"
       then:
-        - stop: "Give warmth (warmer, cooler, warmest, warm, neutral, cool or coolest) or kelvin."
+        - stop: "Give warmth (warmer, cooler, warmest, warm, neutral, cool or coolest), percent or kelvin."
           error: true
     - variables:
         # Both, or no lights given: whichever are on, or both if neither is.
@@ -1470,6 +1488,8 @@ voice_light_warmth:
             {%- set was = state_attr(id, 'color_temp_kelvin') | int(0) if is_state(id, 'on') else 0 -%}
             {%- if want -%}
               {%- set k = want -%}
+            {%- elif pct >= 0 -%}
+              {%- set k = hi - pct / 100 * (hi - lo) -%}
             {%- elif was -%}
               {%- set k = 1000000 / (1000000 / was + (70 if w == 'warmer' else -70)) -%}
             {%- else -%}
@@ -1478,7 +1498,7 @@ voice_light_warmth:
             {%- set k = [lo, [hi, ((k / 50) | round(0) * 50) | int] | min] | max if k else 0 -%}
             {%- if not k -%}
               {%- set ns.off = ns.off + [names[id]] -%}
-            {%- elif not want and (k - was) | abs < 30 -%}
+            {%- elif not want and pct < 0 and (k - was) | abs < 30 -%}
               {%- set ns.limit = ns.limit + [names[id]] -%}
             {%- else -%}
               {%- set ns.go = ns.go + [{'id': id, 'light': names[id], 'kelvin': k, 'was': was or 'off'}] -%}
@@ -1499,7 +1519,8 @@ voice_light_warmth:
           {%- set words = {'warmer': 'warmer', 'cooler': 'cooler', 'warmest': 'as warm as they go',
                            'warm': 'warm white', 'neutral': 'neutral white', 'cool': 'cool white',
                            'coolest': 'daylight white'} -%}
-          {%- set what = (want ~ ' kelvin') if kelvin is defined else words[w] -%}
+          {%- set what = (want ~ ' kelvin') if kelvin is defined else
+                         ((pct | round(0) | int) ~ ' percent warm') if pct >= 0 else words[w] -%}
           {%- macro who(l) -%}{{ 'Lights' if l | count > 1 else l[0] }}{%- endmacro -%}
           {%- set go = plan.go | map(attribute='light') | list -%}
           {%- set s = namespace(t='') -%}

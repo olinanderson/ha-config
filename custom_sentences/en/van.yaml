@@ -80,6 +80,10 @@ intents:
           - "(make|turn|set|change|put|switch) [the] {warm_lights:lights} [to] [a] [bit|little|lot] {light_warmth:warmth} [light|lighting|color|colour]"
           - "[the] {warm_lights:lights} [a] [bit|little|lot] {light_warmth:warmth}"
           - "{light_warmth:warmth} {warm_lights:lights}"
+          - "(make|turn|set|change|put|switch) [the] {warm_lights:lights} [to] {warm_pct}[%| percent] (warm|warmth)"
+          - "(make|turn|set|change|put|switch) [the] {warm_lights:lights} [to] {cool_pct}[%| percent] (cool|cold)"
+          - "[the] {warm_lights:lights} [to] {warm_pct}[%| percent] (warm|warmth)"
+          - "[the] {warm_lights:lights} [to] {cool_pct}[%| percent] (cool|cold)"
 
   OutdoorLightsOff:
     data:
@@ -160,6 +164,15 @@ lists:
         out: cool
       - in: "(coolest|day[ ]light|fully cool)"
         out: coolest
+  # "90% warm": the dashboard's warmth slider, 100 the warmest
+  warm_pct:
+    range:
+      from: 0
+      to: 100
+  cool_pct:
+    range:
+      from: 0
+      to: 100
   # Words only, no value: these lists just keep the sentences short
   indoor_word:
     values: [indoor, inside, interior, cabin, house, coach, van]

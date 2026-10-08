@@ -40,7 +40,7 @@ sentences didn't match.
 | `custom_sentences/en/van.yaml` | Local sentences |
 | `intent_scripts.yaml` | What the local sentences do |
 | `scripts.yaml` → `voice_roof_fan` | Claude's roof fan tool (power, intake/exhaust, speed); the local roof fan sentences use it too |
-| `scripts.yaml` → `voice_light_warmth` | Claude's tool for the Main and Cabinet lights' warmth (warmer/cooler steps, warm white … daylight, kelvin); the `LightWarmth` sentences use it too |
+| `scripts.yaml` → `voice_light_warmth` | Claude's tool for the Main and Cabinet lights' warmth (warmer/cooler steps, warm white … daylight, a percent as on the dashboard's warmth slider, kelvin); the `LightWarmth` sentences use it too |
 | `custom_components/voice_log/` | Writes every run to the voice log (below) |
 
 ## What things are called
@@ -65,7 +65,7 @@ for the same jobs.
 | Intent | Say | Does |
 |---|---|---|
 | `IndoorDimmersOff/On` | "turn off the (indoor) lights", "lights on" | `light.turn_off/on`, area Van |
-| `LightWarmth` | "make the (main/cabinet) lights warmer", "cooler", "set the lights to warm white", "mostly yellow", "daylight" | `script.voice_light_warmth`; "the lights" is whichever of Main and Cabinet are on. A step is 70 mireds (about five from warmest to coolest) and skips lights that are off |
+| `LightWarmth` | "make the (main/cabinet) lights warmer", "cooler", "set the lights to warm white", "mostly yellow", "daylight", "90% warm", "30 percent cool" | `script.voice_light_warmth`; "the lights" is whichever of Main and Cabinet are on. A step is 70 mireds (about five from warmest to coolest) and skips lights that are off. A percent is the dashboard slider's position, linear in kelvin: 90 % warm is about 2450 K |
 | `OutdoorLightsOff/On` | "outdoor lights off" | The three outdoor switches |
 | `RoofFanTurnOn` | "turn the roof fan on (to intake) (at 50 percent)" | `script.voice_roof_fan`; left-out direction/speed stay as they are |
 | `RoofFanTurnOff` | "roof fan off" | Same script, off; the lid closes |
@@ -115,7 +115,7 @@ Over 10 MB the log moves to `voice_log.1.jsonl`.
 | Field | What it holds |
 |---|---|
 | `time` | When the run started, HA's time (Mountain) |
-| `result` | `ok`; `unable`: the reply says it couldn't (a guess from words like "can't", "unable", "not sure which"); `failed`: a tool or the answer returned an error or a device that failed; `error`: the pipeline itself failed (Whisper, Claude, TTS); `no_speech`: nothing heard (a false wake word, or silence after a question) |
+| `result` | `ok`; `unable`: the reply says it couldn't (a guess from words like "can't", "unable", "not sure which"); `failed`: a tool or the answer returned an error or a device that failed; `asked`: the reply asked something back (it ended in a question), so the request may be half done; `error`: the pipeline itself failed (Whisper, Claude, TTS); `no_speech`: nothing heard (a false wake word, silence after a question, or a run cut off before any words) |
 | `heard` | What Whisper heard, or what was typed |
 | `reply` | What it said |
 | `by` | `local` (a sentence) or the agent, `conversation.claude_conversation` |
@@ -145,6 +145,12 @@ undercabinet lighting to 20% and then make it mostly yellow light" was `ok`:
 Claude sent the colour yellow, which the white-only Cabinet lights turned into
 about 3600 K, a neutral white, and said "set to yellow". Fixed the same day
 with `script.voice_light_warmth` (Things to know).
+
+At 12:25 "turn the undercabinet lighting to 10% and then make it 90% warm"
+set 10 % and then asked whether 90 percent warm meant about 2000 kelvin or
+brightness: Light warmth control had no percent. It has one since, the
+position on the dashboard's warmth slider (100 the warmest), and a reply
+that asks something back is `asked` since then, no longer `ok`.
 
 ## API key
 
