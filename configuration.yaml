@@ -26,7 +26,10 @@ frontend:
 lovelace:
   mode: storage
 
-# --- Custom Panels (React dashboards + Vanlife) ---
+# --- Custom Panels (React dashboard) ---
+# The old Vanlife panel (www/vanlife-panel/index.html + panel.js) was removed
+# 2026-10-08: unused, the dashboard's Map page replaced it. Its folder still
+# holds the GPS services (osrm_proxy.py, gps_filter.py, gps_ublox.py).
 panel_custom:
   - name: van-dashboard
     url_path: dashboard
@@ -35,11 +38,6 @@ panel_custom:
     module_url: /local/react-dashboard/panel-loader.js?v=16
     embed_iframe: false
     trust_external_script: true
-  - name: vanlife-panel
-    url_path: vanlife
-    sidebar_title: Vanlife
-    sidebar_icon: mdi:map-marker-path
-    module_url: /local/vanlife-panel/panel.js?v=12
 
 # --- Includes ---
 automation: !include automations.yaml

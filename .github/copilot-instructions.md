@@ -302,13 +302,11 @@ custom_components/              # HACS / custom integrations (DO NOT hand-edit)
   vanlife_tracker/              # Custom: stop detection, geocoding, Traccar
 themes/mushroom/                # Mushroom UI theme
 www/                            # Static web assets (NOT synced via Syncthing)
-  vanlife-panel/                # Vanlife tracker panel
-    index.html                  # Panel UI (~2700 lines, Leaflet map + trips + places)
+  vanlife-panel/                # Vanlife GPS services (the panel UI was removed 2026-10-08)
     osrm_proxy.py               # CORS proxy + API server (port 8765)
     gps_filter.py               # GPS filter daemon (background, incremental mode)
     backfill_gps.py             # One-shot historical GPS backfill
     filtered_gps.db             # SQLite DB (segments, parking, named_places)
-    panel.js                    # Panel loader
 zigbee2mqtt/                    # Zigbee2MQTT config
 .storage/                       # HA storage (dashboards, registries, etc.)
 .github/
@@ -1195,15 +1193,18 @@ to a switch entity — it's a momentary press, not a toggle.
 
 ---
 
-## Vanlife Tracker Panel (`www/vanlife-panel/`)
+## Vanlife GPS services (`www/vanlife-panel/`)
 
-A custom HA panel for GPS trip tracking, map visualization, and named places management.
+GPS trip tracking and named places, served to the React dashboard's Map page. The folder
+once held a sidebar panel too (`index.html` + `panel.js`, the `vanlife` `panel_custom`). It was
+removed on 2026-10-08: nobody opened it, and the Map page shows the track, places and trips.
+The folder keeps its name because `shell_commands.yaml` and the REST sensors start and call
+the services from it.
 
 ### Architecture
 
 | Component | File | Purpose |
 |---|---|---|
-| **Panel UI** | `www/vanlife-panel/index.html` | Single-file panel (~2700 lines): Leaflet map, trip sidebar, place management, date picker |
 | **CORS Proxy / API** | `www/vanlife-panel/osrm_proxy.py` | Python HTTP server (port 8765): filtered GPS endpoint, named places CRUD, Valhalla routing proxy, data-range endpoint |
 | **GPS Filter Daemon** | `www/vanlife-panel/gps_filter.py` | Background daemon: filters raw Starlink GPS → movement segments & parking spots, pre-routes via Valhalla, stores in SQLite |
 | **Backfill Script** | `www/vanlife-panel/backfill_gps.py` | One-shot script to process historical GPS data |
@@ -1231,35 +1232,13 @@ A custom HA panel for GPS trip tracking, map visualization, and named places man
 ### Named Places System
 
 - **DB table**: `named_places` (id, name, category, lat, lon, radius_m, notes, created_at)
-- **Place radius**: Used for matching — parking dots within a place's radius are hidden on the map, and the place name is shown instead
-- **Place markers**: Purple with category emoji icon + name label; radius circle shown only on marker click (popup open), hidden on popup close
-- **Place creation**: Via floating overlay form on the map (not in the Places tab); accessible from sidebar "＋ Place" button or parking dot "Create Place Here" popup
-- **Place form**: Floating overlay at top-left of map pane (310px wide, purple border, z-index 9500); has live dotted radius preview circle + zoom-to-fit when location is set
+- **Place radius**: used for matching; parking spots within a place's radius belong to that place
 - **Categories**: campsite, gas_station, dump_station, water_fill, walmart, rest_area, trailhead, mechanic, other
-
-### Van/Place Marker Grouping
-
-When the van is parked near a named place, the markers would overlap. The panel uses **pixel-distance grouping**:
-- On each zoom change + van position update, checks pixel distance between van marker and all place markers
-- If within 60px on screen → hides the van marker and shows a small red 🚐 badge on the place marker icon
-- If further apart (zoomed in) → shows both markers separately
-- This is purely visual — the place radius controls stop-matching, the pixel threshold controls marker grouping
-
-### Panel UI Structure
-
-- **Tabs**: "Map & Trips" (default) | "Named Places"
-- **Map pane**: Leaflet map + route layer + sidebar (collapsible) + floating place form overlay
-- **Sidebar**: Date picker (min from data-range API), date mode buttons, trip list with stop durations + place names, "＋ Place" button
-- **Trip rendering**: Blue polylines for routed trips, grey parking dots for unmatched stops (parking dots inside named places are hidden)
-- **Van marker**: Red 🚐 icon with "Van" label, zIndexOffset 1000, updated every 10s via polling
 
 ### Deployment
 
-Panel files are NOT synced via Syncthing (`www/` is in `.stignore`). Deploy manually:
-```bash
-cat index.html | ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 "cat > /tmp/index.html && sudo cp /tmp/index.html /config/www/vanlife-panel/index.html"
-```
-Same pattern for `osrm_proxy.py` and `gps_filter.py`. Hard-refresh the browser after deploy.
+The services deploy with the rest of the repo (`bash deploy.sh`). A running service only picks up a
+change when it restarts (the start commands are in `shell_commands.yaml`).
 
 ### Running Services on HA
 

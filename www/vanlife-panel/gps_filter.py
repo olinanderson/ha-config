@@ -45,7 +45,8 @@ TOKEN_FILE  = "/config/.gps_filter_token"
 ENTITY_ID   = "device_tracker.ublox_gps"
 LOG_FILE    = "/config/www/vanlife-panel/gps_filter.log"
 
-# Filter constants — MUST match index.html _fetchAndFilterStarlink()
+# Filter constants, from the old panel's _fetchAndFilterStarlink() (index.html,
+# removed 2026-10-08; it is in the git history)
 MIN_PARK_DURATION_S = 180   # 3 min — avoid splitting trips at traffic lights
 FILTER_RADIUS_M     = 15
 CONFIRM_COUNT       = 3
@@ -267,7 +268,7 @@ def dedup_points(points):
 
 def filter_movement(deduped):
     """Run movement state machine. Returns (raw_segments, raw_parking_spots).
-    This is a faithful port of the JS state machine in index.html."""
+    A faithful port of the JS state machine in the old panel's index.html."""
     if not deduped:
         return [], []
 

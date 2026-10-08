@@ -10,8 +10,7 @@
  * the tile URL, so any browser that draws a map can already read it. Putting it
  * in a VITE_ variable would only mean a fresh clone (`.env` is gitignored)
  * silently rebuilds the watermark back in — and the same key has to sit inline
- * in dashboards/vanlife_map.yaml and www/vanlife-panel/index.html regardless,
- * because neither has a build step.
+ * in dashboards/vanlife_map.yaml regardless, because it has no build step.
  *
  * CARTO's own docs say the raster basemaps are being retired. When that lands,
  * the keyless replacement is a vector basemap (OpenFreeMap's dark style is free
