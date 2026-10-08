@@ -37,7 +37,7 @@
 ```
 climate.a32_pro_van_hydronic_heating_pid
 switch.a32_pro_switch24_hydronic_heater
-sensor.a32_pro_hydronic_heater_power_supply_lockout_status
+sensor.a32_pro_hydronic_heater_status          # status text (replaced the lockout sensor)
 sensor.a32_pro_coolant_blower_heating_pid_climate_result
 light.a32_pro_a32_pro_dac_0                    # blower matrix
 sensor.a32_pro_s5140_channel_34_temperature_blower_coolant
@@ -107,26 +107,26 @@ switch.a32_pro_switch06_grey_water_tank_valve
 
 ### Vehicle & Travel
 ```
-sensor.wican_speed
-sensor.wican_fuel
-sensor.stable_fuel_level
-sensor.wican_coolant_temperature
-sensor.wican_rpm
-sensor.wican_throttle_position
-sensor.wican_engine_load
-sensor.wican_control_module_voltage
-sensor.wican_ambient_air_temperature
-sensor.wican_distance_mil_on
-binary_sensor.wican_connected
+# WiCAN Pro OBD PIDs (mqtt/sensors.yaml), unavailable while the engine is off
+sensor.192_168_10_90_0d_vehiclespeed
+sensor.192_168_10_90_2f_fueltanklevel          # raw
+sensor.stable_fuel_level                       # smoothed
+sensor.192_168_10_90_05_enginecoolanttemp
+sensor.192_168_10_90_0c_enginerpm
+sensor.192_168_10_90_11_throttleposition
+sensor.192_168_10_90_04_calcengineload
+sensor.192_168_10_90_42_controlmodulevolt
+sensor.192_168_10_90_46_ambientairtemp
+binary_sensor.meatpi_pro_ecu_status            # WiCAN ECU status
 binary_sensor.vehicle_is_moving
 binary_sensor.vehicle_is_stable
 binary_sensor.engine_is_running
 device_tracker.ublox_gps_filtered
 sensor.road_grade_deg
-sensor.road_grade_percent
+sensor.road_grade
 sensor.hill_aggression
-sensor.ambient_air_temp_last
-sensor.coolant_temp_last
+sensor.ambient_air_temp_last_good
+sensor.coolant_temp_last_good
 ```
 
 ### Propane & Safety
