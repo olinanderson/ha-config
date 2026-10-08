@@ -1,0 +1,47 @@
+# ================================
+# template/gas_price.yaml
+# ================================
+# Regular gas in CAD/L, for the fuel-cost sensors (template/sensors.yaml).
+# GasBuddy's "Cheapest Regular Nearby" (HACS ha-gasbuddy) reports CAD/liter in
+# Canada and USD/gallon in the US. US prices are converted with the Bank of
+# Canada's daily rate (configuration.yaml, rest:) plus the ATB card's 2.9 %
+# foreign transaction fee. Only a usable price gets past the condition, so the
+# last one is kept while GasBuddy has none (no current prices in town, no
+# internet) and through restarts.
+- triggers:
+    - trigger: state
+      entity_id:
+        - sensor.cheapest_regular_nearby_regular_gas
+        - sensor.bank_of_canada_usd_cad
+    - trigger: homeassistant
+      event: start
+    - trigger: event
+      event_type: event_template_reloaded
+  conditions:
+    # A price in CAD, or in USD with a rate to convert it
+    - condition: template
+      value_template: >
+        {% set p = states('sensor.cheapest_regular_nearby_regular_gas') | float(0) %}
+        {% set unit = state_attr('sensor.cheapest_regular_nearby_regular_gas', 'unit_of_measurement') or '' %}
+        {% set fx = states('sensor.bank_of_canada_usd_cad') | float(0) %}
+        {{ p > 0 and (unit.startswith('CAD') or (unit.startswith('USD') and 1 < fx < 2)) }}
+  sensor:
+    - name: Regular Gas Price
+      unique_id: regular_gas_price_cad_per_l
+      icon: mdi:gas-station
+      unit_of_measurement: CAD/L
+      state_class: measurement
+      state: >
+        {% set p = states('sensor.cheapest_regular_nearby_regular_gas') | float %}
+        {% set unit = state_attr('sensor.cheapest_regular_nearby_regular_gas', 'unit_of_measurement') %}
+        {% set per_l = p / 3.785411784 if unit.endswith('gallon') else p %}
+        {% if unit.startswith('USD') %}
+          {{ (per_l * (states('sensor.bank_of_canada_usd_cad') | float) * 1.029) | round(3) }}
+        {% else %}
+          {{ per_l | round(3) }}
+        {% endif %}
+      attributes:
+        gasbuddy: "{{ states('sensor.cheapest_regular_nearby_regular_gas') }} {{ state_attr('sensor.cheapest_regular_nearby_regular_gas', 'unit_of_measurement') }}"
+        usd_cad: "{{ states('sensor.bank_of_canada_usd_cad') }}"
+        station: "{{ state_attr('sensor.cheapest_regular_nearby_regular_gas', 'address') }}"
+        posted: "{{ state_attr('sensor.cheapest_regular_nearby_regular_gas', 'last_updated') }}"

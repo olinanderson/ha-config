@@ -504,12 +504,17 @@ after 2 s (what a reboot's setup does) and restarts the board after 10 s — nev
 next knobs are the I²C clock (400 kHz in `i2c:`) and the chip's address jumpers.
 
 ### Fuel prices (GasBuddy, HACS `firstof9/ha-gasbuddy`)
-One hub + one *cheapest* station subentry (regular, credit price, no postal code → HA's
-home coordinates, which follow the van). Sensors are CAD/L; cost templates in
-`template/sensors.yaml` multiply them by the trip tracker's litres.
+One hub + one *cheapest* station subentry (regular, credit price). No postal code → HA's
+home coordinates, which follow the van; until the 2026-10-24 trip it has V9Y 8Y5 (Port
+Alberni), as Ucluelet posts no current prices (automation `gasbuddy_postal_code_reminder`
+says when to clear it). GasBuddy reports CAD/liter in Canada and USD/gallon in the US;
+`sensor.regular_gas_price` (`template/gas_price.yaml`) makes both CAD/L (÷ 3.785 ×
+`sensor.bank_of_canada_usd_cad` × 1.029 card fee) and keeps the last good price. The cost
+templates in `template/sensors.yaml` multiply it by the trip tracker's litres.
 | Entity | Description |
 |---|---|
-| `sensor.cheapest_regular_nearby_regular_gas` | Cheapest regular near the van (CAD/L; station_id/address attrs) |
+| `sensor.cheapest_regular_nearby_regular_gas` | Cheapest regular near the van (CAD/liter or USD/gallon; station_id/address attrs) |
+| `sensor.regular_gas_price` | That price in CAD/L, read by every cost template |
 | `sensor.live_trip_fuel_cost` | This trip's fuel (moving + idle) × price |
 | `sensor.highway_fuel_cost_per_100km` / `sensor.city_fuel_cost_per_100km` | Lifetime economy × price |
 | `sensor.fill_up_cost` | Fill the 94.6 L tank from `sensor.stable_fuel_level` |

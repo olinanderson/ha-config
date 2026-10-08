@@ -630,9 +630,14 @@
         {% endif %}
 
     # ── Fuel cost (GasBuddy) ──────────────────────────────────────────────────
-    # Price = sensor.cheapest_regular_nearby_regular_gas: HACS ha-gasbuddy in
+    # Price = sensor.regular_gas_price (template/gas_price.yaml), CAD/L:
+    # sensor.cheapest_regular_nearby_regular_gas from HACS ha-gasbuddy in
     # "cheapest" mode around HA's home coordinates, which follow the van via the
-    # Keep-Home-zone automation; posted credit price, CAD/L, refreshed hourly.
+    # Keep-Home-zone automation; posted credit price, refreshed hourly. US
+    # prices (USD/gallon) are converted there, and the last good price is kept.
+    # Until the 2026-10-24 trip the station searches postal code V9Y 8Y5 (Port
+    # Alberni) instead, as neither Ucluelet station has current prices; clear it
+    # when leaving (automation gasbuddy_postal_code_reminder says when).
     # All emit unknown (never a fake 0) while the price or a fuel figure is missing.
     - name: "Live Trip Fuel Cost"
       unique_id: live_trip_fuel_cost
@@ -640,7 +645,7 @@
       icon: mdi:cash
       state: >
         {# Whole-trip fuel (moving + idle) × today's cheapest nearby regular. #}
-        {% set price = states('sensor.cheapest_regular_nearby_regular_gas') | float(none) %}
+        {% set price = states('sensor.regular_gas_price') | float(none) %}
         {% set mov   = states('sensor.live_trip_fuel') | float(none) %}
         {% set idle  = states('sensor.live_trip_idle_fuel') | float(0) %}
         {% if price is none or mov is none %}
@@ -656,7 +661,7 @@
       state: >
         {# Lifetime highway economy (highway_fuel_total ÷ highway_distance_total)
            × price: what 100 km of QEII costs today. Needs ≥ 50 highway km. #}
-        {% set price = states('sensor.cheapest_regular_nearby_regular_gas') | float(none) %}
+        {% set price = states('sensor.regular_gas_price') | float(none) %}
         {% set l  = states('sensor.highway_fuel_total') | float(none) %}
         {% set km = states('sensor.highway_distance_total') | float(none) %}
         {% if price is none or l is none or km is none or km < 50 %}
@@ -672,7 +677,7 @@
       state: >
         {# Lifetime non-highway MOVING economy — (moving fuel − highway fuel) over
            (odometer − highway distance), idle excluded — × price. #}
-        {% set price = states('sensor.cheapest_regular_nearby_regular_gas') | float(none) %}
+        {% set price = states('sensor.regular_gas_price') | float(none) %}
         {% set mf = states('sensor.moving_fuel_total') | float(none) %}
         {% set hf = states('sensor.highway_fuel_total') | float(none) %}
         {% set od = states('sensor.vehicle_distance_odometer') | float(none) %}
@@ -689,7 +694,7 @@
       icon: mdi:gas-station-outline
       state: >
         {# Litres to fill the 94.6 L tank from stable_fuel_level × price. #}
-        {% set price = states('sensor.cheapest_regular_nearby_regular_gas') | float(none) %}
+        {% set price = states('sensor.regular_gas_price') | float(none) %}
         {% set pct = states('sensor.stable_fuel_level') | float(none) %}
         {% if price is none or pct is none %}
           {{ none }}

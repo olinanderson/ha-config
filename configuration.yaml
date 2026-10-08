@@ -113,6 +113,23 @@ rest:
         json_attributes:
           - utc_offset_seconds
 
+  # USD→CAD, the Bank of Canada's daily rate (Valet API, no key; one value per
+  # business day, around 16:30 ET; attribute d is its date). Converts US
+  # GasBuddy prices to CAD/L in template/gas_price.yaml, which keeps the last
+  # good price through no internet.
+  - resource: https://www.bankofcanada.ca/valet/observations/FXUSDCAD/json?recent=1
+    scan_interval: 10800
+    timeout: 20
+    sensor:
+      - name: "Bank of Canada USD CAD"
+        unique_id: boc_fxusdcad
+        icon: mdi:currency-usd
+        unit_of_measurement: CAD/USD
+        value_template: "{{ value_json.observations[0].FXUSDCAD.v }}"
+        json_attributes_path: "$.observations[0]"
+        json_attributes:
+          - d
+
   # How fast driving refills a LOW house battery, averaged over the last 20
   # drives from the vanlife proxy's fuel-trips endpoint (the same per-trip
   # energy-based battery gain the map cards show: stored-Wh delta ÷ full-pack

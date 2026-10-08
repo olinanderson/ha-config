@@ -2991,3 +2991,36 @@
         entity_id: input_datetime.starlink_window_started
       data:
         timestamp: "{{ now().timestamp() }}"
+
+# GasBuddy's "Cheapest Regular Nearby" station got postal code V9Y 8Y5 (Port
+# Alberni) on 2026-10-08: neither Ucluelet station had a current price, so the
+# search around the van found nothing and the integration never started. The
+# code has to be cleared when the van leaves, or the price stays Port Alberni's
+# all trip. This says so once the van is 100 km away and the price still comes
+# from there; daily at 09:00 until it's done. distance() goes through zone.home,
+# which moves with the van: from plain coordinates it has no entity to follow,
+# and the trigger would never re-check.
+- id: gasbuddy_postal_code_reminder
+  alias: "GasBuddy - clear the Port Alberni postal code"
+  mode: single
+  trigger:
+    - trigger: template
+      value_template: "{{ distance('zone.home', 49.234, -124.805) > 100 }}"
+      for: "00:30:00"
+    - trigger: time
+      at: "09:00:00"
+  condition:
+    - condition: template
+      value_template: >
+        {{ distance('zone.home', 49.234, -124.805) > 100
+           and 'Port Alberni' in (state_attr('sensor.cheapest_regular_nearby_regular_gas', 'address') or '') }}
+  action:
+    - action: persistent_notification.create
+      data:
+        notification_id: gasbuddy_postal_code
+        title: "GasBuddy still searches Port Alberni"
+        message: >
+          The van is {{ distance('zone.home', 49.234, -124.805) | round(0) | int }} km from Port
+          Alberni, but GasBuddy still searches postal code V9Y 8Y5. Clear it so the
+          gas price follows the van: Settings → Devices & services → GasBuddy →
+          Cheapest Regular Nearby → ⋮ → Reconfigure, empty Postal code, Submit twice.

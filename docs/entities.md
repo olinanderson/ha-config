@@ -117,16 +117,21 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor, plus `sensor.mppt1_
 | `sensor.a32_pro_di33_40_expander_faults` | Count of those faults since flash (kept across reboots) |
 
 ## Fuel Prices (GasBuddy)
-HACS `firstof9/ha-gasbuddy` 1.5.0, hub "GasBuddy Hub" with one station subentry in
-*cheapest* mode: regular, posted credit price, no postal code — so it searches around
+HACS `firstof9/ha-gasbuddy` 1.6.1, hub "GasBuddy Hub" with one station subentry in
+*cheapest* mode: regular, posted credit price. With no postal code it searches around
 HA's home coordinates, which the "Keep Home zone on GPS" automation moves with the van.
+Until the 2026-10-24 trip it has postal code V9Y 8Y5 (Port Alberni) instead: neither
+Ucluelet station posts current prices, and the integration fails setup when nothing in
+the search has one. Automation `gasbuddy_postal_code_reminder` says when to clear it.
 Refreshes hourly. Add more stations under Settings → Integrations → GasBuddy → Add station.
 
 | Entity | Description |
 |---|---|
-| `sensor.cheapest_regular_nearby_regular_gas` | Cheapest regular near the van, CAD/L (attributes: station_id, address, formatted_price, last_updated) |
-| `sensor.cheapest_regular_nearby_premium_gas` | Premium at that same station |
+| `sensor.cheapest_regular_nearby_regular_gas` | Cheapest regular near the van: CAD/liter in Canada, USD/gallon in the US (attributes: station_id, address, formatted_price, last_updated) |
+| `sensor.cheapest_regular_nearby_premium_gas` | Premium at that same station (unavailable when it posts none) |
 | `sensor.cheapest_regular_nearby_last_updated` | When GasBuddy last saw a price there |
+| `sensor.bank_of_canada_usd_cad` | Bank of Canada daily USD→CAD rate, attribute `d` = its date (`rest:`, every 3 h) |
+| `sensor.regular_gas_price` | Regular in CAD/L: US prices ÷ 3.785 × the Bank of Canada rate × 1.029 (card fee); keeps the last good price (`template/gas_price.yaml`) |
 | `sensor.live_trip_fuel_cost` | This trip's fuel (moving + idle) × that price, CAD |
 | `sensor.highway_fuel_cost_per_100km` | Lifetime highway economy × price — what 100 km of QEII costs today |
 | `sensor.city_fuel_cost_per_100km` | Lifetime non-highway moving economy × price |
