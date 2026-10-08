@@ -72,10 +72,12 @@ start_gps_ublox: >
     echo "u-blox GPS bridge already running";
   fi'
 
-# Restart u-blox USB GPS bridge — kill existing and start fresh
+# Restart u-blox USB GPS bridge — kill existing and start fresh. The pkill
+# pattern is anchored, as in restart_gps_filter: unanchored it also matched this
+# shell's own command line and killed it before the start (2026-10-08).
 restart_gps_ublox: >
   /bin/sh -c 'kill $(cat /tmp/gps_ublox.pid) 2>/dev/null;
-    pkill -f "python3.*gps_ublox" 2>/dev/null;
+    pkill -f "^python3.*gps_ublox" 2>/dev/null;
     sleep 1;
     cd /config/www/vanlife-panel &&
     nohup python3 gps_ublox.py >> /config/www/vanlife-panel/gps_ublox.log 2>&1 &
@@ -122,10 +124,11 @@ start_dvr_proxy: >
       echo "DVR proxy already running";
     fi'
 
-# Restart DVR proxy — kill existing and start fresh
+# Restart DVR proxy — kill existing and start fresh. Anchored pkill pattern, as
+# in restart_gps_ublox.
 restart_dvr_proxy: >
   /bin/sh -c 'which ffmpeg >/dev/null 2>&1 || apk add --no-cache ffmpeg >/dev/null 2>&1;
-    pkill -f "python3.*dvr_proxy" 2>/dev/null;
+    pkill -f "^python3.*dvr_proxy" 2>/dev/null;
     sleep 2;
     cd /config/www/react-dashboard &&
     nohup python3 dvr_proxy.py >> /config/www/react-dashboard/dvr_proxy.log 2>&1 &
