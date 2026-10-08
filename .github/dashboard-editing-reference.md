@@ -1,37 +1,80 @@
 # Dashboard Editing Reference
 
-> Quick-reference for editing Home Assistant Lovelace dashboards via Copilot.
+> Quick reference for editing the van's Home Assistant dashboards.
 > Full entity list and system docs: see `.github/copilot-instructions.md`.
 
-## Dashboard Status
+## How the dashboards work (checked 2026-10-08)
 
-| File | Status | Notes |
+- **Lovelace runs in storage mode.** `configuration.yaml` has `lovelace: mode: storage`
+  and no `dashboards:` key, so every Lovelace dashboard lives in HA's `.storage/`
+  (`lovelace_dashboards` lists them, `lovelace.<id>` holds each config), not in git.
+- **`dashboards/` is an archive.** HA never loads those YAML files (`old_home*.yaml`,
+  `*_v2.yaml`, `van.yaml`, `map.yaml` ...), so editing them changes nothing, and
+  `deploy.sh` ignores the folder (89ff714). `lovelace_resources.yaml` isn't loaded
+  either: the card resources are in storage too (websocket `lovelace/resources`).
+- **The React dashboard** in `react-dashboard/` is separate: a `panel_custom` at
+  `/dashboard` ("Dashboard" in the sidebar). Build it with
+  `cd react-dashboard && bash deploy.sh`, commit the bundle in `www/react-dashboard/`,
+  then run the top-level `deploy.sh`. More under "React Dashboard Panel" in
+  copilot-instructions.md.
+
+### The 17 Lovelace dashboards
+
+`lovelace/dashboards/list` gives the current list. Only the three raw device
+dashboards are in the sidebar; the rest open by URL (`/<url_path>`).
+
+| url_path | Title | Notes |
 |---|---|---|
-| `old_home.yaml` | ✅ **ACTIVE** | Real entity IDs, Mushroom + custom cards, sections layout |
-| `main_overview.yaml` | 🟡 Partial | Some real IDs, basic entity/gauge cards |
-| `climate_control.yaml` | 🔴 **FAKE IDs** | Needs full rewrite with real entities |
-| `power_energy.yaml` | 🔴 **FAKE IDs** | Needs full rewrite with real entities |
-| `lighting_electrical.yaml` | 🔴 **FAKE IDs** | Needs full rewrite with real entities |
-| `water_system.yaml` | 🔴 **FAKE IDs** | Needs full rewrite with real entities |
-| `vehicle_travel.yaml` | 🔴 **FAKE IDs** | Needs full rewrite with real entities |
-| `propane_safety.yaml` | 🔴 **FAKE IDs** | Needs full rewrite with real entities |
-| `diagnostics_maintenance.yaml` | 🔴 **FAKE IDs** | Needs full rewrite with real entities |
-| `entertainment_media.yaml` | 🔴 **FAKE IDs** | Needs full rewrite with real entities |
-| `automation_scenes.yaml` | 🔴 **FAKE IDs** | Needs full rewrite with real entities |
+| `lovelace` | Overview | the default dashboard (`url_path` null works too) |
+| `dashboard-home` | Home | |
+| `dashboard-van` | Van | |
+| `dashboard-lights` | Lights | |
+| `dashboard-hvac` | HVAC | |
+| `dashboard-climate` | Weather | |
+| `dashboard-bms` | Water Systems | |
+| `dashboard-sensors` | Bed | |
+| `dashboard-ir` | IR | |
+| `roof-fan` | Roof Fan | |
+| `map` | Map | |
+| `security-cameras` | Security Cameras | admin only |
+| `research-development` | Research & Development | |
+| `input-numbers` | Input Numbers | |
+| `raw-a32-pro-control` | Raw A32 Pro Control | sidebar, admin only |
+| `raw-a-8-pro` | Raw AG Pro | sidebar, admin only |
+| `mtr-2-radar` | Raw Apollo MTR-2 | sidebar |
 
-## Rewrite Priority
+### Editing one
 
-1. **climate_control.yaml** — Hydronic heater PID, BME280 temps, roof fan
-2. **power_energy.yaml** — Battery, solar, power flow, energy tracking
-3. **lighting_electrical.yaml** — 4 LED controllers, switches, monitors
-4. **water_system.yaml** — Tank levels, water modes, grey valve
-5. **vehicle_travel.yaml** — WiCAN OBD data, GPS, road grade, fuel
-6. **propane_safety.yaml** — Propane tank, LPG valve, Kidde sensors
-7. **entertainment_media.yaml** — Starlink, speedtest, audio, monitors
-8. **diagnostics_maintenance.yaml** — System health, ESPHome status
-9. **automation_scenes.yaml** — Mode toggles, automation status
+- **In the UI:** open `/<url_path>`, then ⋮ → Edit dashboard → Raw configuration editor.
+  A save is live at once; there is nothing to reload or deploy.
+- **From a script:** the websocket command `lovelace/config` reads a config, and
+  `lovelace/config/save` (`url_path`, `config`) replaces all of it. Pipe a Python script
+  to `ssh hassio@100.80.15.86 'sudo docker exec -i homeassistant python3 -'`; the
+  container has aiohttp, and the script reads the token from `/config/.gps_filter_token`
+  without printing it.
+- **Back up first:** save the current config to
+  `/config/vanlife-data/lovelace_backup_<date>/<url_path>.json` (git-ignored, not served).
+  Never put backups in `/config/www`: it is public at `/local/` without a login. To undo,
+  send the JSON back with `lovelace/config/save`. After a save, read the config back and
+  compare.
+- **Don't hand-edit `.storage/lovelace*` while HA runs.** HA won't see the edit until a
+  restart, and its next save overwrites it.
+- **Custom cards** must be in `lovelace/resources` (HACS adds them). A card whose type
+  isn't there shows an error; config-template-card and meteogram-card aren't installed.
 
-## Entity Quick-Lookup by Dashboard
+### Checking for dead entity IDs
+
+1. Existing IDs: `get_states` plus `config/entity_registry/list`.
+2. For the default dashboard and every url_path from `lovelace/dashboards/list`, fetch
+   `lovelace/config` and match `domain.object_id` with a word-boundary regex.
+3. Skip action names such as `input_boolean.toggle`, `script.turn_on` and `switch.toggle`
+   (`get_services` lists them all).
+4. Fix card by card, not with a global string replace: some live IDs start the same way
+   as dead ones.
+
+## Entity Quick-Lookup by Topic
+
+All 103 IDs below were checked against HA on 2026-10-08.
 
 ### Climate Control
 ```
@@ -154,7 +197,7 @@ switch.a32_pro_do8_switch07_bottom_monitor
 input_boolean.windows_audio_stream
 ```
 
-### Modes / Input Helpers (for Automation & Scenes dashboard)
+### Modes / Input Helpers
 ```
 input_boolean.power_saving_mode
 input_boolean.sleep_mode
