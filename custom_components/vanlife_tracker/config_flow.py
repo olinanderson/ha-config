@@ -168,15 +168,14 @@ class VanlifeTrackerConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):
         config_entry: config_entries.ConfigEntry,
     ) -> VanlifeTrackerOptionsFlow:
         """Return the options flow handler."""
-        return VanlifeTrackerOptionsFlow(config_entry)
+        return VanlifeTrackerOptionsFlow()
 
 
 class VanlifeTrackerOptionsFlow(config_entries.OptionsFlow):
-    """Handle options flow for Vanlife Tracker (reconfigure without removing)."""
+    """Handle options flow for Vanlife Tracker (reconfigure without removing).
 
-    def __init__(self, config_entry: config_entries.ConfigEntry) -> None:
-        """Initialize options flow."""
-        self.config_entry = config_entry
+    HA sets self.config_entry itself; assigning it raises on HA 2025.12+.
+    """
 
     async def async_step_init(
         self, user_input: dict[str, Any] | None = None
@@ -185,7 +184,7 @@ class VanlifeTrackerOptionsFlow(config_entries.OptionsFlow):
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)
 
-        current = self.config_entry.data
+        current = {**self.config_entry.data, **self.config_entry.options}
 
         return self.async_show_form(
             step_id="init",

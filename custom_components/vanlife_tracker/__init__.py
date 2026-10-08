@@ -304,7 +304,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # Create the coordinator
     coordinator = VanlifeCoordinator(
         hass=hass,
-        config=dict(entry.data),
+        config={**entry.data, **entry.options},  # options from the Configure dialog win
         database=database,
     )
 
