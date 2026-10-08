@@ -3,6 +3,7 @@ import { PageContainer } from '@/components/layout/PageContainer';
 import { Card, CardContent } from '@/components/ui/card';
 import { useHassStore } from '@/context/HomeAssistantContext';
 import { cn } from '@/lib/utils';
+import { haAccessToken } from '@/lib/ha-auth';
 import {
   MODE_ID as NIGHT_MODE_ID,
   NIGHT_TARGET_ID,
@@ -403,15 +404,15 @@ export function editorToPayload(e: EditorState) {
 function useSchedulerApi() {
   const store = useHassStore();
 
-  const getToken = useCallback(() => {
-    const token = store.hass?.auth?.data?.access_token;
+  const getToken = useCallback(async () => {
+    const token = await haAccessToken();
     if (!token) throw new Error('Not authenticated');
     return token;
-  }, [store]);
+  }, []);
 
   const listSchedules = useCallback(async (): Promise<ScheduleEntry[]> => {
     const res = await fetch('/api/scheduler/list', {
-      headers: { Authorization: `Bearer ${getToken()}` },
+      headers: { Authorization: `Bearer ${await getToken()}` },
     });
     if (!res.ok) throw new Error(`Scheduler API ${res.status}`);
     return res.json();
@@ -421,7 +422,7 @@ function useSchedulerApi() {
     async (data: object) => {
       const res = await fetch('/api/scheduler/add', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${await getToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify(data),
       });
       if (!res.ok) throw new Error(`Add failed: ${res.status}`);
@@ -433,7 +434,7 @@ function useSchedulerApi() {
     async (scheduleId: string, data: object) => {
       const res = await fetch('/api/scheduler/edit', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${await getToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ schedule_id: scheduleId, ...data }),
       });
       if (!res.ok) throw new Error(`Edit failed: ${res.status}`);
@@ -445,7 +446,7 @@ function useSchedulerApi() {
     async (scheduleId: string) => {
       const res = await fetch('/api/scheduler/remove', {
         method: 'POST',
-        headers: { Authorization: `Bearer ${getToken()}`, 'Content-Type': 'application/json' },
+        headers: { Authorization: `Bearer ${await getToken()}`, 'Content-Type': 'application/json' },
         body: JSON.stringify({ schedule_id: scheduleId }),
       });
       if (!res.ok) throw new Error(`Remove failed: ${res.status}`);

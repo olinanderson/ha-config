@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useHassStore } from '@/context/HomeAssistantContext';
+import { haAccessToken } from '@/lib/ha-auth';
 
 export interface HistoryPoint {
   t: number; // unix ms
@@ -68,12 +69,14 @@ export function useHistory(
       `${base}/api/history/period/${startIso}?end_time=${endIso}` +
       `&filter_entity_id=${encodeURIComponent(entityId)}` +
       `&minimal_response&no_attributes`;
-    const token = hass.auth?.data?.access_token;
-
-    fetch(url, {
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      signal: controller.signal,
-    })
+    haAccessToken()
+      .then((token) => {
+        if (!token) throw new Error('no HA token');
+        return fetch(url, {
+          headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+          signal: controller.signal,
+        });
+      })
       .then((r) => {
         if (!r.ok) throw new Error(`HTTP ${r.status}`);
         return r.json();

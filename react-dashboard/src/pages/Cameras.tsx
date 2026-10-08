@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo, useCallback } from 'react';
 import { PageContainer } from '@/components/layout/PageContainer';
 import { useEntity } from '@/hooks/useEntity';
 import { useToggle } from '@/hooks/useService';
+import { haAccessToken } from '@/lib/ha-auth';
 import {
   Maximize2,
   VideoOff,
@@ -106,28 +107,7 @@ function dvrStreamBase(): string {
 
 /** Get auth headers for DVR requests through HA */
 async function dvrAuthHeaders(): Promise<Record<string, string>> {
-  const hass = (window as unknown as Record<string, unknown>).__HASS__ as { auth?: { data?: { access_token?: string } } } | undefined;
-  let token = hass?.auth?.data?.access_token;
-  if (!token) {
-    // Wait for hass to be available
-    token = await new Promise<string | undefined>((resolve) => {
-      const timeout = setTimeout(() => {
-        window.removeEventListener('hass-updated', handler);
-        const h = (window as unknown as Record<string, unknown>).__HASS__ as any;
-        resolve(h?.auth?.data?.access_token);
-      }, 5000);
-      const handler = () => {
-        const h = (window as unknown as Record<string, unknown>).__HASS__ as any;
-        const t = h?.auth?.data?.access_token;
-        if (t) {
-          clearTimeout(timeout);
-          window.removeEventListener('hass-updated', handler);
-          resolve(t);
-        }
-      };
-      window.addEventListener('hass-updated', handler);
-    });
-  }
+  const token = await haAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { vanApiBase } from '@/lib/vanlife-api';
+import { authHeaders, vanApiBase } from '@/lib/vanlife-api';
 
 export interface FuelTrip {
   start_ts: number;
@@ -57,34 +57,9 @@ export interface FuelTripsResult {
   error: string | null;
 }
 
-const IS_LOCAL = /^(192\.168\.|10\.|100\.|172\.(1[6-9]|2\d|3[01])\.|localhost$)/.test(
-  location.hostname,
-);
 const API_BASE = vanApiBase;
 
 const REFRESH_MS = 5 * 60 * 1000; // 5 minutes
-
-/** Get auth headers for API requests through HA */
-async function getAuthHeaders(): Promise<Record<string, string> | null> {
-  if (IS_LOCAL) return {};
-  const hass = (window as unknown as Record<string, unknown>).__HASS__ as { auth?: { data?: { access_token?: string } } } | undefined;
-  let token = hass?.auth?.data?.access_token;
-  if (!token) {
-    // Wait for hass to be available
-    token = await new Promise<string | undefined>((resolve) => {
-      const timeout = setTimeout(() => resolve(undefined), 2000);
-      const check = setInterval(() => {
-        const t = (window as any).__HASS__?.auth?.data?.access_token;
-        if (t) {
-          clearInterval(check);
-          clearTimeout(timeout);
-          resolve(t);
-        }
-      }, 100);
-    });
-  }
-  return token ? { Authorization: `Bearer ${token}` } : null;
-}
 
 export function useFuelTrips(limit = 20): FuelTripsResult {
   const [trips, setTrips] = useState<FuelTrip[]>([]);
@@ -108,7 +83,7 @@ export function useFuelTrips(limit = 20): FuelTripsResult {
 
     async function load() {
       try {
-        const headers = await getAuthHeaders();
+        const headers = await authHeaders();
         if (!headers) {
           retrySoon(10_000); // remote without a token yet — skip the request (avoids 401 auth-ban), try again shortly
           return;

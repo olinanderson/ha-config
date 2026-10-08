@@ -1,5 +1,7 @@
 /** Vanlife map API client — talks to osrm_proxy.py on port 8765 */
 
+import { haAccessToken } from './ha-auth';
+
 const IS_LOCAL = /^(192\.168\.|10\.|100\.|172\.(1[6-9]|2\d|3[01])\.|localhost$)/.test(
   location.hostname,
 );
@@ -13,35 +15,13 @@ export const vanApiBase = (): string =>
   (IS_LOCAL ? `${location.protocol}//${location.hostname}:8765` : `${location.origin}/api`);
 const API_BASE = vanApiBase;
 
-/** Get HA auth token — waits up to 5s for __HASS__ to be available */
-async function getAuthToken(): Promise<string | null> {
-  const hass = () => (window as any).__HASS__;
-  const token = () => hass()?.auth?.data?.access_token as string | undefined;
-  if (token()) return token()!;
-  // Wait for hass-updated event
-  return new Promise<string | null>((resolve) => {
-    const timeout = setTimeout(() => {
-      window.removeEventListener('hass-updated', handler);
-      resolve(token() || null);
-    }, 5000);
-    const handler = () => {
-      if (token()) {
-        clearTimeout(timeout);
-        window.removeEventListener('hass-updated', handler);
-        resolve(token()!);
-      }
-    };
-    window.addEventListener('hass-updated', handler);
-  });
-}
-
 /** Auth headers — needed when routing through HA's API proxy.
  *  Returns null when remote and no token is available yet, so callers SKIP the
  *  request rather than firing it unauthenticated (which trips HA's auth-ban
  *  warning on the requires_auth `/api/vanlife/*` proxy). Retries next interval. */
-async function authHeaders(): Promise<Record<string, string> | null> {
+export async function authHeaders(): Promise<Record<string, string> | null> {
   if (IS_LOCAL) return {};
-  const token = await getAuthToken();
+  const token = await haAccessToken();
   return token ? { Authorization: `Bearer ${token}` } : null;
 };
 

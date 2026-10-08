@@ -42,8 +42,10 @@ beforeEach(() => {
     },
     callService: vi.fn(),
   };
+  // In HA the store's hass is window.__HASS__, where the scheduler calls get the token
+  (window as { __HASS__?: unknown }).__HASS__ = storeRef.current.hass;
 });
-afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
+afterEach(() => { cleanup(); vi.unstubAllGlobals(); delete (window as { __HASS__?: unknown }).__HASS__; });
 
 const pressed = (el: HTMLElement) => el.getAttribute('aria-pressed') === 'true';
 

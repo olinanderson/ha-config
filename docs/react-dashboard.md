@@ -43,7 +43,16 @@ const { open } = useHistoryDialog();
 
 // Weather (WS subscription, not entity attributes)
 const forecast = useWeatherForecast('weather.pirateweather', 'daily');
+
+// REST calls through HA (/api/...): get the token from haAccessToken() (src/lib/ha-auth.ts)
+const token = await haAccessToken();
 ```
+
+Don't read `hass.auth.data.access_token` directly for REST calls. HA tokens last 30 minutes, and
+HA renews them only when the websocket reconnects. A tab left open then polls with a dead token, and
+HA logs each request as "invalid authentication from localhost (127.0.0.1)". Remote use goes through
+Nabu Casa, which is why it shows as localhost. That happened every 5 min from 2026-10-06 until
+`haAccessToken()`, which renews the token first.
 
 ## Build & Deploy
 
