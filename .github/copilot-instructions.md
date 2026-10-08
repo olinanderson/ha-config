@@ -14,7 +14,7 @@
 
 ## Overview
 
-This is a **Home Assistant** instance (version **2025.7.1**) running on a **camper van / RV**
+This is a **Home Assistant** instance (version **2026.10.0**) running on a **camper van / RV**
 (referred to as "Olin's van"). The system manages all electrical, climate, water, vehicle,
 entertainment, and safety subsystems for full-time van life.
 
@@ -301,7 +301,7 @@ custom_components/              # HACS / custom integrations (DO NOT hand-edit)
   vanlife_tracker/              # Custom: stop detection, geocoding, Traccar
   voice_log/                    # Custom: every voice run to vanlife-data/voice_log.jsonl
 themes/mushroom/                # Mushroom UI theme
-www/                            # Static web assets (NOT synced via Syncthing)
+www/                            # Served at /local/ WITHOUT login: nothing private here (git: react-dashboard/, vanlife-panel/)
   vanlife-panel/                # Vanlife GPS services (the panel UI was removed 2026-10-08)
     osrm_proxy.py               # CORS proxy + API server (port 8765)
     gps_filter.py               # GPS filter daemon (background, incremental mode)
@@ -315,14 +315,6 @@ zigbee2mqtt/                    # Zigbee2MQTT config
 .github/
   copilot-instructions.md       # THIS FILE
   dashboard-editing-reference.md
-
-# --- Syncthing (bidirectional sync) ---
-.ha-sync/                       # Syncthing binary + config (NOT synced, NOT in git)
-  syncthing                     # Syncthing v2.0.15 Linux binary
-  st-config/                    # Syncthing config, keys, index DB
-  syncthing.log                 # Runtime log
-.stignore                       # Syncthing ignore patterns
-.stfolder/                      # Syncthing folder marker (empty)
 ```
 
 ---
@@ -982,7 +974,6 @@ Example configs for the card types above, in the style of the archived YAML in
 | Shelly EM 1s ping | Update inverter detection every second |
 | Inverter pending clear | Clear pending flag when ping state changes |
 | Bootstrap ducking / Scream | Start audio ducking + Scream receiver on HA boot |
-| `syncthing_start_on_boot` | Start Syncthing daemon 30s after HA boot |
 | `dvr_proxy_start_on_boot` | Start DVR camera proxy daemon 40s after HA boot |
 
 ---

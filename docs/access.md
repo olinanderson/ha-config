@@ -27,7 +27,6 @@ the username and password for the login form.
 | **WiCAN Pro** | `192.168.10.90` (web UI only, no API) |
 | **Lorex DVR** | `192.168.10.156` (RTSP) |
 | **Router (MoFi)** | `192.168.10.1` |
-| **Syncthing GUI (HA)** | `http://100.80.15.86:8384` |
 | **Shelly EM** | `192.168.10.174` |
 | **HA Host SSH** | port `22222` on `172.30.32.1` (PulseAudio/Scream) |
 

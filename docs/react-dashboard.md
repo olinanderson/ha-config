@@ -57,11 +57,16 @@ Nabu Casa, which is why it shows as localhost. That happened every 5 min from 20
 ## Build & Deploy
 
 ```bash
-cd react-dashboard && bash deploy.sh
+cd react-dashboard && bash deploy.sh   # npm test, npm run build, copy into ../www/react-dashboard/
+cd .. && git add react-dashboard/src www/react-dashboard && git commit   # source + bundle together
+bash deploy.sh                          # push to GitHub, fast-forward /config on HA
 ```
 
-This builds via Vite and deploys `van-dashboard.js`, `van-dashboard.css`, and
-`panel-loader.js` to `/config/www/react-dashboard/` on HA via SSH.
+`react-dashboard/deploy.sh` never writes to HA. It runs the tests, builds with Vite and
+copies `van-dashboard.js`, `van-dashboard.css` and `panel-loader.js` into
+`www/react-dashboard/`, which is tracked in git; the top-level `deploy.sh` then delivers
+the commit. Don't copy files straight onto HA: that leaves its git checkout modified and
+the next deploy fails (2026-10-04).
 
 **Always hard-refresh** (Ctrl+Shift+R) after deploy.
 

@@ -1,5 +1,9 @@
 # Syncthing — Bidirectional Config Sync
 
+> **Removed 2026-09-25; kept for history.** `/config` on HA is a git checkout of this repo:
+> commit, then `bash deploy.sh`. Don't start Syncthing on any PC: it fights the git checkout.
+> Nothing below describes the current setup.
+
 HA config (`/config`) syncs bidirectionally to local PCs via Syncthing over Tailscale.
 Changes propagate in ~10 seconds.
 

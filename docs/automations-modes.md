@@ -135,7 +135,6 @@ with the 1200-baud rule above.
 | Shelly EM 1s ping | Update inverter detection every second |
 | `night_climate_*` (×7) | Night Climate: controller (5-min loop, skipped while shore power or the target is unavailable, e.g. during a reload), start with Sleep Mode, Night on the card turns Sleep Mode on, stop with Sleep Mode, fan + A/C off when the mode goes Off (at the wake a running A/C stays on as a fan), wake time, roof-fan watchdog (re-sends off if the motor draws power while HA has it off) |
 | `shore_power_seen` | Keeps `input_datetime.shore_power_last_seen` for `binary_sensor.shore_power_present` (charger drew power within 3 h) |
-| `syncthing_start_on_boot` | Start Syncthing 30s after HA boot |
 | `dvr_proxy_start_on_boot` | Start DVR proxy 40s after HA boot |
 
 ## Voice Assistant
