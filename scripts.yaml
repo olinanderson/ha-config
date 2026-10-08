@@ -1459,9 +1459,10 @@ voice_light_warmth:
         w: "{{ warmth | default('', true) | string | lower | trim }}"
         # 0-100, or -1 for none (the local sentences pass '' then).
         # Kelvin wins over a percent, a percent over a warmth word.
+        # No default('', true) here: it would turn 0 ("100% cool") into none.
         pct: >-
           {{ [100, percent | float] | min
-             if percent | default('', true) | string | trim | is_number and percent | float >= 0 else -1 }}
+             if percent | default('') | string | trim | is_number and percent | float >= 0 else -1 }}
         want: >-
           {{ kelvin | int(0) if kelvin is defined else 0 if pct >= 0 else
              {'warmest': 2000, 'warm': 2700, 'neutral': 4000, 'cool': 5000, 'coolest': 6500}.get(w, 0) }}
