@@ -516,14 +516,22 @@ home coordinates, which follow the van). Sensors are CAD/L; cost templates in
 
 ### Vehicle / OBD — WiCAN Pro via MQTT
 
-The WiCAN Pro connects via **MQTT** to `core-mosquitto` (192.168.10.173:1883). Entities are
-created by **MQTT discovery** (retained configs under `homeassistant/sensor/wican_pro/`).
+The WiCAN Pro connects via **MQTT** to `core-mosquitto` (192.168.10.173:1883). The PID
+sensors are **MQTT YAML** in `mqtt/sensors.yaml` (unique_id `wican_*`). Three entities come
+from retained **discovery** configs on the broker instead (`homeassistant/+/wican_pro/*/config`):
+`binary_sensor.meatpi_pro_ecu_status`, `sensor.192_168_10_90_intake_air_temp_2` and
+`sensor.192_168_10_90_octane_ratio_l`. A unique_id must be in only one of the two. From
+2026-04-19 (758287f) the broker also held 35 discovery configs reusing the YAML unique_ids;
+the YAML registered first, so they never ran (nor anything in them, like a tyre `/ 2`), and
+every HA start logged "Platform mqtt does not generate unique IDs" 35 times. They were
+cleared on 2026-10-08 (backup: `/config/vanlife-data/wican_discovery_backup_2026-10-08.json`).
 Entity IDs follow the pattern `sensor.192_168_10_90_*` (preserved from the old ha-wican
-integration for backward compatibility). The old `ha-wican` HACS integration has been removed.
+integration; the entity registry keeps them). The old `ha-wican` integration has no config
+entry, but its files are still in `custom_components/wican` (HACS).
 
 **WiCAN MQTT topics**: Each PID publishes to its own topic (e.g. `wican/EngineRPM`,
-`wican/GEAR`, `wican/TYRE_P_FL`). Payloads are JSON with a single key-value pair
-(e.g. `{"0C-EngineRPM": 1826}`). The discovery `value_template` is
+`wican/GEAR`, `wican/TYRE_P_FL`), retained. Payloads are JSON with a single key-value pair
+(e.g. `{"0C-EngineRPM": 1826}`). The YAML `value_template` is
 `{{ value_json.values() | first }}`.
 
 > **⚠ WiCAN CONFIG SAFETY**: The WiCAN `/store_config` HTTP endpoint **replaces ALL
@@ -957,15 +965,21 @@ Used in `old_home.yaml`:
 - **Fuel level** is noisy from OBD — use `sensor.stable_fuel_level` or `sensor.wican_fuel_5_min_mean`.
 - **Roof fan direction**: `forward` = exhaust, `reverse` = intake.
 - **Scenes are all dynamic** — `scenes.yaml` is empty. They're created via `scene.create` in scripts/automations.
-- **Tire pressure raw kPa values from WiCAN are ~2× actual.** The MQTT discovery `value_template`
-  divides by 2 (`/ 2`), so entities like `sensor.192_168_10_90_tyre_p_fl` already report in psi.
+- **Tire pressure raw kPa values from WiCAN are ~2× actual.** The tyre sensors report the raw
+  value (YAML, no conversion). The `/ 2` was only in the duplicate discovery configs, which
+  never ran, yet Van.tsx, `sensor.tire_pressure_min` and `binary_sensor.low_tire_pressure`
+  treat the values as psi. As of 2026-10-08 the four had read the same 1408 / 0 / 0 / 5452.8
+  for 30 days (old retained values), so the TPMS PIDs aren't reporting at all.
   **Do NOT apply `* 0.0725190`** in templates or Van.tsx — that was the old wrong conversion.
 - **`binary_sensor.engine_is_running`** uses RPM freshness only (RPM > 0 and last_updated < 120s).
   Do NOT gate it on `binary_sensor.meatpi_pro_ecu_status` — that entity uses the WiCAN MQTT LWT
   topic which is unreliable (stays `on` even when ECU has no response).
-- **WiCAN MQTT discovery configs** have no `expire_after` — entities keep last known value forever.
-  The ECU status entity (`binary_sensor.meatpi_pro_ecu_status`) also has no `expire_after`; it
-  reflects the retained `wican/status` LWT (`online`/`offline`).
+- **WiCAN `expire_after`**: the YAML sensors have it (22 at 60 s, 12 at 30 s, ambient 300 s), so
+  they go unavailable soon after the WiCAN sleeps. The PID topics are retained, so after an HA
+  start or MQTT reload (every deploy's `reload_all`) they show the last values until it runs out.
+  Of the discovery entities, ECU status and Intake Air Temp 2 have none and keep their last
+  value; Octane Ratio has 60 s. ECU status (`binary_sensor.meatpi_pro_ecu_status`) reflects the
+  retained `wican/status` LWT (`online`/`offline`).
 - **Fuel consumption uses speed-density estimation** — via Ford Mode 22 MAP PID (`22F404`)
   combined with RPM + IAT. The formula uses a volumetric efficiency (VE) correction factor
   (`input_number.fuel_ve_correction`, default 0.55) that should be calibrated against

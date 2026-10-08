@@ -210,7 +210,9 @@ rest:
 # so a top-level `filter:` key was silently ignored by HA (dead config).
 sensor: !include integrations/sensor.yaml
 
-# --- MQTT (device tracker via YAML; sensors via MQTT discovery) ---
+# --- MQTT: u-blox trackers, WiCAN car sensors and Apple Watch, all YAML. Three
+# WiCAN entities (ECU status, Intake Air Temp 2, Octane Ratio) come from retained
+# discovery configs instead; see the header of mqtt/sensors.yaml. ---
 mqtt:
   device_tracker: !include mqtt/device_tracker.yaml
   sensor: !include mqtt/sensors.yaml

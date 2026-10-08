@@ -1,8 +1,14 @@
 # ============================================================
 # mqtt/sensors.yaml — WiCAN Pro OBD2 Sensors (MQTT)
 # ============================================================
-# All WiCAN OBD data via MQTT topics (replaces ha-wican HTTP webhooks).
-# Entity IDs match old ha-wican integration via object_id — no downstream changes needed.
+# All WiCAN OBD data via MQTT topics (replaces ha-wican HTTP webhooks), except
+# INTAKE_AIR_TEMP_2 and OCTANE_RATIO_L (and the ECU status binary sensor), whose
+# entities come from retained discovery configs under homeassistant/+/wican_pro/.
+# Entity IDs (sensor.192_168_10_90_*) date from the old ha-wican integration; the
+# entity registry keeps them (object_id was dropped here 2026-06-23).
+# A unique_id may be here or in a discovery config, never both. Until 2026-10-08 the
+# broker held 35 discovery configs reusing these unique_ids: the YAML registered
+# first and every HA start logged "Platform mqtt does not generate unique IDs".
 # WiCAN publishes {"NAME": value} per PID; value_template extracts the first value.
 #
 # Disabled PIDs (broken on this ECU): FUEL_RATE, ALT_DUTY
