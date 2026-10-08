@@ -62,11 +62,8 @@ www/community/
 www/sounds/
 www/images/
 
-# --- Frontend runtime caches ---
-www/vanlife-panel/route_cache.db
-www/vanlife-panel/osrm_proxy.log
-www/vanlife-panel/gps_filter.log
-www/vanlife-panel/gps_ublox.log
+# --- HA token of the GPS services and scripts (their databases and logs are in
+# vanlife-data/, which has its own .gitignore) ---
 .gps_filter_token
 
 # --- Diagnostic ps dumps (until 2026-10-08 ps aux printed the gps_filter --token) ---

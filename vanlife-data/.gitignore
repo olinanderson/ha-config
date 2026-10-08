@@ -1,0 +1,6 @@
+# Databases and logs of the van services (filtered_gps.db, route_cache.db,
+# gps_filter/gps_ublox/osrm_proxy/dvr_proxy logs). Kept out of www/, which HA
+# serves at /local/ without login. Only this file is in git, so the folder
+# exists in every checkout.
+*
+!.gitignore

@@ -40,10 +40,12 @@ from datetime import datetime, timedelta, timezone
 # ── Config ────────────────────────────────────────────────────────────────────
 HA_URL      = os.environ.get("HA_URL", "http://localhost:8123")
 PROXY_URL   = os.environ.get("PROXY_URL", "http://localhost:8765")
-FILTER_DB   = "/config/www/vanlife-panel/filtered_gps.db"
+# Data and logs live in /config/vanlife-data/: HA serves www/ (this folder) at
+# /local/ without login, so until 2026-10-08 they were public.
+FILTER_DB   = "/config/vanlife-data/filtered_gps.db"
 TOKEN_FILE  = "/config/.gps_filter_token"
 ENTITY_ID   = "device_tracker.ublox_gps"
-LOG_FILE    = "/config/www/vanlife-panel/gps_filter.log"
+LOG_FILE    = "/config/vanlife-data/gps_filter.log"   # stdout goes there (shell_commands.yaml)
 
 # Filter constants, from the old panel's _fetchAndFilterStarlink() (index.html,
 # removed 2026-10-08; it is in the git history)

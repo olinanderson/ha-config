@@ -33,13 +33,17 @@ start_vban_receptor: >
   root@172.30.32.1
   'sh /mnt/data/supervisor/homeassistant/vban/start-receiver.sh'
 
+# The van services below (osrm_proxy, gps_ublox, gps_filter, dvr_proxy) log to
+# /config/vanlife-data/, next to their databases. HA serves www/, where their
+# code lives, at /local/ without login, so until 2026-10-08 all of it was public.
+
 # Restart routing CORS proxy
 restart_osrm_proxy: >
   /bin/sh -c '
     python3 /config/www/vanlife-panel/kill_osrm.py;
     sleep 2;
     cd /config/www/vanlife-panel &&
-    nohup python3 osrm_proxy.py >> /config/www/vanlife-panel/osrm_proxy.log 2>&1 &
+    nohup python3 osrm_proxy.py >> /config/vanlife-data/osrm_proxy.log 2>&1 &
     echo "Routing proxy restarted"'
 
 # Start routing CORS proxy so the vanlife panel can call GraphHopper without CORS
@@ -51,7 +55,7 @@ start_osrm_proxy: >
     python3 /config/www/vanlife-panel/kill_osrm.py;
     sleep 2;
     cd /config/www/vanlife-panel &&
-    nohup python3 osrm_proxy.py >> /config/www/vanlife-panel/osrm_proxy.log 2>&1 &
+    nohup python3 osrm_proxy.py >> /config/vanlife-data/osrm_proxy.log 2>&1 &
     echo "Routing proxy started";
   else
     echo "Routing proxy already running";
@@ -65,7 +69,7 @@ diag_psout: sh /config/www/vanlife-panel/psout.sh
 start_gps_ublox: >
   /bin/sh -c 'if [ ! -f /tmp/gps_ublox.pid ] || ! kill -0 $(cat /tmp/gps_ublox.pid) 2>/dev/null; then
     cd /config/www/vanlife-panel &&
-    nohup python3 gps_ublox.py >> /config/www/vanlife-panel/gps_ublox.log 2>&1 &
+    nohup python3 gps_ublox.py >> /config/vanlife-data/gps_ublox.log 2>&1 &
     echo $! > /tmp/gps_ublox.pid;
     echo "u-blox GPS bridge started";
   else
@@ -80,7 +84,7 @@ restart_gps_ublox: >
     pkill -f "^python3.*gps_ublox" 2>/dev/null;
     sleep 1;
     cd /config/www/vanlife-panel &&
-    nohup python3 gps_ublox.py >> /config/www/vanlife-panel/gps_ublox.log 2>&1 &
+    nohup python3 gps_ublox.py >> /config/vanlife-data/gps_ublox.log 2>&1 &
     echo $! > /tmp/gps_ublox.pid;
     echo "u-blox GPS bridge restarted"'
 
@@ -91,7 +95,7 @@ start_gps_filter: >
   /bin/sh -c 'if [ ! -f /tmp/gps_filter.pid ] || ! kill -0 $(cat /tmp/gps_filter.pid) 2>/dev/null; then
     if [ ! -s /config/.gps_filter_token ]; then echo "No token in /config/.gps_filter_token"; exit 1; fi;
     cd /config/www/vanlife-panel &&
-    nohup python3 gps_filter.py >> /config/www/vanlife-panel/gps_filter.log 2>&1 &
+    nohup python3 gps_filter.py >> /config/vanlife-data/gps_filter.log 2>&1 &
     echo $! > /tmp/gps_filter.pid;
     echo "GPS filter daemon started";
   else
@@ -108,7 +112,7 @@ restart_gps_filter: >
     sleep 1;
     if [ ! -s /config/.gps_filter_token ]; then echo "No token in /config/.gps_filter_token"; exit 1; fi;
     cd /config/www/vanlife-panel &&
-    nohup python3 gps_filter.py >> /config/www/vanlife-panel/gps_filter.log 2>&1 &
+    nohup python3 gps_filter.py >> /config/vanlife-data/gps_filter.log 2>&1 &
     echo $! > /tmp/gps_filter.pid;
     echo "GPS filter daemon restarted"'
 
@@ -118,7 +122,7 @@ start_dvr_proxy: >
   /bin/sh -c 'which ffmpeg >/dev/null 2>&1 || apk add --no-cache ffmpeg >/dev/null 2>&1;
     if ! nc -z 127.0.0.1 8766 2>/dev/null; then
       cd /config/www/react-dashboard &&
-      nohup python3 dvr_proxy.py >> /config/www/react-dashboard/dvr_proxy.log 2>&1 &
+      nohup python3 dvr_proxy.py >> /config/vanlife-data/dvr_proxy.log 2>&1 &
       echo "DVR proxy started";
     else
       echo "DVR proxy already running";
@@ -131,7 +135,7 @@ restart_dvr_proxy: >
     pkill -f "^python3.*dvr_proxy" 2>/dev/null;
     sleep 2;
     cd /config/www/react-dashboard &&
-    nohup python3 dvr_proxy.py >> /config/www/react-dashboard/dvr_proxy.log 2>&1 &
+    nohup python3 dvr_proxy.py >> /config/vanlife-data/dvr_proxy.log 2>&1 &
     echo "DVR proxy restarted"'
 
 # Called after a fill-up is detected — queries fuel-stats API to compute the

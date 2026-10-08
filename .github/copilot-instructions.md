@@ -306,7 +306,9 @@ www/                            # Static web assets (NOT synced via Syncthing)
     osrm_proxy.py               # CORS proxy + API server (port 8765)
     gps_filter.py               # GPS filter daemon (background, incremental mode)
     backfill_gps.py             # One-shot historical GPS backfill
-    filtered_gps.db             # SQLite DB (segments, parking, named_places)
+vanlife-data/                   # Their databases + the daemon logs (not served, not in git)
+  filtered_gps.db               # SQLite DB (segments, parking, named_places)
+  route_cache.db                # Valhalla route cache (osrm_proxy)
 zigbee2mqtt/                    # Zigbee2MQTT config
 .storage/                       # HA storage (dashboards, registries, etc.)
 .github/
@@ -1199,7 +1201,8 @@ GPS trip tracking and named places, served to the React dashboard's Map page. Th
 once held a sidebar panel too (`index.html` + `panel.js`, the `vanlife` `panel_custom`). It was
 removed on 2026-10-08: nobody opened it, and the Map page shows the track, places and trips.
 The folder keeps its name because `shell_commands.yaml` and the REST sensors start and call
-the services from it.
+the services from it. Their databases and logs are in `/config/vanlife-data/` since 2026-10-08:
+HA serves `www/` at `/local/` without login, so they were public before.
 
 ### Architecture
 
@@ -1214,7 +1217,7 @@ the services from it.
 
 - **Source**: `device_tracker.ublox_gps` (5–10s update interval from Starlink)
 - **Filter constants**: `MIN_PARK_DURATION_S=180`, `FILTER_RADIUS_M=15`, `CONFIRM_COUNT=3`, `MIN_SEGMENT_DISTANCE_M=300`
-- **Database**: `www/vanlife-panel/filtered_gps.db` (SQLite)
+- **Database**: `/config/vanlife-data/filtered_gps.db` (SQLite); Valhalla route cache `/config/vanlife-data/route_cache.db`
 - **Tables**: `gps_points`, `segments` (with pre-routed geometry), `named_places`
 - **Routing**: Valhalla `trace_route` with `search_radius=100`, `gps_accuracy=50`, `breakage_distance=20000`
 - **Data range**: 2025-03-03 to present (511+ routed segments as of April 2026)
@@ -1242,8 +1245,9 @@ change when it restarts (the start commands are in `shell_commands.yaml`).
 
 ### Running Services on HA
 
-- **Proxy**: `cd /config/www/vanlife-panel && python3 osrm_proxy.py &` (port 8765)
-- **Daemon**: `cd /config/www/vanlife-panel && python3 gps_filter.py --mode incremental &`
+- **Proxy**: `shell_command.start_osrm_proxy` / `restart_osrm_proxy` (port 8765), log `/config/vanlife-data/osrm_proxy.log`
+- **Daemon**: `shell_command.start_gps_filter` / `restart_gps_filter`, log `/config/vanlife-data/gps_filter.log`
+- The boot automations and the 3-min liveness watchdog call the `start_*` commands
 - **Auth token**: Stored at `/config/.gps_filter_token`
 
 ---

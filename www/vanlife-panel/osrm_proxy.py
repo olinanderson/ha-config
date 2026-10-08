@@ -34,8 +34,9 @@ CHUNK_OVL      = 5      # overlap GPS points between chunks for continuity
 PORT           = 8765
 TIMEOUT        = 45     # seconds; public Valhalla can be slow
 REQUEST_DELAY  = 1.2    # seconds between Valhalla calls — avoids 429 rate limit
-CACHE_DB    = "/config/www/vanlife-panel/route_cache.db"
-FILTERED_DB = "/config/www/vanlife-panel/filtered_gps.db"
+# In /config/vanlife-data/, not here: HA serves www/ at /local/ without login.
+CACHE_DB    = "/config/vanlife-data/route_cache.db"
+FILTERED_DB = "/config/vanlife-data/filtered_gps.db"
 
 # ── Fuel-history helpers (read-only HA recorder lookups) ────────────────────
 TANK_L                 = 94.6   # Ford Transit T-350, 25 US gal

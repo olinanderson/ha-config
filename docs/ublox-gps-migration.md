@@ -38,7 +38,7 @@ If missing, the device isn't mapped into Core — stop and fix mapping before co
 
 **2. Start the daemon and watch it get a fix:**
 - Developer Tools → Actions → `shell_command.start_gps_ublox` → Run.
-- `tail -f /config/www/vanlife-panel/gps_ublox.log`
+- `tail -f /config/vanlife-data/gps_ublox.log`
 - Expect: `streaming NMEA from /dev/ttyACM0 @ <baud> baud`, then quiet (publishing).
   - `valid sentences but no satellite fix yet` → needs sky view; cold start can take minutes.
   - `open failed ... errno 13` → permission; `errno 2` → wrong device path / not mapped.
