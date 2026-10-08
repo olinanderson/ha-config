@@ -49,6 +49,9 @@ shell_command: !include shell_commands.yaml
 # intent_scripts.yaml, the rest in voice/ (docs/voice-assistant.md)
 conversation:
 intent_script: !include intent_scripts.yaml
+# Every voice run, with what it did, to vanlife-data/voice_log.jsonl
+# (custom_components/voice_log)
+voice_log:
 
 # --- Input helpers ---
 input_boolean: !include input_boolean.yaml

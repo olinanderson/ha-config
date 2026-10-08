@@ -300,6 +300,7 @@ yaml_backups/                   # Full backups of all original YAML files
 esphome/                        # ESPHome device configs
 custom_components/              # HACS / custom integrations (DO NOT hand-edit)
   vanlife_tracker/              # Custom: stop detection, geocoding, Traccar
+  voice_log/                    # Custom: every voice run to vanlife-data/voice_log.jsonl
 themes/mushroom/                # Mushroom UI theme
 www/                            # Static web assets (NOT synced via Syncthing)
   vanlife-panel/                # Vanlife GPS services (the panel UI was removed 2026-10-08)
@@ -309,6 +310,7 @@ www/                            # Static web assets (NOT synced via Syncthing)
 vanlife-data/                   # Their databases + the daemon logs (not served, not in git)
   filtered_gps.db               # SQLite DB (segments, parking, named_places)
   route_cache.db                # Valhalla route cache (osrm_proxy)
+  voice_log.jsonl               # Every voice run and what it did (custom_components/voice_log)
 zigbee2mqtt/                    # Zigbee2MQTT config
 .storage/                       # HA storage (dashboards, registries, etc.)
 .github/
@@ -789,7 +791,7 @@ against measured power every minute; the fan's off is sent twice (`button.ag_pro
 
 ## Voice Assistant
 
-Since 2026-10-07: Whisper → local sentences (`custom_sentences/en/van.yaml` → `intent_scripts.yaml`) → anything else to Claude Haiku 5.5 (Anthropic integration) → OpenAI TTS. Names, areas, what Assist may see, the model and the pipeline are in `voice/spec.yaml`; Claude's instructions in `voice/prompt.md`; `deploy.sh` applies both. Whole setup, the local sentence list and the model benchmark: `docs/voice-assistant.md`.
+Since 2026-10-07: Whisper → local sentences (`custom_sentences/en/van.yaml` → `intent_scripts.yaml`) → anything else to Claude Haiku 5.5 (Anthropic integration) → OpenAI TTS. Names, areas, what Assist may see, the model and the pipeline are in `voice/spec.yaml`; Claude's instructions in `voice/prompt.md`; `deploy.sh` applies both. Whole setup, the local sentence list and the model benchmark: `docs/voice-assistant.md`. Every run (what was heard, what Claude or the sentence did, the reply, `ok`/`unable`/`failed`/`error`/`no_speech`) is logged to `/config/vanlife-data/voice_log.jsonl` by `custom_components/voice_log` since 2026-10-08.
 
 ---
 

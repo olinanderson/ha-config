@@ -40,6 +40,7 @@ sentences didn't match.
 | `custom_sentences/en/van.yaml` | Local sentences |
 | `intent_scripts.yaml` | What the local sentences do |
 | `scripts.yaml` → `voice_roof_fan` | Claude's roof fan tool (power, intake/exhaust, speed); the local roof fan sentences use it too |
+| `custom_components/voice_log/` | Writes every run to the voice log (below) |
 
 ## What things are called
 
@@ -99,6 +100,39 @@ lights to 30 percent", "turn on the heater".
   PE's `device_id` (`0026618f4429fdcd4c612ccb18fae4d1`).
 - **Claude directly**: websocket `conversation/process` with
   `agent_id: conversation.claude_conversation` and the same `device_id`.
+
+## Voice log
+
+Since 2026-10-08 every run, spoken or typed in the Assist dialog, is one line
+of JSON in `/config/vanlife-data/voice_log.jsonl` (not in git, not served).
+`custom_components/voice_log` copies it from the debug view's records within
+10 s of the run ending; HA itself keeps only the last 10 runs, in memory.
+Over 10 MB the log moves to `voice_log.1.jsonl`.
+
+| Field | What it holds |
+|---|---|
+| `time` | When the run started, HA's time (Mountain) |
+| `result` | `ok`; `unable`: the reply says it couldn't (a guess from words like "can't", "unable", "not sure which"); `failed`: a tool or the answer returned an error or a device that failed; `error`: the pipeline itself failed (Whisper, Claude, TTS); `no_speech`: nothing heard (a false wake word, or silence after a question) |
+| `heard` | What Whisper heard, or what was typed |
+| `reply` | What it said |
+| `by` | `local` (a sentence) or the agent, `conversation.claude_conversation` |
+| `tools` | Claude's tool calls: name, arguments, then the entities `done` or `failed`, the `error`, or the `result` (cut to 200 characters) |
+| `done`, `failed` | The entities a local sentence acted on |
+| `error` | The pipeline error: code and message |
+| `follow_up` | It asked something back and listened again |
+| `seconds` | `listen` (speaking + Whisper), `think` (sentence or Claude), `total` |
+| `input`, `satellite`, `pipeline`, `conversation_id` | Where it came from; a follow-up keeps the conversation_id |
+
+Everything that wasn't `ok`:
+
+```
+ssh hassio@100.80.15.86 "sudo grep -v '\"result\": \"ok\"' /config/vanlife-data/voice_log.jsonl"
+```
+
+The first line is the request that started the log: "turn the heater on and
+set it to 26 degrees Celsius on auto". Claude turned it on at 26 °C, then said
+it couldn't set auto. The heater's only modes are off and heat, and heat with
+a target is already its thermostat, so the reply should have said so.
 
 ## API key
 

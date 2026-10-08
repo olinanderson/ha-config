@@ -51,9 +51,11 @@ deps/
 tts/
 
 # --- HACS / custom components (managed by HACS, not hand-edited) ---
-# Ignore everything inside custom_components except vanlife_tracker
+# Ignore everything inside custom_components except our own: vanlife_tracker
+# and voice_log
 custom_components/*
 !custom_components/vanlife_tracker/
+!custom_components/voice_log/
 
 # --- Frontend assets (HACS-managed cards) ---
 www/community/

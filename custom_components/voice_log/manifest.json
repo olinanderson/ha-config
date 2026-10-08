@@ -1,0 +1,8 @@
+{
+  "domain": "voice_log",
+  "name": "Voice Log",
+  "documentation": "https://github.com/olinanderson/ha-config",
+  "dependencies": ["assist_pipeline"],
+  "codeowners": ["@olinanderson"],
+  "version": "1.0.0"
+}
