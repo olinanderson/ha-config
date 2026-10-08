@@ -7,9 +7,6 @@ home-assistant.log*
 home-assistant_v2.db
 home-assistant_v2.db-shm
 home-assistant_v2.db-wal
-vanlife_tracker.db
-vanlife_tracker.db-shm
-vanlife_tracker.db-wal
 starlink_gps_backup.db*
 db_backups/
 *.db
@@ -51,10 +48,8 @@ deps/
 tts/
 
 # --- HACS / custom components (managed by HACS, not hand-edited) ---
-# Ignore everything inside custom_components except our own: vanlife_tracker
-# and voice_log
+# Ignore everything inside custom_components except our own: voice_log
 custom_components/*
-!custom_components/vanlife_tracker/
 !custom_components/voice_log/
 
 # --- Frontend assets (HACS-managed cards) ---

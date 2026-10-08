@@ -209,12 +209,11 @@ export default function VanlifeMap() {
   });
 
   // HA van location entities
-  const vanTracker1 = useEntity('device_tracker.vanlife_tracker_van_location');
-  const vanTracker2 = useEntity('device_tracker.ublox_gps');
-  const vanTracker3 = useEntity('device_tracker.ublox_gps_filtered');
+  const vanTracker1 = useEntity('device_tracker.ublox_gps');
+  const vanTracker2 = useEntity('device_tracker.ublox_gps_filtered');
 
   const vanPos = useMemo((): [number, number] | null => {
-    for (const e of [vanTracker1, vanTracker2, vanTracker3]) {
+    for (const e of [vanTracker1, vanTracker2]) {
       const lat = Number(e?.attributes?.latitude);
       const lon = Number(e?.attributes?.longitude);
       // Reject missing/NaN and the (0,0) "null island" fix that a dropped raw
@@ -224,7 +223,7 @@ export default function VanlifeMap() {
       }
     }
     return null;
-  }, [vanTracker1, vanTracker2, vanTracker3]);
+  }, [vanTracker1, vanTracker2]);
 
   // Refs for map objects that persist across renders
   const vanMarkerRef = useRef<L.Marker | null>(null);

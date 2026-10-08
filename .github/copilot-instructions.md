@@ -298,14 +298,12 @@ yaml_backups/                   # Full backups of all original YAML files
 # --- Other directories ---
 esphome/                        # ESPHome device configs
 custom_components/              # HACS / custom integrations (DO NOT hand-edit)
-  vanlife_tracker/              # Custom: stop detection, geocoding, Traccar
   voice_log/                    # Custom: every voice run to vanlife-data/voice_log.jsonl
 themes/mushroom/                # Mushroom UI theme
 www/                            # Served at /local/ WITHOUT login: nothing private here (git: react-dashboard/, vanlife-panel/)
   vanlife-panel/                # Vanlife GPS services (the panel UI was removed 2026-10-08)
     osrm_proxy.py               # CORS proxy + API server (port 8765)
     gps_filter.py               # GPS filter daemon (background, incremental mode)
-    backfill_gps.py             # One-shot historical GPS backfill
 vanlife-data/                   # Their databases + the daemon logs (not served, not in git)
   filtered_gps.db               # SQLite DB (segments, parking, named_places)
   route_cache.db                # Valhalla route cache (osrm_proxy)
@@ -1249,14 +1247,18 @@ The folder keeps its name because `shell_commands.yaml` and the REST sensors sta
 the services from it. Their databases and logs are in `/config/vanlife-data/` since 2026-10-08:
 HA serves `www/` at `/local/` without login, so they were public before.
 
+The `vanlife_tracker` integration (stop detection, geocoding, Traccar) was retired on
+2026-10-08. Its GPS source had been the Starlink location, which stopped reporting in
+spring, and these services already cover drives, parking and places. Its databases are
+archived in `/config/vanlife-data/` (`vanlife_tracker-2026-10-08.db.gz`,
+`vanlife_tracker_pre_replace-2026-04-08.db.gz`); the code is in git history.
+
 ### Architecture
 
 | Component | File | Purpose |
 |---|---|---|
 | **CORS Proxy / API** | `www/vanlife-panel/osrm_proxy.py` | Python HTTP server (port 8765): filtered GPS endpoint, named places CRUD, Valhalla routing proxy, data-range endpoint |
 | **GPS Filter Daemon** | `www/vanlife-panel/gps_filter.py` | Background daemon: filters raw Starlink GPS → movement segments & parking spots, pre-routes via Valhalla, stores in SQLite |
-| **Backfill Script** | `www/vanlife-panel/backfill_gps.py` | One-shot script to process historical GPS data |
-| **Custom Component** | `custom_components/vanlife_tracker/` | HA integration: stop detection, geocoding, Traccar client |
 
 ### GPS Filter Pipeline
 

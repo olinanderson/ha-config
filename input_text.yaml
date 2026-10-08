@@ -14,25 +14,6 @@ ve_correction_history:
   max: 255
   initial: "[]"
 
-# --- Vanlife Tracker journal ---
-vanlife_stop_name:
-  name: "Stop Name"
-  icon: mdi:map-marker
-  max: 100
-  initial: ""
-
-vanlife_stop_notes:
-  name: "Stop Notes"
-  icon: mdi:notebook-edit
-  max: 255
-  initial: ""
-
-vanlife_stop_id:
-  name: "Editing Stop ID"
-  icon: mdi:identifier
-  max: 20
-  initial: ""
-
 # --- Live Trip computer timestamps (epoch ms) ---
 # No `initial:` so they RESTORE across restarts (mid-trip restart keeps the trip).
 trip_start_ts:

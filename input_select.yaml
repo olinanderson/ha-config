@@ -1,21 +1,6 @@
 # ================================
 # input_select.yaml
 # ================================
-vanlife_stop_category:
-  name: "Stop Category"
-  icon: mdi:tag
-  options:
-    - free_camping
-    - paid_campground
-    - walmart
-    - blm_land
-    - national_forest
-    - rest_area
-    - friend_family
-    - urban
-    - trailhead
-    - other
-  initial: other
 
 # ─── Night Climate (Tonight card, automations night_climate_*) ───
 # Anything but "Off" means the program is running now. Hold keeps the hold

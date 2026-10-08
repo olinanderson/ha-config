@@ -73,11 +73,10 @@ export function TodayTripsCard() {
   const [hasTrips, setHasTrips] = useState(false);
 
   // Current van location (same tracker fallback as the full map).
-  const vanTracker1 = useEntity('device_tracker.vanlife_tracker_van_location');
-  const vanTracker2 = useEntity('device_tracker.ublox_gps');
-  const vanTracker3 = useEntity('device_tracker.ublox_gps_filtered');
+  const vanTracker1 = useEntity('device_tracker.ublox_gps');
+  const vanTracker2 = useEntity('device_tracker.ublox_gps_filtered');
   const vanPos = useMemo((): [number, number] | null => {
-    for (const e of [vanTracker1, vanTracker2, vanTracker3]) {
+    for (const e of [vanTracker1, vanTracker2]) {
       const lat = Number(e?.attributes?.latitude);
       const lon = Number(e?.attributes?.longitude);
       if (Number.isFinite(lat) && Number.isFinite(lon) && (lat !== 0 || lon !== 0)) {
@@ -85,7 +84,7 @@ export function TodayTripsCard() {
       }
     }
     return null;
-  }, [vanTracker1, vanTracker2, vanTracker3]);
+  }, [vanTracker1, vanTracker2]);
 
   // Init a static, non-interactive thumbnail map.
   useEffect(() => {
