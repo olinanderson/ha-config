@@ -1,60 +1,65 @@
-## Home Assistant - ha_config (van)
+# Home Assistant config: camper van
 
-This directory contains my Home Assistant configuration and dashboards. One of the dashboards is the "van" dashboard located at `dashboards/van.yaml` — it collects vehicle-specific sensors, controls, and UI cards for monitoring and managing the van.
+The Home Assistant configuration of a Ford Transit camper van that its owner lives in full
+time. It runs the house power system (24 V LiFePO4 battery, solar, alternator and shore
+charging, inverter), heating, cooling and the roof fan, water and propane, lighting, the
+vehicle's OBD data, GPS and trips, cameras and a voice assistant.
 
-### Purpose
+## Layout
 
-- Provide a focused dashboard for the van: charging, battery, power usage, water, climate, and locations.
-- Keep a reproducible config for Home Assistant (YAML-based) that can be version-controlled.
+| Path | Contents |
+|---|---|
+| `configuration.yaml` | Entry point; includes the files and folders below |
+| `automations.yaml`, `scripts.yaml`, `scenes.yaml` | Automations, scripts and scenes |
+| `input_*.yaml` | Helpers (booleans, numbers, selects, texts, dates and times) |
+| `template/` | Template sensors and binary sensors |
+| `mqtt/` | MQTT entities: the vehicle's OBD data (WiCAN), the GPS and others |
+| `integrations/` | YAML sensor platforms (statistics, history stats, integrals) |
+| `shell_commands.yaml` | Shell commands, including starting the van services kept in `www/` |
+| `custom_sentences/`, `intent_scripts.yaml`, `voice/` | Voice assistant: local sentences and what they do; names, areas and Claude's prompt (`voice/`, applied by `deploy.sh`) |
+| `custom_components/` | Integrations written for the van; those installed from HACS aren't in git |
+| `esphome/` | ESPHome configs: the I/O controllers, the radar presence sensor and the voice satellite |
+| `react-dashboard/` | Source of the React dashboard, a sidebar panel at `/dashboard`; its build goes to `www/react-dashboard/` |
+| `www/` | Served at `/local/` **without login**, so nothing private goes here: the dashboard build and the GPS, routing and camera services |
+| `relay/` | Node service that stands in for HA while the van is offline |
+| `dashboards/` | Archive of old YAML dashboards; HA doesn't load them |
+| `analyze_*.py` | One-off analyses of HA's history |
+| `docs/`, `.github/` | Documentation (below) and the CI check |
 
-### Important files
+All Lovelace dashboards are in storage mode and are edited in HA, not in this repo: see
+[How the dashboards work](.github/dashboard-editing-reference.md).
 
-- `configuration.yaml` - main HA configuration entrypoint (includes, integrations).
-- `dashboards/van.yaml` - the van-specific Lovelace dashboard used in the HA UI. This is the primary file for the van UI.
-- `automations.yaml`, `scripts.yaml`, `sensors/`, `mqtt/`, `esphome/` - supporting config for sensors, automations, and devices.
+## Deploying
 
-If you edit or move `dashboards/van.yaml`, update any reference in `configuration.yaml` or the Lovelace resources.
+`/config` on the HA machine is a git checkout of this repo. Edit here, commit, then:
 
-### How to use
-
-1. Copy this folder into your Home Assistant config directory (or point HA to this folder when using a separate repo).
-2. Ensure `configuration.yaml` includes the dashboards directory (or includes the `dashboards/van.yaml` file directly).
-3. Restart Home Assistant (or reload Lovelace) to pick up changes.
-
-Example snippet to include a dashboard (if using YAML mode):
-
-```yaml
-# In configuration.yaml
-lovelace:
-  mode: yaml
-  resources: !include lovelace/resources.yaml
-  dashboards:
-    van:
-      mode: yaml
-      filename: dashboards/van.yaml
+```sh
+bash deploy.sh        # push to GitHub, pull on HA, check the config, reload what changed
+bash deploy.sh --dry  # only show what HA would receive
 ```
 
-### Notes and assumptions
+`deploy.sh` refuses to run with uncommitted changes. It never restarts HA or the van
+services; it lists the files that need a restart. Don't edit files on HA directly or save
+from HA's automation and script editors: that leaves HA's checkout modified, and the next
+deploy that changes the same file stops.
 
-- Some sensors are provided via MQTT and ESPHome devices stored in `mqtt/` and `esphome/` respectively. If you don't have those devices, the dashboard will show unavailable entities.
-- Secrets (API keys, credentials) should be stored in `secrets.yaml` and not checked into version control.
-- Paths and entity names follow the local naming conventions used in this repo; if you copy the dashboard to another HA instance you may need to map entity IDs.
+## Documentation
 
-### Editing tips
+- [docs/README.md](docs/README.md): index of the reference docs (hardware, entities,
+  automations, voice, the React dashboard, GPS and more)
+- [.github/copilot-instructions.md](.github/copilot-instructions.md): the full system
+  description and working rules, written for AI assistants
+- [.github/dashboard-editing-reference.md](.github/dashboard-editing-reference.md): how the
+  dashboards work
 
-- Edit `dashboards/van.yaml` to change cards or add entities. Use the HA UI Raw Editor to validate YAML if needed.
-- When adding sensors, update `template/` or `mqtt/` sensor definitions accordingly.
+## Notes
 
-### Troubleshooting
-
-- If cards show "entity not found" or "unavailable": verify the entity ID in Developer Tools -> States and the device providing it (MQTT, ESPHome, integrations).
-- Check Home Assistant logs after restart for configuration errors (`Configuration -> Settings -> Logs`).
-
-### Contributing / Changes
-
-- Keep changes small and test in a local HA instance or a safe environment before deploying to production.
-- Document any new entities or integrations you add in this README under the "Important files" or a new subsection.
-
----
-
-If you'd like, I can also add a short list of the van-specific entities (e.g., battery, charger, water pump) by scanning the YAML files and summarizing them.
+- Secrets (API keys, passwords) belong in `secrets.yaml`, which is not in git.
+  `secrets.fake.yaml` is a stub for the CI config check.
+- Many entities come from the van's MQTT and ESPHome devices. On another HA instance they
+  are unavailable, and entity IDs would need mapping.
+- If a card shows "entity not found" or "unavailable", check the entity ID in Developer
+  tools → States and the device behind it (MQTT, ESPHome or an integration). HA's log is
+  in Settings → System → Logs.
+- When adding sensors, update the definitions in `template/` or `mqtt/`.
+- Keep changes small; `deploy.sh` checks the config before it reloads anything.
