@@ -201,11 +201,19 @@
 
 # ─── Vehicle Specific PIDs (Ford Mode 22, 5s polling) ───────
 
+# Tyre pressures: the WiCAN's "Ford: Transit North America 2022" profile reads
+# 222813/14/16/15 from module 0x726 with [B4:B5]/10, which is 2 × psi on this van
+# (OBDb Ford-Transit: raw ÷ 20 = psi). This ÷ 2 is the only conversion; the
+# dashboard, templates and automations read psi as is. Outside 0-150 psi (OBDb's
+# valid range, e.g. the 0 / 1408 / 5452.8 retained since 2026-08) the state is
+# unknown. No device_class, so HA's metric unit system never shows them in kPa.
 - name: "Tire Pressure FL"
   unique_id: "wican_tyre_p_fl"
   state_topic: "wican/TYRE_P_FL"
-  value_template: "{{ value_json.values() | first }}"
-  unit_of_measurement: "kPa"
+  value_template: >-
+    {% set psi = (value_json.values() | first | float(0)) / 2 %}
+    {{ psi | round(1) if 0 < psi < 150 else None }}
+  unit_of_measurement: "psi"
   state_class: measurement
   icon: mdi:car-tire-alert
   expire_after: 60
@@ -214,8 +222,10 @@
 - name: "Tire Pressure FR"
   unique_id: "wican_tyre_p_fr"
   state_topic: "wican/TYRE_P_FR"
-  value_template: "{{ value_json.values() | first }}"
-  unit_of_measurement: "kPa"
+  value_template: >-
+    {% set psi = (value_json.values() | first | float(0)) / 2 %}
+    {{ psi | round(1) if 0 < psi < 150 else None }}
+  unit_of_measurement: "psi"
   state_class: measurement
   icon: mdi:car-tire-alert
   expire_after: 60
@@ -224,8 +234,10 @@
 - name: "Tire Pressure RL"
   unique_id: "wican_tyre_p_rl"
   state_topic: "wican/TYRE_P_RL"
-  value_template: "{{ value_json.values() | first }}"
-  unit_of_measurement: "kPa"
+  value_template: >-
+    {% set psi = (value_json.values() | first | float(0)) / 2 %}
+    {{ psi | round(1) if 0 < psi < 150 else None }}
+  unit_of_measurement: "psi"
   state_class: measurement
   icon: mdi:car-tire-alert
   expire_after: 60
@@ -234,8 +246,10 @@
 - name: "Tire Pressure RR"
   unique_id: "wican_tyre_p_rr"
   state_topic: "wican/TYRE_P_RR"
-  value_template: "{{ value_json.values() | first }}"
-  unit_of_measurement: "kPa"
+  value_template: >-
+    {% set psi = (value_json.values() | first | float(0)) / 2 %}
+    {{ psi | round(1) if 0 < psi < 150 else None }}
+  unit_of_measurement: "psi"
   state_class: measurement
   icon: mdi:car-tire-alert
   expire_after: 60

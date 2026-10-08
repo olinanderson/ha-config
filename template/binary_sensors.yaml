@@ -91,7 +91,7 @@
       state: >
         {{ states('sensor.shellyem_c4d8d500789a_channel_1_voltage') | float(0) > 0 }}
 
-# ─── TPMS low pressure alert ───
+# ─── TPMS low pressure alert (the tyre sensors are psi, see mqtt/sensors.yaml) ───
 - binary_sensor:
     - name: "Low Tire Pressure"
       unique_id: low_tire_pressure

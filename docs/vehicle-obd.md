@@ -29,7 +29,7 @@ web UI at `http://192.168.10.90` (use browser automation).
 
 | Entity | Description |
 |---|---|
-| `sensor.192_168_10_90_tyre_p_fl/fr/rl/rr` | Tire pressure (psi, already corrected) |
+| `sensor.192_168_10_90_tyre_p_fl/fr/rl/rr` | Tire pressure (psi). The WiCAN profile's `[B4:B5]/10` is 2 × psi; `mqtt/sensors.yaml` halves it (the only conversion) and makes values outside 0–150 psi unknown |
 | `sensor.192_168_10_90_tran_f_temp` | Transmission fluid temp (°C) |
 | `sensor.192_168_10_90_gear` | Current gear (0=P, 15=N, 255=R, 1-6=gear) |
 | `sensor.192_168_10_90_oil_life` | Oil life remaining (%) |

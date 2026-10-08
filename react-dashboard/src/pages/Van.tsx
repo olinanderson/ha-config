@@ -157,7 +157,7 @@ function TirePressureCard() {
   const lowTire = useEntity('binary_sensor.low_tire_pressure');
   const isLow = lowTire?.state === 'on';
 
-  // Entity now reports directly in psi (conversion done in MQTT discovery value_template)
+  // The entities are psi: mqtt/sensors.yaml halves the WiCAN's [B4:B5]/10 (2 × psi)
   const fl = flRaw;
   const fr = frRaw;
   const rl = rlRaw;

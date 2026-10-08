@@ -1559,7 +1559,7 @@
           Load: {{ states('sensor.192_168_10_90_04_calcengineload') }}%
           ECU Volt: {{ states('sensor.192_168_10_90_42_controlmodulevolt') }} V
           Ambient: {{ states('sensor.192_168_10_90_46_ambientairtemp') }}°C
-          Tires FL/FR/RL/RR: {{ states('sensor.192_168_10_90_tyre_p_fl') }}/{{ states('sensor.192_168_10_90_tyre_p_fr') }}/{{ states('sensor.192_168_10_90_tyre_p_rl') }}/{{ states('sensor.192_168_10_90_tyre_p_rr') }} kPa
+          Tires FL/FR/RL/RR: {{ states('sensor.192_168_10_90_tyre_p_fl') }}/{{ states('sensor.192_168_10_90_tyre_p_fr') }}/{{ states('sensor.192_168_10_90_tyre_p_rl') }}/{{ states('sensor.192_168_10_90_tyre_p_rr') }} psi
           Trans: {{ states('sensor.192_168_10_90_tran_f_temp') }}°C
           Gear: {{ states('sensor.192_168_10_90_gear') }}
           Oil Life: {{ states('sensor.192_168_10_90_oil_life') }}%
@@ -1574,7 +1574,7 @@
           Speed: {{ states('sensor.192_168_10_90_0d_vehiclespeed') }} km/h | RPM: {{ states('sensor.192_168_10_90_0c_enginerpm') }}
           Fuel: {{ states('sensor.192_168_10_90_2f_fueltanklevel') }}% | Coolant: {{ states('sensor.192_168_10_90_05_enginecoolanttemp') }}°C
           Throttle: {{ states('sensor.192_168_10_90_11_throttleposition') }}% | Load: {{ states('sensor.192_168_10_90_04_calcengineload') }}%
-          Tires FL/FR/RL/RR: {{ states('sensor.192_168_10_90_tyre_p_fl') }}/{{ states('sensor.192_168_10_90_tyre_p_fr') }}/{{ states('sensor.192_168_10_90_tyre_p_rl') }}/{{ states('sensor.192_168_10_90_tyre_p_rr') }} kPa
+          Tires FL/FR/RL/RR: {{ states('sensor.192_168_10_90_tyre_p_fl') }}/{{ states('sensor.192_168_10_90_tyre_p_fr') }}/{{ states('sensor.192_168_10_90_tyre_p_rl') }}/{{ states('sensor.192_168_10_90_tyre_p_rr') }} psi
           Trans: {{ states('sensor.192_168_10_90_tran_f_temp') }}°C | Gear: {{ states('sensor.192_168_10_90_gear') }}
           Oil: {{ states('sensor.192_168_10_90_oil_life') }}% | Wastegate: {{ states('sensor.192_168_10_90_wastegate') }}%
           DTC: {{ states('sensor.dtc_count') }} | CEL: {{ states('binary_sensor.check_engine_light') }}
@@ -1601,7 +1601,7 @@
           Time: {{ now().isoformat() }}
           Speed: {{ states('sensor.192_168_10_90_0d_vehiclespeed') }} | RPM: {{ states('sensor.192_168_10_90_0c_enginerpm') }} | Fuel: {{ states('sensor.192_168_10_90_2f_fueltanklevel') }}%
           Coolant: {{ states('sensor.192_168_10_90_05_enginecoolanttemp') }}°C | Trans: {{ states('sensor.192_168_10_90_tran_f_temp') }}°C
-          Tires FL/FR/RL/RR: {{ states('sensor.192_168_10_90_tyre_p_fl') }}/{{ states('sensor.192_168_10_90_tyre_p_fr') }}/{{ states('sensor.192_168_10_90_tyre_p_rl') }}/{{ states('sensor.192_168_10_90_tyre_p_rr') }} kPa
+          Tires FL/FR/RL/RR: {{ states('sensor.192_168_10_90_tyre_p_fl') }}/{{ states('sensor.192_168_10_90_tyre_p_fr') }}/{{ states('sensor.192_168_10_90_tyre_p_rl') }}/{{ states('sensor.192_168_10_90_tyre_p_rr') }} psi
 
 # ────────────────────────────────────────────────────────────────
 # Host Python daemons — liveness watchdog

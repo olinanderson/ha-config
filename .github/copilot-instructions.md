@@ -586,10 +586,10 @@ by then) was removed through HACS on 2026-10-08, together with an empty MQTT dev
 **Ford Mode 22 Custom PIDs (via WiCAN Automate tab):**
 | Entity | Description |
 |---|---|
-| `sensor.192_168_10_90_tyre_p_fl` | Front-left tire pressure (kPa) — raw; divide by ~2 for actual psi |
-| `sensor.192_168_10_90_tyre_p_fr` | Front-right tire pressure (kPa) — raw; divide by ~2 for actual psi |
-| `sensor.192_168_10_90_tyre_p_rl` | Rear-left tire pressure (kPa) — raw; divide by ~2 for actual psi |
-| `sensor.192_168_10_90_tyre_p_rr` | Rear-right tire pressure (kPa) — raw; divide by ~2 for actual psi |
+| `sensor.192_168_10_90_tyre_p_fl` | Front-left tire pressure (psi; the YAML halves the WiCAN's 2 × psi, see Tips) |
+| `sensor.192_168_10_90_tyre_p_fr` | Front-right tire pressure (psi) |
+| `sensor.192_168_10_90_tyre_p_rl` | Rear-left tire pressure (psi) |
+| `sensor.192_168_10_90_tyre_p_rr` | Rear-right tire pressure (psi) |
 | `sensor.192_168_10_90_tran_f_temp` | Transmission fluid temp (°C) |
 | `sensor.192_168_10_90_gear` | Current gear (raw int: 0=P, 15=N, 255=R, 1-6=gear) |
 | `sensor.192_168_10_90_oil_life` | Engine oil life remaining (%) |
@@ -635,7 +635,7 @@ by then) was removed through HACS on 2026-10-08, together with an empty MQTT dev
 | `sensor.stable_fuel_level` | Template: sticky fuel (updates only when vehicle stable) |
 | `sensor.trans_temp_last_good` | Sticky last-known-good transmission temp |
 | `sensor.gear_display` | Gear as text: Park/Reverse/Neutral/1-6 |
-| `sensor.tire_pressure_min` | Min tire pressure across all 4 (psi, with kPa÷2 correction) |
+| `sensor.tire_pressure_min` | Min tire pressure across all 4 (psi; 0 = no data) |
 | `sensor.dtc_count` | Number of active DTCs (from PID 0x01) |
 | `sensor.estimated_fuel_rate` | Speed-density fuel rate (L/h) — engine load (the `map` PID) × RPM × IAT × barometer × VE, with an RPM curve for the turbo, fuel trim avg and lambda AFR. Attributes: load_raw, ve_base, rpm, ve_effective, baro_factor, fuel_trim_avg, lambda |
 | `sensor.estimated_fuel_consumption` | Fuel economy (L/100km) — only when speed > 5 km/h |
@@ -971,12 +971,16 @@ Used in `old_home.yaml`:
 - **Fuel level** is noisy from OBD — use `sensor.stable_fuel_level` or `sensor.wican_fuel_5_min_mean`.
 - **Roof fan direction**: `forward` = exhaust, `reverse` = intake.
 - **Scenes are all dynamic** — `scenes.yaml` is empty. They're created via `scene.create` in scripts/automations.
-- **Tire pressure raw kPa values from WiCAN are ~2× actual.** The tyre sensors report the raw
-  value (YAML, no conversion). The `/ 2` was only in the duplicate discovery configs, which
-  never ran, yet Van.tsx, `sensor.tire_pressure_min` and `binary_sensor.low_tire_pressure`
-  treat the values as psi. As of 2026-10-08 the four had read the same 1408 / 0 / 0 / 5452.8
-  for 30 days (old retained values), so the TPMS PIDs aren't reporting at all.
-  **Do NOT apply `* 0.0725190`** in templates or Van.tsx — that was the old wrong conversion.
+- **Tyre pressures are converted in one place: `mqtt/sensors.yaml`.** The WiCAN's built-in
+  "Ford: Transit North America 2022" profile reads them with `[B4:B5]/10`, which is 2 × psi on
+  this van (OBDb Ford-Transit: raw ÷ 20 = psi). The YAML halves it, reports psi (no
+  device_class, so HA's metric system doesn't turn it into kPa) and makes anything outside
+  0–150 psi unknown. Van.tsx, `sensor.tire_pressure_min`, `binary_sensor.low_tire_pressure` and
+  the drive-log automations read psi as is. **Don't convert again anywhere** (no `/ 2`, no
+  `* 0.0725190`). The long-term statistics stay in kPa (HA converts psi into them; no repair
+  issue). As of 2026-10-08 the WiCAN hadn't sent a real pressure since April (May–July HA only
+  replayed the retained values; 2026-08-22/25 brought 1408 / 0 / 0 / 5452.8, then nothing).
+  The cause is still open: see WICAN_CUSTOM_PIDS.md.
 - **`binary_sensor.engine_is_running`** uses RPM freshness only (RPM > 0 and last_updated < 120s).
   Do NOT gate it on `binary_sensor.meatpi_pro_ecu_status` — that entity uses the WiCAN MQTT LWT
   topic which is unreliable (stays `on` even when ECU has no response).

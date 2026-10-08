@@ -59,13 +59,13 @@ views:
 
       # ── Tires ──
       - type: custom:mushroom-template-badge
-        entity: sensor.wican_tyre_pressure_min
+        entity: sensor.tire_pressure_min
         icon: >
-          {% set min_p = states('sensor.wican_tyre_pressure_min') | float(0) %}
+          {% set min_p = states('sensor.tire_pressure_min') | float(0) %}
           {{ 'mdi:car-tire-alert' if min_p < 35 and min_p > 0 else 'mdi:tire' }}
-        content: "{{ states('sensor.wican_tyre_pressure_min') | float(0) | round(0) }} psi"
+        content: "{{ states('sensor.tire_pressure_min') | float(0) | round(0) }} psi"
         color: >
-          {% set min_p = states('sensor.wican_tyre_pressure_min') | float(0) %}
+          {% set min_p = states('sensor.tire_pressure_min') | float(0) %}
           {{ 'red' if min_p < 35 and min_p > 0 else 'green' if min_p > 0 else 'grey' }}
         label: Tires
         tap_action:
@@ -173,8 +173,8 @@ views:
             label: |
               [[[
                 function s(id){ var v=states[id]; return v&&v.state!=='unknown'&&v.state!=='unavailable' ? parseFloat(v.state) : NaN; }
-                var fl=s('sensor.192_168_10_90_tyre_p_fl')*0.0725190, fr=s('sensor.192_168_10_90_tyre_p_fr')*0.0725190,
-                    rl=s('sensor.192_168_10_90_tyre_p_rl')*0.0725190, rr=s('sensor.192_168_10_90_tyre_p_rr')*0.0725190;
+                var fl=s('sensor.192_168_10_90_tyre_p_fl'), fr=s('sensor.192_168_10_90_tyre_p_fr'),
+                    rl=s('sensor.192_168_10_90_tyre_p_rl'), rr=s('sensor.192_168_10_90_tyre_p_rr');
                 function tc(p){ return isNaN(p)||p===0?'var(--secondary-text-color)':p<35?'#ef4444':'var(--primary-text-color)'; }
                 return `<div style="padding:4px 0;">
                   <div style="font-size:13px; font-weight:600; margin-bottom:14px;">Tire Pressure (psi)</div>

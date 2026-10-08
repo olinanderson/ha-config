@@ -37,25 +37,38 @@
 
 These require the WiCAN Pro's STN instruction support for the ATSH/STCAFCP init commands.
 
-### TPMS — Tire Pressure Monitoring (IPC Module)
+### TPMS — Tire Pressure Monitoring (module 0x726)
 
-All 4 TPMS PIDs use the same init command to talk to the IPC module at address 0x726.
+Since about 2026-04-19 the tyre pressures come from the WiCAN's built-in vehicle profile
+"Ford: Transit North America 2022" (vehicle-specific PIDs), not from custom PIDs:
 
 | Field | FL | FR | RL | RR |
 |---|---|---|---|---|
-| **Name** | `TYRE_P_FL` | `TYRE_P_FR` | `TYRE_P_RL` | `TYRE_P_RR` |
+| **Name** (topic `wican/<name>`) | `TYRE_P_FL` | `TYRE_P_FR` | `TYRE_P_RL` | `TYRE_P_RR` |
 | **PID** | `222813` | `222814` | `222816` | `222815` |
 | **Init** | `ATSH000726;STCAFCP726,72E;` | _(same)_ | _(same)_ | _(same)_ |
-| **Expression** | `[B4:B5]/20` | `[B4:B5]/20` | `[B4:B5]/20` | `[B4:B5]/20` |
-| **MQTT Topic** | `wican/tyre_p_fl` | `wican/tyre_p_fr` | `wican/tyre_p_rl` | `wican/tyre_p_rr` |
-| **Period (ms)** | `1000` | `1000` | `1000` | `1000` |
+| **Expression (profile)** | `[B4:B5]/10` | _(same)_ | _(same)_ | _(same)_ |
 
-> **Note:** TPMS talks to the Instrument Panel Cluster (IPC) at CAN ID 0x726.
-> The 2016 Transit should have factory TPMS. If these return no data, the IPC
-> module address may differ on the 2016 model year. Try `ATSH000720` as an alternative.
+`[B4:B5]` is psi × 20 (OBDb Ford-Transit, valid 0–150 psi), so the profile's value is 2 × psi.
+`mqtt/sensors.yaml` halves it, and that is the only conversion. If the PIDs are ever set up as
+custom PIDs again, keep these names and `[B4:B5]/10`, or change the YAML with them.
+
+The first setup (2026-04-06) used custom PIDs with `[B4:B5]/20` (psi) on lowercase topics
+(`wican/tyre_p_fl` etc.). Their last values (60.5 / 59.75 / 72 / 73.25 psi) are still retained
+on the broker; nothing reads them.
+
+> **Status 2026-10-08: no tyre data.** The last real pressures arrived in April (126.8 / 126.8 /
+> 148.8 / 151.3, i.e. 63.4 / 63.4 / 74.4 / 75.7 psi). From May to July HA only replayed those
+> retained values; on 2026-08-22/25 the PIDs sent 1408 / 0 / 0 / 5452.8 (not pressures), and
+> nothing since. The last drive's data (2026-10-07) has every PID read from the engine computer
+> (0x7E0) but none from module 0x726. To check, with the engine running (the WiCAN sleeps
+> otherwise), use read-only GETs: `/check_status` (firmware), `/load_auto_pid_car_data`
+> (profile and enabled flags), `/load_auto_pid` (custom PIDs), `/autopid_data` (live values).
+> `/load_config` holds the WiFi and MQTT passwords. Firmware: v4.48 was recorded on 2026-04-20.
+> Later releases list "Fixed some autopid parameter stop updating" (v4.50) and "Fixed an
+> AutoPID issue where some vehicle profiles were returning incorrect PID values" (v4.51).
 
 > **Note on RL/RR:** In the Ford profile, PID `222815` = RR and `222816` = RL.
-> The MQTT topics above are mapped accordingly.
 
 ### Engine / Drivetrain (PCM Module)
 
@@ -116,8 +129,8 @@ then use the app for details.
   the same Ford CAN architecture and most Mode 22 PIDs should work.
 - **PIDs that definitely work:** Standard Mode 01 PIDs (speed, RPM, fuel, coolant, etc.)
   are already confirmed working on your vehicle.
-- **PIDs that might not work:** TPMS depends on the IPC module being present and using
-  the same CAN addressing. If TPMS returns no data, the 2016 may use a different address.
+- **TPMS:** module 0x726 answered on this 2016 in April 2026 (plausible pressures), so the
+  addressing is right; since then it has stopped reporting (see the TPMS status above).
 - **PIDs to skip:** The Ford Transit 2022 profile includes HV_A, HV_V, SOC (hybrid/EV
   battery) — these won't work on your gasoline-only vehicle.
 
