@@ -68,10 +68,6 @@ www/images/
 # vanlife-data/, which has its own .gitignore) ---
 .gps_filter_token
 
-# --- Diagnostic ps dumps (until 2026-10-08 ps aux printed the gps_filter --token) ---
-www/vanlife-panel/ps_debug.txt
-www/vanlife-panel/ps_output.txt
-
 # --- Zigbee2MQTT (managed by Z2M, not hand-edited) ---
 zigbee2mqtt/
 

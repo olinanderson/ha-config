@@ -61,9 +61,6 @@ start_osrm_proxy: >
     echo "Routing proxy already running";
   fi'
 
-# Diagnostic: dump ps aux + netstat from inside HA container to a readable file
-diag_psout: sh /config/www/vanlife-panel/psout.sh
-
 # Start u-blox USB GPS bridge — reads NMEA from /dev/ttyACM0 and publishes the
 # device_tracker.ublox_gps MQTT tracker (raw GPS source for the whole system).
 start_gps_ublox: >
@@ -143,6 +140,3 @@ restart_dvr_proxy: >
 # entry to input_text.ve_correction_history.
 # Arguments: from_ts (epoch ms of previous fill-up), to_ts (epoch ms of now)
 update_ve_from_fillup: "python3 /config/ve_update.py {{ from_ts }} {{ to_ts }}"
-
-# Debug: dump ps + port info inside HA container
-osrm_debug: "/bin/sh -c 'ps aux > /config/www/vanlife-panel/ps_debug.txt 2>&1; netstat -tlnp >> /config/www/vanlife-panel/ps_debug.txt 2>&1; echo done'"
