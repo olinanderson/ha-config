@@ -40,7 +40,7 @@
 - **Inverter has no state entity** — inferred from Shelly EM ping (`binary_sensor.shelly_em_reachable`)
 - **WiCAN /store_config wipes ALL settings** — NEVER POST partial config
 - **Jinja2 pipe precedence** — `states(x) | float(0) * N` → must use `(states(x) | float(0)) * N`
-- **No MAF/fuel-rate PID** — fuel consumption uses speed-density estimation via MAP+RPM+IAT
+- **No MAF/fuel-rate PID** — fuel consumption uses speed-density estimation via engine load (the misnamed `map` PID) + RPM + IAT + barometer
 - **Scenes are all dynamic** — `scenes.yaml` is empty; created via `scene.create` in scripts
 - **Never edit `secrets.yaml`** or files in `custom_components/`
 - **DI33–40 rockers live on a PCF8574 (I²C 0x23) that can read "all pressed" after a bus glitch** — the a32 firmware ignores such presses and self-heals (re-init, then restart); `binary_sensor.a32_pro_di33_40_expander_fault` shows it. See copilot-instructions § rocker expander fault guard.

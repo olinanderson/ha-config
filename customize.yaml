@@ -1,0 +1,14 @@
+# Attribute overrides (configuration.yaml → homeassistant: customize:). They are
+# applied on each state write; homeassistant.reload_all reloads them with the core
+# config, no restart needed.
+
+# WiCAN custom PIDs named after what they were thought to be (docs/vehicle-obd.md):
+# 22F404 is PID 04 calculated load, 22F44A is PID 4A accelerator pedal E. They keep
+# their names on the WiCAN, because renaming them there would change these entity
+# IDs, which the fuel estimate and the history use.
+sensor.192_168_10_90_map:
+  friendly_name: "WiCAN Pro Engine Load (raw, 255 = 100 %)"
+  device_class: null
+  unit_of_measurement: null
+sensor.192_168_10_90_inj_pw:
+  friendly_name: "WiCAN Pro Accelerator Pedal E (raw, byte × 256)"

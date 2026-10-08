@@ -324,11 +324,11 @@
       unit_of_measurement: "L/h"
       state_class: measurement
       state: >
-        {% set map_kpa = states('sensor.192_168_10_90_map') | float(0) %}
+        {% set load_raw = states('sensor.192_168_10_90_map') | float(0) %}
         {% set rpm = states('sensor.192_168_10_90_0c_enginerpm') | float(0) %}
         {% set iat_c = states('sensor.192_168_10_90_0f_intakeairtemperature') | float(20) %}
         {% set ve_base = states('input_number.fuel_ve_correction') | float(0.80) %}
-        {% if map_kpa > 0 and rpm > 0 %}
+        {% if load_raw > 0 and rpm > 0 %}
           {# RPM curve: 0.30 up to 1100, ~0.61 at 1500, 1.0 at 2000+ #}
           {% set rpm_factor = [0.30 + 0.70 * ((rpm - 1100) / 900), 1.0] | min %}
           {% set rpm_factor = [rpm_factor, 0.30] | max %}
@@ -350,7 +350,7 @@
           {% set afr = 14.7 * lambda_val %}
           {# Speed-density: MAF = ρ × Vd × RPM/120 × VE × baro, ρ from the load byte #}
           {% set t_k = iat_c + 273.15 %}
-          {% set air_density = (map_kpa * 1000) / (287 * t_k) %}
+          {% set air_density = (load_raw * 1000) / (287 * t_k) %}
           {% set maf_gs = (air_density * 0.0035 * rpm * ve * baro_factor * 1000) / 120 %}
           {% set fuel_gs = (maf_gs / afr) * trim_factor %}
           {{ ((fuel_gs * 3600) / 750) | round(2) }}
@@ -358,7 +358,7 @@
           0
         {% endif %}
       attributes:
-        map_kpa: "{{ states('sensor.192_168_10_90_map') }}"
+        load_raw: "{{ states('sensor.192_168_10_90_map') }}"
         ve_base: "{{ states('input_number.fuel_ve_correction') }}"
         rpm: "{{ states('sensor.192_168_10_90_0c_enginerpm') }}"
         ve_effective: >
@@ -403,22 +403,21 @@
           {{ none }}
         {% endif %}
 
-    # ─── Injector Pulse Width (ms) ───
-    # Raw WiCAN value is in µs (5120 = 5.12 ms). Typical 3.5 EB GDI:
-    #   Idle: ~4–6 ms, Cruise: ~6–10 ms, WOT: ~12–20 ms
+    # ─── Accelerator Pedal (%) ───
+    # sensor.192_168_10_90_inj_pw is NOT injector pulse width. DID 22F44A mirrors
+    # PID 4A (accelerator pedal position E), read as two bytes, so the value is
+    # the pedal byte × 256 (always a multiple of 256). PID 4A % = byte × 100/255:
+    # 7.8 % at rest (5120). This replaced "Injector Pulse Width" (raw ÷ 1000 shown
+    # as ms, 5.12 at rest) on 2026-10-08. Unavailable with the engine off, not 0.
 
-    - name: "Injector Pulse Width"
-      unique_id: injector_pulse_width_ms
-      icon: mdi:fuel
-      unit_of_measurement: "ms"
+    - name: "Accelerator Pedal"
+      unique_id: accelerator_pedal_e
+      icon: mdi:foot-print
+      unit_of_measurement: "%"
       state_class: measurement
+      availability: "{{ states('sensor.192_168_10_90_inj_pw') | is_number }}"
       state: >
-        {% set raw = states('sensor.192_168_10_90_inj_pw') | float(0) %}
-        {% if raw > 0 %}
-          {{ (raw / 1000) | round(2) }}
-        {% else %}
-          0
-        {% endif %}
+        {{ ((states('sensor.192_168_10_90_inj_pw') | float(0)) / 256 * 100 / 255) | round(1) }}
 
     # ─── Fuel Trim Sensors (derived) ───
 

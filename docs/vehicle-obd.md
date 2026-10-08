@@ -34,9 +34,9 @@ web UI at `http://192.168.10.90` (use browser automation).
 | `sensor.192_168_10_90_gear` | Current gear (0=P, 15=N, 255=R, 1-6=gear) |
 | `sensor.192_168_10_90_oil_life` | Oil life remaining (%) |
 | `sensor.192_168_10_90_wastegate` | Turbo wastegate (%) |
-| `sensor.192_168_10_90_map` | NOT manifold pressure: `22F404` mirrors PID 04, so it is calculated load × 2.55 (255 = 100 %) |
+| `sensor.192_168_10_90_map` | NOT manifold pressure: `22F404` mirrors PID 04, so it is calculated load × 2.55 (255 = 100 %). HA name "WiCAN Pro Engine Load (raw, 255 = 100 %)", no unit (customize.yaml) |
 | `sensor.192_168_10_90_park_brake` | Parking brake (0/1) |
-| `sensor.192_168_10_90_inj_pw` | NOT injector pulse width: `22F44A` mirrors PID 4A (accelerator pedal E), byte × 256 (5120 at rest) |
+| `sensor.192_168_10_90_inj_pw` | NOT injector pulse width: `22F44A` mirrors PID 4A (accelerator pedal E), byte × 256 (5120 at rest). HA name "WiCAN Pro Accelerator Pedal E (raw, byte × 256)" (customize.yaml) |
 | `sensor.192_168_10_90_lambda` | Commanded equivalence ratio |
 | `sensor.192_168_10_90_stft_b1/b2` | Short-term fuel trim |
 | `sensor.192_168_10_90_ltft_b1/b2` | Long-term fuel trim |
@@ -55,7 +55,7 @@ web UI at `http://192.168.10.90` (use browser automation).
 | `sensor.tire_pressure_min` | Min tire pressure across all 4 (psi) |
 | `sensor.estimated_fuel_rate` | Speed-density fuel rate (L/h) |
 | `sensor.estimated_fuel_consumption` | Fuel economy (L/100km, speed > 5 km/h) |
-| `sensor.injector_pulse_width` | Misnamed: `inj_pw` ÷ 1000, really the pedal (see above) |
+| `sensor.accelerator_pedal` | Accelerator pedal E (%): `inj_pw` ÷ 256 × 100/255, 7.8 % at rest. Replaced the misnamed `sensor.injector_pulse_width` on 2026-10-08 |
 | `sensor.average_fuel_trim` | Averaged fuel trim across both banks |
 | `sensor.commanded_afr` | Commanded air-fuel ratio (14.7 × lambda) |
 | `binary_sensor.check_engine_light` | MIL/CEL on/off |

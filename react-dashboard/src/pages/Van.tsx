@@ -236,8 +236,8 @@ function DiagnosticsCard() {
   const { value: intakeAir } = useEntityNumeric('sensor.192_168_10_90_intake_air_tmp');
   const { value: ambientAir } = useEntityNumeric('sensor.192_168_10_90_46_ambientairtemp');
   const { value: fuelPressure } = useEntityNumeric('sensor.192_168_10_90_fuel_pressure');
-  const { value: mapKpa } = useEntityNumeric('sensor.192_168_10_90_map');
-  const { value: injPw } = useEntityNumeric('sensor.injector_pulse_width');
+  const { value: engineLoad } = useEntityNumeric('sensor.192_168_10_90_04_calcengineload');
+  const { value: pedal } = useEntityNumeric('sensor.accelerator_pedal');
   const { value: fuelTrim } = useEntityNumeric('sensor.average_fuel_trim');
   const { value: afr } = useEntityNumeric('sensor.commanded_afr');
   const { value: fuelPumpDuty } = useEntityNumeric('sensor.192_168_10_90_fuel_pump_duty');
@@ -262,8 +262,8 @@ function DiagnosticsCard() {
         <SparklineStat entityId="sensor.192_168_10_90_intake_air_tmp" label="Intake Air" value={fmt(intakeAir, 0)} unit="°C" color="#06b6d4" />
         <SparklineStat entityId="sensor.192_168_10_90_46_ambientairtemp" label="Ambient Air" value={fmt(ambientAir, 0)} unit="°C" color="#3b82f6" />
         <SparklineStat entityId="sensor.192_168_10_90_fuel_pressure" label="Fuel Pressure" value={fmt(fuelPressure, 0)} unit="kPa" color="#8b5cf6" />
-        <SparklineStat entityId="sensor.192_168_10_90_map" label="MAP" value={fmt(mapKpa, 0)} unit="kPa" color="#14b8a6" />
-        <SparklineStat entityId="sensor.injector_pulse_width" label="Injector PW" value={fmt(injPw, 2)} unit="ms" color="#e879f9" />
+        <SparklineStat entityId="sensor.192_168_10_90_04_calcengineload" label="Engine Load" value={fmt(engineLoad, 0)} unit="%" color="#14b8a6" />
+        <SparklineStat entityId="sensor.accelerator_pedal" label="Accelerator" value={fmt(pedal, 0)} unit="%" color="#e879f9" />
         <SparklineStat entityId="sensor.average_fuel_trim" label="Fuel Trim" value={fmt(fuelTrim, 1)} unit="%" color="#fb923c" />
         <SparklineStat entityId="sensor.commanded_afr" label="AFR" value={fmt(afr, 1)} unit=":1" color="#a78bfa" />
         <SparklineStat entityId="sensor.192_168_10_90_fuel_pump_duty" label="Fuel Pump Duty" value={fmt(fuelPumpDuty, 0)} unit="%" color="#facc15" />

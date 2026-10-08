@@ -26915,7 +26915,7 @@ function hM() {
   ] });
 }
 function mM() {
-  const { value: t } = ge("sensor.192_168_10_90_oil_life"), { value: s } = ge("sensor.192_168_10_90_wastegate"), { value: o } = ge("sensor.192_168_10_90_intake_air_tmp"), { value: l } = ge("sensor.192_168_10_90_46_ambientairtemp"), { value: d } = ge("sensor.192_168_10_90_fuel_pressure"), { value: f } = ge("sensor.192_168_10_90_map"), { value: h } = ge("sensor.injector_pulse_width"), { value: g } = ge("sensor.average_fuel_trim"), { value: x } = ge("sensor.commanded_afr"), { value: _ } = ge("sensor.192_168_10_90_fuel_pump_duty"), b = ye("binary_sensor.check_engine_light"), w = ye("sensor.transit_active_dtcs"), N = (w == null ? void 0 : w.state) === "System Clear" || !(w != null && w.state) ? 0 : parseInt(w.state) || 0;
+  const { value: t } = ge("sensor.192_168_10_90_oil_life"), { value: s } = ge("sensor.192_168_10_90_wastegate"), { value: o } = ge("sensor.192_168_10_90_intake_air_tmp"), { value: l } = ge("sensor.192_168_10_90_46_ambientairtemp"), { value: d } = ge("sensor.192_168_10_90_fuel_pressure"), { value: f } = ge("sensor.192_168_10_90_04_calcengineload"), { value: h } = ge("sensor.accelerator_pedal"), { value: g } = ge("sensor.average_fuel_trim"), { value: x } = ge("sensor.commanded_afr"), { value: _ } = ge("sensor.192_168_10_90_fuel_pump_duty"), b = ye("binary_sensor.check_engine_light"), w = ye("sensor.transit_active_dtcs"), N = (w == null ? void 0 : w.state) === "System Clear" || !(w != null && w.state) ? 0 : parseInt(w.state) || 0;
   return (b == null ? void 0 : b.state) === "on" || N > 0, /* @__PURE__ */ i.jsxs(lt, { children: [
     /* @__PURE__ */ i.jsx(vt, { className: "pb-2", children: /* @__PURE__ */ i.jsx(_t, { className: "flex items-center justify-between text-base", children: /* @__PURE__ */ i.jsxs("div", { className: "flex items-center gap-2", children: [
       /* @__PURE__ */ i.jsx(Gc, { className: "h-4 w-4" }),
@@ -26927,8 +26927,8 @@ function mM() {
       /* @__PURE__ */ i.jsx(tt, { entityId: "sensor.192_168_10_90_intake_air_tmp", label: "Intake Air", value: Se(o, 0), unit: "°C", color: "#06b6d4" }),
       /* @__PURE__ */ i.jsx(tt, { entityId: "sensor.192_168_10_90_46_ambientairtemp", label: "Ambient Air", value: Se(l, 0), unit: "°C", color: "#3b82f6" }),
       /* @__PURE__ */ i.jsx(tt, { entityId: "sensor.192_168_10_90_fuel_pressure", label: "Fuel Pressure", value: Se(d, 0), unit: "kPa", color: "#8b5cf6" }),
-      /* @__PURE__ */ i.jsx(tt, { entityId: "sensor.192_168_10_90_map", label: "MAP", value: Se(f, 0), unit: "kPa", color: "#14b8a6" }),
-      /* @__PURE__ */ i.jsx(tt, { entityId: "sensor.injector_pulse_width", label: "Injector PW", value: Se(h, 2), unit: "ms", color: "#e879f9" }),
+      /* @__PURE__ */ i.jsx(tt, { entityId: "sensor.192_168_10_90_04_calcengineload", label: "Engine Load", value: Se(f, 0), unit: "%", color: "#14b8a6" }),
+      /* @__PURE__ */ i.jsx(tt, { entityId: "sensor.accelerator_pedal", label: "Accelerator", value: Se(h, 0), unit: "%", color: "#e879f9" }),
       /* @__PURE__ */ i.jsx(tt, { entityId: "sensor.average_fuel_trim", label: "Fuel Trim", value: Se(g, 1), unit: "%", color: "#fb923c" }),
       /* @__PURE__ */ i.jsx(tt, { entityId: "sensor.commanded_afr", label: "AFR", value: Se(x, 1), unit: ":1", color: "#a78bfa" }),
       /* @__PURE__ */ i.jsx(tt, { entityId: "sensor.192_168_10_90_fuel_pump_duty", label: "Fuel Pump Duty", value: Se(_, 0), unit: "%", color: "#facc15" })

@@ -599,19 +599,19 @@ entry, but its files are still in `custom_components/wican` (HACS).
 **User Custom PIDs (via WiCAN Automate → User Custom tab):**
 | Entity | PID | Expression | Description |
 |---|---|---|---|
-| `sensor.192_168_10_90_map` | `22F404` | `[B4:B5]/256` | NOT manifold pressure: `F404` mirrors PID 04, so this is calculated load × 2.55 (255 = 100 %). The air term of the speed-density fuel estimate |
+| `sensor.192_168_10_90_map` | `22F404` | `[B4:B5]/256` | NOT manifold pressure: `F404` mirrors PID 04, so this is calculated load × 2.55 (255 = 100 %). The air term of the speed-density fuel estimate. Named "WiCAN Pro Engine Load (raw, 255 = 100 %)" with no unit in HA (customize.yaml) |
 | `sensor.192_168_10_90_stft_b1` | `0x06` | standard | Short-term fuel trim Bank 1 (%) |
 | `sensor.192_168_10_90_ltft_b1` | `0x07` | standard | Long-term fuel trim Bank 1 (%) |
 | `sensor.192_168_10_90_stft_b2` | `0x08` | standard | Short-term fuel trim Bank 2 (%) |
 | `sensor.192_168_10_90_ltft_b2` | `0x09` | standard | Long-term fuel trim Bank 2 (%) |
 | `sensor.192_168_10_90_lambda` | `0x44` | standard | Commanded equivalence ratio (lambda); 1.0 = stoich, <1 = rich, >1 = lean |
-| `sensor.192_168_10_90_inj_pw` | `22F44A` | `[B4:B5]` | NOT injector pulse width: `F44A` mirrors PID 4A (accelerator pedal E), so this is the pedal byte × 256 (5120 at rest, always a multiple of 256) |
+| `sensor.192_168_10_90_inj_pw` | `22F44A` | `[B4:B5]` | NOT injector pulse width: `F44A` mirrors PID 4A (accelerator pedal E), so this is the pedal byte × 256 (5120 at rest, always a multiple of 256). Named "WiCAN Pro Accelerator Pedal E (raw, byte × 256)" in HA (customize.yaml); `sensor.accelerator_pedal` gives it in % |
 
 **NOT supported by this ECU** (tested, returns "no positive response" or "NO DATA"):
 - `FUEL_RATE` (Mode 22, PID 22F49D) — fuel consumption rate
 - `ALT_DUTY` (Mode 22) — alternator duty cycle
 - Standard PID 0x10 (MAF) — not exposed by Ford PCM (speed-density engine)
-- Standard PID 0x0B (MAP) — not exposed via standard OBD (but Ford Mode 22 `22F404` **works**)
+- Standard PID 0x0B (MAP) — not exposed via standard OBD (Ford Mode 22 `22F404` answers, but it is PID 04 load, not MAP)
 - Standard PID 0x5E (Engine Fuel Rate) — NO DATA
 - Ford Mode 22 MAF (`22F410`) — no positive response
 - Ford Mode 22 IPW Bank 2 (`22F44B`) — no positive response (V6 uses shared injection timing)
@@ -631,9 +631,9 @@ entry, but its files are still in `custom_components/wican` (HACS).
 | `sensor.gear_display` | Gear as text: Park/Reverse/Neutral/1-6 |
 | `sensor.tire_pressure_min` | Min tire pressure across all 4 (psi, with kPa÷2 correction) |
 | `sensor.dtc_count` | Number of active DTCs (from PID 0x01) |
-| `sensor.estimated_fuel_rate` | Speed-density fuel rate (L/h) — MAP × RPM × IAT × VE with 3 corrections: RPM-based VE curve, fuel trim avg, lambda AFR. Attributes: map_kpa, ve_base, rpm, ve_effective, fuel_trim_avg, lambda |
+| `sensor.estimated_fuel_rate` | Speed-density fuel rate (L/h) — engine load (the `map` PID) × RPM × IAT × barometer × VE, with an RPM curve for the turbo, fuel trim avg and lambda AFR. Attributes: load_raw, ve_base, rpm, ve_effective, baro_factor, fuel_trim_avg, lambda |
 | `sensor.estimated_fuel_consumption` | Fuel economy (L/100km) — only when speed > 5 km/h |
-| `sensor.injector_pulse_width` | Injector pulse width (ms) — raw WiCAN µs ÷ 1000. Idle ~5 ms |
+| `sensor.accelerator_pedal` | Accelerator pedal E (%) — `inj_pw` ÷ 256 × 100/255, 7.8 % at rest. Replaced the misnamed `sensor.injector_pulse_width` (raw ÷ 1000 shown as ms) on 2026-10-08 |
 | `sensor.average_fuel_trim` | Averaged fuel trim across both banks: (STFT+LTFT B1 + STFT+LTFT B2) / 2. Attributes: per-bank breakdowns |
 | `sensor.commanded_afr` | Commanded air-fuel ratio (14.7 × lambda). Falls back to 14.7 if lambda unavailable |
 | `binary_sensor.check_engine_light` | MIL/CEL on/off (from PID 0x01 bit 7 ≥ 128) |
@@ -1845,7 +1845,7 @@ the new Scale-routed stream).
 - **I-frame interval at Scale > 1**: DVR sends roughly one keyframe per 2 seconds of real-time
   DVR content. At 8× this means ~4 I-frames per second of wall-clock time.
 - **No MAF/MAP for fuel rate**: Unrelated to cameras but noted here — the Ford ECU doesn't
-  support MAF (0x10) via standard OBD, only Ford Mode 22 MAP (`22F404`).
+  support MAF (0x10) or MAP (0x0B); Ford Mode 22 `22F404` answers, but it is PID 04 load, not MAP.
 - **Measured playback stability** (verified 2026-04-15):
   | Speed | Duration tested | Result |
   |---|---|---|

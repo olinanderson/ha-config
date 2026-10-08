@@ -6,6 +6,9 @@
 # ============================================================
 
 # --- Core ---
+homeassistant:
+  customize: !include customize.yaml
+
 recorder:
   auto_purge: true
   purge_keep_days: 60

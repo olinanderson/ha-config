@@ -568,7 +568,8 @@ From `sensor.estimated_fuel_rate`, stationary, matched on charger load:
 | chargers light | 1000 | 5.35 L/h | 12 |
 
 ≈ **+1.44 L/h (+33 %)** under load. **Trust the magnitude, not the precision**: MAP reads
-123–178 kPa at idle, which is physically impossible (should be ~30–40 kPa), so the
+123–178 kPa at idle, which is physically impossible (should be ~30–40 kPa; 2026-10-08:
+that sensor is PID 04 load × 2.55, so 48–70 % load, see docs/vehicle-obd.md), so the
 speed-density model is mis-scaled at idle, and the VE correction is fill-up calibrated hence
 cruise-dominated. Elevated-RPM bins are only n=12–13 and are transients, not sustained idle.
 
