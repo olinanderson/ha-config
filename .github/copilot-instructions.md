@@ -543,30 +543,41 @@ by then) was removed through HACS on 2026-10-08, together with an empty MQTT dev
 > **⚠ WiCAN CONFIG SAFETY**: The WiCAN `/store_config` HTTP endpoint **replaces ALL
 > settings at once** — including WiFi SSID/password/mode. If you POST only MQTT fields,
 > it **wipes WiFi settings** and the device reverts to AP-only mode, dropping off the
-> network. **NEVER send a partial config.** Always `GET /get_config` first, modify only
-> the needed fields in the full JSON, then POST the complete config back. This caused an
-> outage on 2026-04-19.
+> network. **NEVER send a partial config.** Always read the full config first
+> (`GET /load_config`), modify only the needed fields in that JSON, then POST the complete
+> config back. This caused an outage on 2026-04-19: when a key is missing, the firmware
+> writes its default config (AP only) and restarts.
 >
 > **Note**: `/get_config` and `/api/get_config` both return 404 on firmware v4.48. The
-> only way to read or change config is via the WiCAN web UI at `http://192.168.10.90`.
-> Use browser automation (Playwright) for scripted changes.
+> firmware's read endpoint is `GET /load_config` (config_server.c; not yet tried on this
+> device). Its JSON holds the WiFi, AP and MQTT passwords: never print, paste or commit it.
+> Changes go through the WiCAN web UI at `http://192.168.10.90`; use browser automation
+> (Playwright) for scripted changes.
 >
 > **Required fields in any `/store_config` POST** (must ALL be present):
 > - `wifi_mode`: `"STA+AP"` — Station + AP mode. Never set to `"AP"` alone or device drops off network.
-> - `ssid`: `"Olins Van 2.4G"` — WiFi SSID
-> - `password`: `"OlinsVanWifiIsFast"` — WiFi password
-> - `wifi_security`: `"WPA2"` — security type
-> - `ap_ssid`: `"WiCAN_48ca43343365"` — AP SSID
-> - `ap_password`: `"wican1234"` — AP password
+> - `ssid` [`sta_ssid`]: `"<van WiFi SSID: wifi_ssid in esphome/secrets.yaml>"` — WiFi SSID
+> - `password` [`sta_pass`]: `"<van WiFi password: wifi_password in esphome/secrets.yaml>"` — WiFi password
+> - `wifi_security` [`sta_security`]: `"WPA2"` — security type
+> - `ap_ssid`: `"WiCAN_48ca43343365"` — AP SSID (not a key in the firmware's config; the AP is named WiCAN_<device id>)
+> - `ap_password` [`ap_pass`]: `"<WiCAN AP password: not in the repo; on the device, /load_config>"` — AP password
 > - `mqtt_en`: `"enable"`
 > - `mqtt_url`: `"mqtt://192.168.10.173"` — core-mosquitto broker IP
 > - `mqtt_port`: `1883`
-> - `mqtt_user`: `"mqtt_user"`
-> - `mqtt_pass`: `"mqtt_password"`
+> - `mqtt_user`: `"<MQTT username: same login as HA's MQTT integration, not in the repo>"`
+> - `mqtt_pass`: `"<MQTT password: same login as HA's MQTT integration, not in the repo>"`
 > - `mqtt_rx_en`: `"disable"` — raw incoming CAN frames; keep disabled or broker floods
 > - `mqtt_tx_en`: `"disable"`
 > - `webhook_en`: `"disable"` — old ha-wican webhook mode; keep disabled
 > - `protocol`: `"AutoPID"` — enables OBD PID polling mode
+>
+> These names and values were recorded on 2026-04-19. The firmware's
+> config_server.c (read 2026-10-08) uses the JSON keys in brackets, some values differ
+> (`sta_security` `"wpa2"`, `protocol` `"auto_pid"`), and it checks every key in the
+> file, not only these. So start from the device's own `/load_config` JSON; never build
+> one from this list. The MQTT login is the one HA's MQTT integration
+> (`.storage/core.config_entries`) and Zigbee2MQTT (`zigbee2mqtt/configuration.yaml`) use;
+> both are gitignored.
 
 **Standard OBD PIDs (Mode 01):**
 | Entity | PID | Description |
