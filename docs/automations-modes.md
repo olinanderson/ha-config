@@ -70,9 +70,11 @@ heater, the A/C at 26 °C and the roof fan all running):
   (`input_datetime.shore_power_last_seen`, automation `shore_power_seen`); an hour of the A/C drawing power
   with the charger silent clears it.
 
-Room temperature: `sensor.living_space_temperature` = median of BME280_1 (only while
-`sensor.inverter_power_24v` < 60 W), BME280_3 (only while the blower air is < 40 °C) and the Kidde (only if
-updated within 15 min), BME280_1 as the fallback; attribute `sources` says which counted.
+Room temperature: `sensor.living_space_temperature` = median of BME280_1 (only once the inverter has been
+off 45 min: it reads 1–4 °C high while the inverter is on, idle included), BME280_3 (only while the blower air
+is < 40 °C) and the Kidde (only if updated within 15 min), BME280_1 as the fallback; attribute `sources` says
+which counted. Until 2026-10-08 BME280_1 counted below 60 W of inverter power; the inverter idles around 60 W,
+so the reading jumped 2–3 °C thousands of times a day.
 `sensor.night_climate_status` is the one-line summary the Tonight card shows.
 
 Files: `template/night_climate.yaml` (also `binary_sensor.roof_fan_running` and

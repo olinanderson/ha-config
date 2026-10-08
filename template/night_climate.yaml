@@ -7,10 +7,17 @@
 # ─── Living-space temperature ───
 # One room reading the night controller can trust. Each sensor counts only
 # while nothing is fooling it (2026-09-10 audit): BME280_1 sits under the
-# cabinet and reads 3–5 °C high while the inverter is loaded, BME280_3 heat-
-# soaks +7–11 °C while the coolant blower runs, and the Kidde is the honest
-# one but its cloud poll stops 01:00–08:15 (Starlink sleep). Median of what
-# passes; BME280_1 as the last resort.
+# cabinet, BME280_3 heat-soaks +7–11 °C while the coolant blower runs, and the
+# Kidde is the honest one but its cloud poll stops 01:00–08:15 (Starlink
+# sleep). Median of what passes; BME280_1 as the last resort.
+#
+# BME280_1 reads 1–4 °C high whenever the inverter is on, idle included, and
+# takes about 45 min to cool once it's off (history 2026-09-30..10-08: −0.3 °C
+# against BME280_3 with the inverter off, +1.3 at 1–30 W, +3.2 above 55 W).
+# So it counts once the inverter has been off 45 min. It used to count below
+# 60 W of inverter power. The inverter idles right around 60 W, so from
+# 2026-10-04, when it started staying on, the reading jumped 2–3 °C a few
+# thousand times a day.
 - sensor:
     - name: "Living Space Temperature"
       unique_id: living_space_temperature
@@ -23,8 +30,10 @@
            or has_value('sensor.smoke_co_and_iac_detector_indoor_temperature') }}
       state: >
         {% set ns = namespace(v=[]) %}
+        {% set inv = states.binary_sensor.inverter_on %}
         {% set b1 = states('sensor.a32_pro_bme280_1_temperature') | float(none) %}
-        {% if b1 is not none and states('sensor.inverter_power_24v') | float(999) < 60 %}
+        {% if b1 is not none and inv is not none and inv.state == 'off'
+              and (now() - inv.last_changed).total_seconds() > 2700 %}
           {% set ns.v = ns.v + [b1] %}
         {% endif %}
         {% set b3 = states('sensor.a32_pro_bme280_3_temperature') | float(none) %}
@@ -43,8 +52,10 @@
       attributes:
         sources: >
           {% set ns = namespace(s=[]) %}
+          {% set inv = states.binary_sensor.inverter_on %}
           {% if has_value('sensor.a32_pro_bme280_1_temperature')
-                and states('sensor.inverter_power_24v') | float(999) < 60 %}
+                and inv is not none and inv.state == 'off'
+                and (now() - inv.last_changed).total_seconds() > 2700 %}
             {% set ns.s = ns.s + ['living'] %}
           {% endif %}
           {% if has_value('sensor.a32_pro_bme280_3_temperature')

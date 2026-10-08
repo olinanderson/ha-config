@@ -147,9 +147,6 @@ the model think when a request needs it.
   `LocalDate` replace HA's own time and date sentences, which use HA's
   clock. Claude still gets Mountain times from GetDateTime; the prompt tells
   it how far the van's zone is from Mountain and to name the zone.
-- Living Space Temperature jumps about 3 °C as the inverter load crosses
-  60 W (BME280 1 drops in and out). In the benchmark it read 23.8 for a few
-  seconds, then 20.8, and the answers followed it.
 - The roof fan's direction comes from `sensor.roof_fan_direction`; the fan
   entity's own direction attribute isn't in what Claude is shown.
 - The propane and grey water valves stay exposed on purpose; the prompt tells
