@@ -1267,9 +1267,10 @@
 #   The monitors, the water system and the inverter go back to how they were
 #   before Sleep. The lights:
 #     • within 5 min of Sleep on (a cancel) → back as they were
-#     • later (the wake time, or by hand)   → on bright for the morning:
-#       main and under-cabinet 100 % at 5000 K, the skylight 100 %
-#   The user's wish 2026-10-07. Until then the morning restored the
+#     • later (the wake time, or by hand)   → the main light alone at 10 %
+#       (5000 K, 20 s fade)
+#   The user's wish 2026-10-08; from 10-07 the morning was main and
+#   under-cabinet at 100 % plus the skylight at 100 %. Until 10-07 it restored the
 #   pre-sleep lights plus the under-cabinet at 30 %, forced the water on to
 #   Main, and re-applied scene.last_active_state, which
 #   rolling_last_active_snapshot_1hz rewrites every second, so it held the
@@ -1302,27 +1303,19 @@
               - switch.a32_pro_water_system_master_switch
 
     - choose:
-        # ── Morning: lights on bright ──
+        # ── Morning: the main light low ──
         - conditions:
             - condition: state
               entity_id: input_boolean.sleep_winddown_complete
               state: "on"
           sequence:
-            # Controllers only: the wall switches follow them (blueprint).
+            # The controller only: the wall switch follows it (blueprint).
             - action: light.turn_on
               target:
-                entity_id:
-                  - light.led_controller_cct_1   # main
-                  - light.led_controller_cct_2   # under-cabinet
+                entity_id: light.led_controller_cct_1   # main
               data:
-                brightness_pct: 100
+                brightness_pct: 10
                 color_temp_kelvin: 5000
-                transition: 20
-            - action: light.turn_on
-              target:
-                entity_id: light.led_controller_sc_2   # skylight (Accent)
-              data:
-                brightness_pct: 100
                 transition: 20
       # ── Cancel: lights back as they were ──
       default:
@@ -2385,8 +2378,11 @@
       data:
         option: "Off"
 
-# Ending the program stops the fan and the A/C; the heater is deliberately
-# left where it is.
+# Ending the program stops the roof fan and the A/C; the heater is deliberately
+# left where it is. At the wake (the wake time, or Sleep Mode ending) a running
+# A/C stays on as a fan instead: set point to the unit's top, 32 °C, so the
+# compressor stays off. The user's wish 2026-10-08. Off picked by a person
+# (the card, voice) still switches it off.
 - id: night_climate_mode_off
   alias: "Night Climate – fan and A/C off when the program ends"
   mode: single
@@ -2395,7 +2391,18 @@
       entity_id: input_select.night_climate_mode
       to: "Off"
   action:
-    - action: script.night_climate_actuators_off
+    - if:
+        # Set by night_climate_wake or night_climate_stop_on_sleep_off: an
+        # automation's own state carries the context of its service calls.
+        - >-
+          {{ trigger.to_state.context.id in states.automation
+             | selectattr('attributes.id', 'in', ['night_climate_wake', 'night_climate_stop_on_sleep_off'])
+             | map(attribute='context.id') | list }}
+      then:
+        - action: script.night_climate_fan_off
+        - action: script.night_climate_ac_fan_only
+      else:
+        - action: script.night_climate_actuators_off
     - action: input_boolean.turn_off
       target:
         entity_id: input_boolean.night_climate_fan_by_room
@@ -2411,8 +2418,8 @@
       at: input_datetime.night_climate_wake_time
   action:
     # Hold has no end; the night modes stop here. Mode Off also switches the
-    # roof fan and the A/C off (night_climate_mode_off), the A/C the warm-up
-    # left running as a fan included.
+    # roof fan off (night_climate_mode_off); a running A/C stays on as a fan
+    # at its top set point (until 2026-10-08 it went off here).
     - if:
         - "{{ states('input_select.night_climate_mode') not in ['Off', 'Hold'] }}"
       then:
@@ -2435,8 +2442,8 @@
 # The loop. Every 5 min (and on any setting change) hold sensor.night_climate_
 # target with what the mode allows. The scripts only send a command when the
 # appliance is not already where it should be; the fan and the A/C beep on
-# every IR frame, so that is deliberate. The A/C keeps a 30-min dwell between
-# on and off (compressor and the beeps); the heater has its own PID.
+# every IR frame, so that is deliberate. The A/C cools at least 30 min before
+# it becomes a fan (compressor and the beeps); the heater has its own PID.
 - id: night_climate_controller
   alias: "Night Climate – controller"
   mode: single
@@ -2556,9 +2563,11 @@
 
         # ── Program / Hold: heater below target−1. Above target+2: on shore
         #    power the A/C, from the "A/C above" temperature, cooling to the
-        #    target (16 °C at the least, the card's A/C fan level); when the warm-up's heater
-        #    takes over it stays on as a fan (top set point) until the wake
-        #    time. Off shore the roof fan while it is cooler outside: on its own thermostat
+        #    target (16 °C at the least, the card's A/C fan level). Once on it
+        #    is not switched off while it may run: back under the target, or
+        #    when the heater takes over, it becomes a fan (top set point, no
+        #    compressor) and cools again only where it would start anyway.
+        #    Off shore the roof fan while it is cooler outside: on its own thermostat
         #    first, and if that sits idle (its sensor is in the incoming air)
         #    HA runs the fan from the room sensor instead. Fan and A/C never
         #    run together. Between the bands whatever is running holds its
@@ -2575,14 +2584,17 @@
                   data:
                     hvac_mode: "off"
             - choose:
-                # Too cold: heater to target, roof fan and A/C off. In the
-                # warm-up a running A/C stays on as a fan instead (top set
-                # point, no compressor) until the wake time ends the program:
-                # the user's wish 2026-10-07, after it went off at 06:20.
+                # Too cold: heater to target, roof fan off. A running A/C
+                # stays on as a fan (top set point, no compressor): the user's
+                # wish 2026-10-07 for the warm-up, after it went off at 06:20,
+                # and whenever the heater starts since 10-08. It no longer
+                # asks for the warm-up: the phase attribute is written 50 ms
+                # after the target, so the run the warm-up's start triggers
+                # would read "night" and switch the A/C off.
                 - conditions: "{{ room is not none and use_heater and room < target - 1 }}"
                   sequence:
                     - if:
-                        - "{{ warmup and ac_on and ac_ok }}"
+                        - "{{ ac_on and ac_ok }}"
                       then:
                         - action: script.night_climate_heater_to
                           data:
@@ -2603,19 +2615,29 @@
                         - conditions: "{{ not ac_ok }}"
                           sequence:
                             - action: script.night_climate_ac_off
-                        # Warm-up, A/C as a fan: leave it so until the wake
-                        # time, even with the heater off for a while
-                        - conditions: "{{ warmup and ac_fan_only }}"
+                        # A/C as a fan: it stays so, even with the heater off
+                        # for a while, and cools again only where an A/C that
+                        # is off would start (above target+2 and "A/C above"),
+                        # never in the warm-up
+                        - conditions: "{{ ac_fan_only }}"
                           sequence:
                             - if:
                                 - "{{ fan_thermo or fan_on }}"
                               then:
                                 - action: script.night_climate_fan_off
-                        # Back under target: off once the 30-min dwell is over
+                            - if:
+                                - "{{ not warmup and ac_wanted and room > target + 2 }}"
+                              then:
+                                - action: script.night_climate_ac_on
+                                  data:
+                                    target: "{{ target }}"
+                        # Back under target: a fan once the 30-min dwell is
+                        # over. Until 2026-10-08 it went off here (04:00 that
+                        # night, the room at 15.4 °C against 16).
                         - conditions: >-
                             {{ ac_settled and room is not none and room < target - 0.5 }}
                           sequence:
-                            - action: script.night_climate_ac_off
+                            - action: script.night_climate_ac_fan_only
                       default:
                         - if:
                             - "{{ fan_thermo or fan_on }}"

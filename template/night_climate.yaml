@@ -134,7 +134,8 @@
           {% if room not in ['unknown', 'unavailable'] %}{% set parts = parts + ['room ' ~ room ~ ' °C'] %}{% endif %}
           {% set on = [] %}
           {% if is_state('climate.a32_pro_van_hydronic_heating_pid', 'heat') %}{% set on = on + ['heater'] %}{% endif %}
-          {% if is_state('climate.ag_pro_24v_air_conditioner', 'cool') %}{% set on = on + ['A/C'] %}{% endif %}
+          {# At its top set point the A/C only runs its fan #}
+          {% if is_state('climate.ag_pro_24v_air_conditioner', 'cool') %}{% set on = on + ['A/C as a fan' if state_attr('climate.ag_pro_24v_air_conditioner', 'temperature') | float(0) >= state_attr('climate.ag_pro_24v_air_conditioner', 'max_temp') | float(32) - 0.5 else 'A/C'] %}{% endif %}
           {% if is_state('fan.ag_pro_roof_fan', 'on') %}{% set on = on + ['fan ' ~ state_attr('fan.ag_pro_roof_fan', 'percentage') ~ '%' ~ (' by room sensor' if is_state('input_boolean.night_climate_fan_by_room', 'on') else '')] %}{% endif %}
           {% if is_state('switch.ag_pro_roof_fan_thermostat', 'on') %}{% set on = on + ['fan auto above ' ~ states('number.ag_pro_roof_fan_thermostat_set_point') ~ ' °F'] %}{% endif %}
           {% set parts = parts + [(on | join(' + ')) if on else 'nothing running'] %}
