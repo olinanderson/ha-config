@@ -27,7 +27,7 @@
 | **Victron MPPT** (×2) | Solar charge controllers — PV power, output voltage/current, yield | BLE via `victron_ble` ESPHome |
 | **Pro Check F317** | Propane tank ultrasonic level sensor | BLE |
 | **Lorex D231A41B** | 4-channel 1080p DVR (security cameras) — RTSP streams | go2rtc (MSE) via dvr_proxy |
-| **Kidde HomeSafe** | CO/smoke detection | `kidde_homesafe` custom component |
+| **Kidde HomeSafe** | CO/smoke detection, room temperature and air quality | `kidde_homesafe` custom component (HACS, cloud polling); after a boot without internet it never polls until reloaded, which automation `kidde_reload_when_unavailable` does |
 | **GasBuddy** | Cheapest regular gas near the van (CAD/L) → trip / fill-up cost sensors | HACS `ha-gasbuddy`, cloud polling (hourly) |
 | **Zigbee2MQTT** | Zigbee device gateway | MQTT bridge |
 | **VLC Telnet** | Media player for TTS and audio | Media player integration |

@@ -70,6 +70,33 @@
               seconds: 60
 
 # ───────────────────────────────────────────────
+#  Kidde HomeSafe – reload while unavailable
+# ───────────────────────────────────────────────
+# The kidde_homesafe custom component (HACS; upstream 1.0.4 is the same
+# here) reads the Kidde cloud once at setup and builds its entities from that
+# answer. If HA starts before the van has internet (Starlink takes minutes
+# after a power-up), that read fails, every platform crashes on the empty
+# answer and nothing polls again until the integration is reloaded. That kept
+# it down from the 2026-09-30 power-off to 10-08. Reloads every 15 min once
+# the detector has been unavailable 15 min; a reload while the internet is
+# still down just fails and leaves it as it was.
+- id: kidde_reload_when_unavailable
+  alias: "Kidde - reload integration while unavailable"
+  mode: single
+  trigger:
+    - trigger: time_pattern
+      minutes: "/15"
+  condition:
+    - condition: state
+      entity_id: binary_sensor.smoke_co_and_iac_detector_online
+      state: "unavailable"
+      for: "00:15:00"
+  action:
+    - action: homeassistant.reload_config_entry
+      data:
+        entry_id: "{{ config_entry_id('binary_sensor.smoke_co_and_iac_detector_online') }}"
+
+# ───────────────────────────────────────────────
 #  Filtered GPS tracker – MQTT update logic
 # ───────────────────────────────────────────────
 

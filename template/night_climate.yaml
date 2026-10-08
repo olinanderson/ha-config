@@ -8,8 +8,10 @@
 # One room reading the night controller can trust. Each sensor counts only
 # while nothing is fooling it (2026-09-10 audit): BME280_1 sits under the
 # cabinet, BME280_3 heat-soaks +7–11 °C while the coolant blower runs, and the
-# Kidde is the honest one but its cloud poll stops 01:00–08:15 (Starlink
-# sleep). Median of what passes; BME280_1 as the last resort.
+# Kidde is the honest one but comes from the cloud, so it counts only while
+# it keeps updating (it stopped 01:00–08:15 in the Starlink duty-cycle days,
+# and was down 09-30 → 10-08: automations.yaml, Kidde reload). Median of what
+# passes; BME280_1 as the last resort.
 #
 # BME280_1 reads 1–4 °C high whenever the inverter is on, idle included, and
 # takes about 45 min to cool once it's off (history 2026-09-30..10-08: −0.3 °C
