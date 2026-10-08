@@ -51,11 +51,15 @@ needs_restart=""
 needs_reload=0
 services=""      # reloads that reload_all leaves out
 needs_voice=0
+daemons=""       # van services in www/ (shell_commands.yaml): HA doesn't load their code
 while IFS= read -r f; do
     case "$f" in
         voice/*) needs_voice=1 ;;   # areas, aliases, exposure, Claude: voice/apply.py
         intent_scripts.yaml) services+="intent_script/reload " ;;
         custom_sentences/*) services+="conversation/reload " ;;
+        custom_components/*) needs_restart+="$f " ;;   # integration code loads only at startup
+        www/*/gps_filter.py|www/*/gps_ublox.py|www/*/osrm_proxy.py|www/*/dvr_proxy.py)
+            n=${f##*/}; daemons+="shell_command.restart_${n%.py} " ;;
         esphome/*|react-dashboard/*|relay/*|docs/*|*.md|*.py|*.js|*.sh|.github/*|.claude/*|*.gitignore|.stignore) ;;   # not HA runtime config
         *) if grep -Eq "$reloadable" <<<"$f"; then needs_reload=1; else needs_restart+="$f "; fi ;;
     esac
@@ -74,4 +78,7 @@ if [ "$needs_voice" = 1 ]; then
 fi
 if [ -n "$needs_restart" ]; then
     echo "These need an HA restart to take effect (not done automatically): $needs_restart"
+fi
+if [ -n "$daemons" ]; then
+    echo "These services need a restart to take effect (not done automatically): $daemons"
 fi
