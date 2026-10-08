@@ -526,8 +526,9 @@ the YAML registered first, so they never ran (nor anything in them, like a tyre 
 every HA start logged "Platform mqtt does not generate unique IDs" 35 times. They were
 cleared on 2026-10-08 (backup: `/config/vanlife-data/wican_discovery_backup_2026-10-08.json`).
 Entity IDs follow the pattern `sensor.192_168_10_90_*` (preserved from the old ha-wican
-integration; the entity registry keeps them). The old `ha-wican` integration has no config
-entry, but its files are still in `custom_components/wican` (HACS).
+integration; the entity registry keeps them). The old `ha-wican` integration (no config entry
+by then) was removed through HACS on 2026-10-08, together with an empty MQTT device "WiCAN"
+(identifiers `WiCAN`). The only WiCAN device is "WiCAN Pro" (identifiers `wican_pro`).
 
 **WiCAN MQTT topics**: Each PID publishes to its own topic (e.g. `wican/EngineRPM`,
 `wican/GEAR`, `wican/TYRE_P_FL`), retained. Payloads are JSON with a single key-value pair
