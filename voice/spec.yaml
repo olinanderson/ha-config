@@ -208,7 +208,6 @@ agent:
   model_options:
     thinking_effort: low
   max_tokens: 3000
-  temperature: 1.0
   prompt: prompt.md
 
 # The pipeline the Voice PE uses: local sentences first, then Claude.

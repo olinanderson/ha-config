@@ -122,7 +122,7 @@ async def main() -> None:
                 "recommended": False,
                 "chat_model": agent["model"],
                 "max_tokens": agent.get("max_tokens", 3000),
-                "temperature": agent.get("temperature", 1.0),
+                # No "temperature": HA dropped the option, and 2026.10 deletes the saved value
                 **agent.get("model_options", {}),
             }
             if {k: sub["data"].get(k) for k in want} != want:
@@ -169,6 +169,11 @@ async def run_subentry_flow(http, headers, entry_id: str, subentry_id: str, data
     async with http.post(base, headers=headers, json={"handler": [entry_id, "conversation"], "subentry_id": subentry_id}) as r:
         step = await r.json()
     while step.get("type") == "form":
+        if step.get("errors"):
+            # The same answers would bring the same errors back forever
+            async with http.delete(f"{base}/{step['flow_id']}", headers=headers):
+                pass
+            raise RuntimeError(f"subentry flow form {step.get('step_id')} has errors: {step['errors']}")
         fields = {f["name"] for f in step["data_schema"]}
         answer = {k: v for k, v in data.items() if k in fields}
         async with http.post(f"{base}/{step['flow_id']}", headers=headers, json=answer) as r:

@@ -552,7 +552,9 @@
             {% set away = now() - trigger.from_state.last_changed %}
             {{ away.total_seconds() >= 900 }}
       then:
+        # Since HA 2026.6 a VLC error stops the automation; carry on without it
         - action: media_player.volume_set
+          continue_on_error: true
           target:
             entity_id: media_player.vlc_telnet
           data:
@@ -562,6 +564,7 @@
 
         # Calculate how long you were away and get battery percentage
         - action: tts.speak
+          continue_on_error: true
           target:
             entity_id: tts.openai_tts_gpt_4o_mini_tts
           data:
