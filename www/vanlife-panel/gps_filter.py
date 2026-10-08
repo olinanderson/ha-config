@@ -23,6 +23,9 @@ Usage:
   # Route unrouted segments only:
   python3 gps_filter.py --route-only
 
+  # Re-process past days in full (e.g. to recover minutes a run missed):
+  python3 gps_filter.py --finalize-from 2026-08-20
+
 Token is read from /config/.gps_filter_token (one line, long-lived HA token).
 """
 
@@ -689,13 +692,35 @@ def _process_day(token, day_start, day_end, label=""):
     return bool(segments)
 
 
+def finalize_day(token, day_start, force=False):
+    """Re-process one past UTC day in full, once (meta key finalized_YYYYMMDD).
+
+    Today is only processed up to PROCESS_DELAY_S ago, so the last run before
+    00:00 UTC stops 5–9 min short of midnight. Until 2026-10-08 nothing went
+    back for those minutes once the day had any segments, and every evening
+    the van was driving at 18:00 MDT lost up to 14 km of track.
+
+    Returns False if the HA fetch failed: the day stays unmarked and is retried.
+    A day with no raw GPS left (past the recorder's purge) is left as it was."""
+    meta_key = f"finalized_{day_start.strftime('%Y%m%d')}"
+    if not force and get_meta(meta_key) is not None:
+        return True
+    label = day_start.strftime('%Y-%m-%d')
+    log(f"Finalizing {label}...")
+    if _process_day(token, day_start, day_start + timedelta(days=1), label=label) is None:
+        return False
+    set_meta(meta_key, datetime.now(timezone.utc).timestamp())
+    return True
+
+
 def incremental_run(token):
     """One incremental processing pass.
 
-    Strategy: re-process today's GPS data every cycle. Also backfill any recent
-    days (up to LOOKBACK_DAYS) that have no segments yet — this catches data
-    missed when the daemon was down or when trips happened near midnight UTC.
-    Routing hits the proxy cache for unchanged segments (instant).
+    Strategy: re-process today's GPS data every cycle. Each of the last
+    LOOKBACK_DAYS days is re-processed once in full as soon as all of it is
+    older than PROCESS_DELAY_S (finalize_day): this picks up the minutes before
+    midnight UTC that today's runs never reached, and days missed while the
+    daemon was down. Routing hits the proxy cache for unchanged segments (instant).
     """
     LOOKBACK_DAYS = 3
 
@@ -705,46 +730,11 @@ def incremental_run(token):
     # Today's midnight (UTC)
     today_midnight = now.replace(hour=0, minute=0, second=0, microsecond=0)
 
-    # ── Backfill recent days if needed ────────────────────────────────────────
-    con = sqlite3.connect(FILTER_DB)
+    # ── Finalize recent days ──────────────────────────────────────────────────
     for days_ago in range(LOOKBACK_DAYS, 0, -1):
         day_start = today_midnight - timedelta(days=days_ago)
-        day_end = day_start + timedelta(days=1)
-        day_start_ts = day_start.timestamp() * 1000
-        day_end_ts = day_end.timestamp() * 1000
-
-        # Skip if this day already has segments or was already checked recently
-        existing = con.execute(
-            "SELECT COUNT(*) FROM segments WHERE start_ts >= ? AND start_ts < ?",
-            (day_start_ts, day_end_ts)
-        ).fetchone()[0]
-        if existing > 0:
-            continue
-
-        # Check meta flag to avoid re-checking empty days every cycle
-        meta_key = f"backfill_checked_{day_start.strftime('%Y%m%d')}"
-        checked = con.execute(
-            "SELECT value FROM filter_meta WHERE key = ?", (meta_key,)
-        ).fetchone()
-        if checked:
-            continue
-
-        # Process this day
-        label = day_start.strftime('%Y-%m-%d')
-        log(f"Backfilling {label} (no segments found)...")
-        result = _process_day(token, day_start, day_end, label=label)
-
-        # Only mark as checked when the fetch actually succeeded. A failed fetch
-        # returns None — leave the day unmarked so the next cycle retries it
-        # instead of permanently skipping that day's trips.
-        if result is None:
-            continue
-        con.execute(
-            "INSERT OR REPLACE INTO filter_meta (key, value) VALUES (?, ?)",
-            (meta_key, str(now.timestamp()))
-        )
-        con.commit()
-    con.close()
+        if day_start + timedelta(days=1) <= safe_end:
+            finalize_day(token, day_start)
 
     # ── Process today ─────────────────────────────────────────────────────────
     try:
@@ -795,6 +785,9 @@ if __name__ == "__main__":
                         help="Backfill start date YYYY-MM-DD (default: 2025-01-01)")
     parser.add_argument("--daemon", action="store_true", help="Run as daemon (after backfill if combined)")
     parser.add_argument("--route-only", action="store_true", help="Only route unrouted segments")
+    parser.add_argument("--finalize-from", metavar="YYYY-MM-DD",
+                        help="Re-process every UTC day from this date to yesterday in full, "
+                             "then route. HA keeps ~60 days of raw GPS: start inside that")
     args = parser.parse_args()
 
     # Resolve token
@@ -807,6 +800,15 @@ if __name__ == "__main__":
 
     if args.route_only:
         route_unrouted()
+    elif args.finalize_from:
+        day = datetime.strptime(args.finalize_from, "%Y-%m-%d").replace(tzinfo=timezone.utc)
+        while day + timedelta(days=1) <= datetime.now(timezone.utc) - timedelta(seconds=PROCESS_DELAY_S):
+            if not finalize_day(token, day, force=True):
+                log(f"{day:%Y-%m-%d}: HA fetch failed, left as it was")
+            day += timedelta(days=1)
+        route_unrouted()
+        if args.daemon:
+            daemon_loop(token)
     elif args.backfill:
         backfill(token, args.from_date)
         if args.daemon:
