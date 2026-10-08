@@ -600,13 +600,13 @@ by then) was removed through HACS on 2026-10-08, together with an empty MQTT dev
 **User Custom PIDs (via WiCAN Automate → User Custom tab):**
 | Entity | PID | Expression | Description |
 |---|---|---|---|
-| `sensor.192_168_10_90_map` | `22F404` | `[B4:B5]/256` | NOT manifold pressure: `F404` mirrors PID 04, so this is calculated load × 2.55 (255 = 100 %). The air term of the speed-density fuel estimate. Named "WiCAN Pro Engine Load (raw, 255 = 100 %)" with no unit in HA (customize.yaml) |
+| `sensor.192_168_10_90_map` | `22F404` | `[B4:B5]/256` | NOT manifold pressure: `F404` mirrors PID 04, so this is calculated load × 2.55 (255 = 100 %). The air term of the speed-density fuel estimate. Named "WiCAN Pro Engine Load (raw, 255 = 100 %)" with no unit in HA (mqtt/sensors.yaml) |
 | `sensor.192_168_10_90_stft_b1` | `0x06` | standard | Short-term fuel trim Bank 1 (%) |
 | `sensor.192_168_10_90_ltft_b1` | `0x07` | standard | Long-term fuel trim Bank 1 (%) |
 | `sensor.192_168_10_90_stft_b2` | `0x08` | standard | Short-term fuel trim Bank 2 (%) |
 | `sensor.192_168_10_90_ltft_b2` | `0x09` | standard | Long-term fuel trim Bank 2 (%) |
 | `sensor.192_168_10_90_lambda` | `0x44` | standard | Commanded equivalence ratio (lambda); 1.0 = stoich, <1 = rich, >1 = lean |
-| `sensor.192_168_10_90_inj_pw` | `22F44A` | `[B4:B5]` | NOT injector pulse width: `F44A` mirrors PID 4A (accelerator pedal E), so this is the pedal byte × 256 (5120 at rest, always a multiple of 256). Named "WiCAN Pro Accelerator Pedal E (raw, byte × 256)" in HA (customize.yaml); `sensor.accelerator_pedal` gives it in % |
+| `sensor.192_168_10_90_inj_pw` | `22F44A` | `[B4:B5]` | NOT injector pulse width: `F44A` mirrors PID 4A (accelerator pedal E), so this is the pedal byte × 256 (5120 at rest, always a multiple of 256). Named "WiCAN Pro Accelerator Pedal E (raw, byte × 256)" in HA (mqtt/sensors.yaml); `sensor.accelerator_pedal` gives it in % |
 
 **NOT supported by this ECU** (tested, returns "no positive response" or "NO DATA"):
 - `FUEL_RATE` (Mode 22, PID 22F49D) — fuel consumption rate

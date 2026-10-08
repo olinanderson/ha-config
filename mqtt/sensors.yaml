@@ -179,7 +179,11 @@
   expire_after: 60
   device: *wican_device
 
-- name: "Injector Pulse Width"
+# The WiCAN PIDs INJ_PW and MAP are neither (docs/vehicle-obd.md), so they are named
+# for what they are. 22F44A mirrors PID 4A, accelerator pedal E, read as two bytes
+# (byte × 256); sensor.accelerator_pedal gives it in %. 22F404 mirrors PID 04,
+# calculated load × 2.55. Renamed 2026-10-08; the registry keeps the entity IDs.
+- name: "Accelerator Pedal E (raw, byte × 256)"
   unique_id: "wican_inj_pw"
   state_topic: "wican/INJ_PW"
   value_template: "{{ value_json.values() | first }}"
@@ -187,12 +191,10 @@
   expire_after: 30
   device: *wican_device
 
-- name: "Manifold Absolute Pressure"
+- name: "Engine Load (raw, 255 = 100 %)"
   unique_id: "wican_map"
   state_topic: "wican/MAP"
   value_template: "{{ value_json.values() | first }}"
-  unit_of_measurement: "kPa"
-  device_class: pressure
   state_class: measurement
   expire_after: 30
   device: *wican_device
