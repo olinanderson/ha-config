@@ -69,7 +69,7 @@ www/vanlife-panel/gps_filter.log
 www/vanlife-panel/gps_ublox.log
 .gps_filter_token
 
-# --- Diagnostic ps dumps (ps aux captures the daemon --token on its cmdline) ---
+# --- Diagnostic ps dumps (until 2026-10-08 ps aux printed the gps_filter --token) ---
 www/vanlife-panel/ps_debug.txt
 www/vanlife-panel/ps_output.txt
 
