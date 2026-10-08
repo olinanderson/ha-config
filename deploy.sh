@@ -46,7 +46,8 @@ if [ "$check" != '{"result":"valid","errors":null,"warnings":null}' ] && ! grep 
 fi
 
 # YAML that HA can reload without a restart; everything else needs one.
-reloadable='^(automations\.yaml|scripts\.yaml|scenes\.yaml|input_[a-z_]+\.yaml|customize\.yaml|template/.*\.yaml|group\.yaml|timers?\.yaml|counters?\.yaml)$'
+# reload_all also reloads the MQTT YAML entities in mqtt/ (seen 2026-10-08, 0094a30).
+reloadable='^(automations\.yaml|scripts\.yaml|scenes\.yaml|input_[a-z_]+\.yaml|customize\.yaml|template/.*\.yaml|group\.yaml|timers?\.yaml|counters?\.yaml|mqtt/.*\.yaml)$'
 needs_restart=""
 needs_reload=0
 services=""      # reloads that reload_all leaves out
@@ -60,7 +61,7 @@ while IFS= read -r f; do
         custom_components/*) needs_restart+="$f " ;;   # integration code loads only at startup
         www/*/gps_filter.py|www/*/gps_ublox.py|www/*/osrm_proxy.py|www/*/dvr_proxy.py)
             n=${f##*/}; daemons+="shell_command.restart_${n%.py} " ;;
-        esphome/*|react-dashboard/*|relay/*|docs/*|*.md|*.py|*.js|*.sh|.github/*|.claude/*|*.gitignore|.stignore) ;;   # not HA runtime config
+        esphome/*|react-dashboard/*|dashboards/*|relay/*|docs/*|*.md|*.py|*.js|*.sh|.github/*|.claude/*|*.gitignore|.stignore) ;;   # not HA runtime config (dashboards/: lovelace is in storage mode)
         *) if grep -Eq "$reloadable" <<<"$f"; then needs_reload=1; else needs_restart+="$f "; fi ;;
     esac
 done <<<"$changed"
