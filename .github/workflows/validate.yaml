@@ -39,7 +39,6 @@ jobs:
             input_number.yaml
             input_text.yaml
             input_select.yaml
-            filter.yaml
             integrations
             mqtt
             template
