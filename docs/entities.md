@@ -117,7 +117,8 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor, plus `sensor.mppt1_
 | `sensor.a32_pro_di33_40_expander_faults` | Count of those faults since flash (kept across reboots) |
 
 ## Fuel Prices (GasBuddy)
-HACS `firstof9/ha-gasbuddy` 1.6.1, hub "GasBuddy Hub" with one station subentry in
+HACS `firstof9/ha-gasbuddy` 1.5.0 (1.6.1 and later need HA 2026.8+; 1.6.1 failed setup
+here on 2026.4 and was rolled back), hub "GasBuddy Hub" with one station subentry in
 *cheapest* mode: regular, posted credit price. With no postal code it searches around
 HA's home coordinates, which the "Keep Home zone on GPS" automation moves with the van.
 Until the 2026-10-24 trip it has postal code V9Y 8Y5 (Port Alberni) instead: neither
