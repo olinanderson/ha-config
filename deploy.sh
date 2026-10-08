@@ -56,7 +56,7 @@ while IFS= read -r f; do
         voice/*) needs_voice=1 ;;   # areas, aliases, exposure, Claude: voice/apply.py
         intent_scripts.yaml) services+="intent_script/reload " ;;
         custom_sentences/*) services+="conversation/reload " ;;
-        esphome/*|react-dashboard/*|relay/*|docs/*|*.md|*.py|*.js|*.sh|.github/*|.claude/*|.gitignore|.stignore) ;;   # not HA runtime config
+        esphome/*|react-dashboard/*|relay/*|docs/*|*.md|*.py|*.js|*.sh|.github/*|.claude/*|*.gitignore|.stignore) ;;   # not HA runtime config
         *) if grep -Eq "$reloadable" <<<"$f"; then needs_reload=1; else needs_restart+="$f "; fi ;;
     esac
 done <<<"$changed"
