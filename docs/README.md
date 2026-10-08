@@ -8,7 +8,8 @@ The original copilot-instructions.md is kept as the canonical source for VSCode 
 | `system-overview.md` | Vehicle specs, hardware platform, network, architecture |
 | `entities.md` | All known entity IDs (battery, solar, OBD, climate, etc.) |
 | `syncthing.md` | Bidirectional config sync setup and troubleshooting |
-| `automations-modes.md` | Key automations, modes/routines, voice assistant |
+| `automations-modes.md` | Key automations, modes/routines |
+| `voice-assistant.md` | Voice pipeline, local sentences, Claude, names and areas, model benchmark |
 | `dashboard-yaml.md` | YAML dashboard editing rules, card patterns, custom cards |
 | `react-dashboard.md` | React dashboard architecture, build, deploy |
 | `cameras.md` | Lorex DVR, go2rtc, MSE streaming, dvr_proxy, playback |

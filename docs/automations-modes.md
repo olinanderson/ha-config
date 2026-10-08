@@ -136,14 +136,8 @@ with the 1200-baud rule above.
 
 ## Voice Assistant
 
-| Intent | Triggers | Action |
-|---|---|---|
-| `RoofFanTurnOn` | "turn on the roof fan" | Lid open → intake → fan on |
-| `RoofFanTurnOff` | "shut off the roof fan" | Fan off → lid close |
-| `CookModeStart/Stop` | "start/stop cook mode" | Scripts |
-| `StartBedtimeRoutine` | "goodnight" / "bedtime" | `script.sleep_mode_on` |
-| `GoodMorning` | "good morning" / "wake up" | `script.wake_up_routine` |
-| `IndoorDimmersOff/On` | "turn off/on the lights" | All 4 LED controllers |
+Local sentences first, then Claude. The sentence list, names, model and how
+to test: `voice-assistant.md`.
 
 ## Inverter Detection
 

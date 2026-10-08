@@ -789,18 +789,7 @@ against measured power every minute; the fan's off is sent twice (`button.ag_pro
 
 ## Voice Assistant
 
-Since 2026-10-07 the agent is Claude (Anthropic integration); see `docs/voice-assistant.md` for the whole setup. Local sentences in `custom_sentences/en/van.yaml` → `intent_scripts.yaml` (actions), matched before Claude is asked. The table below is from before that change:
-
-| Intent | Triggers | Action |
-|---|---|---|
-| `RoofFanTurnOn` | "turn on the roof fan" | Lid open → intake → fan on |
-| `RoofFanTurnOff` | "turn/shut off the roof fan" | Fan off → lid close |
-| `RoofFanSetMode` | "set roof fan to exhaust/intake" | Change direction |
-| `AGRoofFanSetPercentage` | "set roof fan to {%}" | Change speed (rounds to 10%) |
-| `CookModeStart/Stop` | "start/stop cook mode" | `script.cook_mode` / `_off` |
-| `StartBedtimeRoutine` | "goodnight" / "bedtime" | `script.sleep_mode_on` |
-| `GoodMorning` | "good morning" / "wake up" | `script.wake_up_routine` |
-| `IndoorDimmersOff/On` | "turn off/on the lights" | All 4 LED controllers |
+Since 2026-10-07: Whisper → local sentences (`custom_sentences/en/van.yaml` → `intent_scripts.yaml`) → anything else to Claude Haiku 5.5 (Anthropic integration) → OpenAI TTS. Names, areas, what Assist may see, the model and the pipeline are in `voice/spec.yaml`; Claude's instructions in `voice/prompt.md`; `deploy.sh` applies both. Whole setup, the local sentence list and the model benchmark: `docs/voice-assistant.md`.
 
 ---
 

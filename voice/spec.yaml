@@ -56,6 +56,9 @@ expose:
   #    may undo a manual change at its next 5-minute tick.
   fan.ag_pro_roof_fan:
     aliases: [Roof fan, MaxxFan, Vent fan, null]
+  # Intake or Exhaust; the fan's own direction attribute isn't in what
+  # Claude is shown. A template sensor without a unique_id, so no aliases.
+  sensor.roof_fan_direction: {}
   cover.ag_pro_roof_fan_lid:
     aliases: [Roof fan lid, Fan lid, null]
   switch.ag_pro_roof_fan_thermostat:
@@ -185,3 +188,25 @@ expose:
   sensor.192_168_10_90_intake_air_temp_2: {}
   sensor.192_168_10_90_intake_air_tmp: {}
   sensor.192_168_10_90_tran_f_temp: {}
+
+# The Claude agent (Settings > Devices & services > Anthropic > Claude
+# conversation). apply.py walks its options flow when any of this differs.
+# Picked from the 2026-10-07 benchmark (docs/voice-assistant.md): Haiku 5.5
+# was the fastest and cheapest and got every test right. Other choices:
+# claude-sonnet-5-5 / claude-opus-5-5 with thinking_effort low (none 400s on
+# those two), or claude-haiku-4-5 with thinking_budget 0.
+agent:
+  subentry: Claude conversation
+  model: claude-haiku-5-5
+  model_options:
+    thinking_effort: low
+  max_tokens: 3000
+  temperature: 1.0
+  prompt: prompt.md
+
+# The pipeline the Voice PE uses: local sentences first, then Claude.
+# Whisper and the OpenAI voice stay as they are.
+pipeline:
+  name: Home Assistant
+  conversation_engine: "subentry:Claude conversation"
+  prefer_local_intents: true

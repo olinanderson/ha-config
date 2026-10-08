@@ -82,10 +82,15 @@ async def main() -> None:
         # ── Entity aliases and areas ──
         expose: dict[str, dict] = {k: v or {} for k, v in spec["expose"].items()}
         entries = await call({"type": "config/entity_registry/get_entries", "entity_ids": list(expose)})
+        known = {s["entity_id"] for s in await call({"type": "get_states"})}
         for eid, want in expose.items():
             entry = entries.get(eid)
             if entry is None:
-                problems.append(f"{eid}: not in the entity registry")
+                # Entities without a unique_id can be exposed, but not named
+                if eid not in known:
+                    problems.append(f"{eid}: no such entity")
+                elif want:
+                    problems.append(f"{eid}: has no unique_id, so no aliases or area")
                 continue
             change = {}
             if "aliases" in want and (entry.get("aliases") or []) != want["aliases"]:
@@ -115,7 +120,7 @@ async def main() -> None:
                 "llm_hass_api": ["assist"],
                 "recommended": False,
                 "chat_model": agent["model"],
-                "max_tokens": agent.get("max_tokens", 1024),
+                "max_tokens": agent.get("max_tokens", 3000),
                 "temperature": agent.get("temperature", 1.0),
                 **agent.get("model_options", {}),
             }
