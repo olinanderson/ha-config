@@ -116,7 +116,8 @@ async def main() -> None:
         if agent := spec.get("agent"):
             entry_id, sub = find_subentry(agent["subentry"])
             want = {
-                "prompt": open(os.path.join(HERE, agent["prompt"])).read(),
+                # HA saves the prompt without the trailing newline
+                "prompt": open(os.path.join(HERE, agent["prompt"])).read().strip(),
                 "llm_hass_api": ["assist"],
                 "recommended": False,
                 "chat_model": agent["model"],
