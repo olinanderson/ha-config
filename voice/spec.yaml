@@ -1,0 +1,187 @@
+# The van's voice vocabulary: areas, what everything is called, and what
+# Assist (the Claude agent and the local sentences) may see and control.
+# All of it lives in HA's registries (.storage), not in YAML config, so
+# voice/apply.py writes it there; deploy.sh runs it when voice/ changes.
+#
+# expose: is the WHOLE list. apply.py takes every other entity out of Assist
+# and turns "expose new entities" off, so new devices don't flood Claude's
+# context. Under aliases, null stands for the entity's own name; entities
+# without aliases: or area: keep whatever they have.
+# Background and how to test: docs/voice-assistant.md
+
+areas:
+  - name: Van
+    icon: mdi:van-utility
+    # "Turn off the indoor lights" = every exposed light in this area.
+    aliases: [Indoor, Indoors, Inside, Interior, Cabin, Living space, House, Coach, Camper]
+  - name: Outside
+    icon: mdi:pine-tree
+    aliases: [Outdoor, Outdoors, Exterior]
+
+# Device name -> area. Their entities follow unless they set an area of their
+# own. The Voice PE's area is what "turn off the lights" means when spoken
+# to it.
+devices:
+  Home Assistant Voice 096586: Van
+  LED Controller CCT 1: Van
+  LED Controller CCT 2: Van
+  LED Controller SC 1: Van
+  LED Controller SC 2: Van
+  AG Pro: Van
+  Apollo MSR-2: Van
+
+expose:
+  # ── Lights. Names first as on the dashboard's light card, then the
+  #    user's own aliases from before 2026-10-07.
+  light.led_controller_cct_1:
+    aliases: [Main lights, Main light, Main Inside Lights, Main Lighting, Roof Lights, Overhead Inside Lights, null]
+  light.led_controller_cct_2:
+    aliases: [Cabinet lights, Cabinet light, Under Cabinet Lighting, Under Cabinet Indoor Lights, Kitchen light, null]
+  light.led_controller_sc_1:
+    aliases: [Shower light, Shower Indoor Lights, Shower Lighting, null]
+  light.led_controller_sc_2:
+    aliases: [Accent lights, Accent light, Skylight Indoor Lights, Skylight Lighting, Roof Hatch Indoor Lights, Roof Hatch Indoor Lighting, null]
+  switch.a32_pro_switch21_left_outdoor_lights:
+    aliases: [Left outdoor lights, null]
+    area: Outside
+  switch.a32_pro_switch22_right_outdoor_lights:
+    aliases: [Right outdoor lights, null]
+    area: Outside
+  switch.a32_pro_switch23_rear_outdoor_lights:
+    aliases: [Rear Outdoor Lights, Back outdoor lights, null]
+    area: Outside
+
+  # ── Climate. Changes go through the scripts' own guards where they have
+  #    them (voice_roof_fan, living_space_off); the Night Climate program
+  #    may undo a manual change at its next 5-minute tick.
+  fan.ag_pro_roof_fan:
+    aliases: [Roof fan, MaxxFan, Vent fan, null]
+  cover.ag_pro_roof_fan_lid:
+    aliases: [Roof fan lid, Fan lid, null]
+  switch.ag_pro_roof_fan_thermostat:
+    aliases: [Roof fan thermostat, null]
+  switch.ag_pro_ceiling_fan_mode:
+    aliases: [Ceiling fan mode, null]
+  climate.ag_pro_24v_air_conditioner:
+    aliases: [Air conditioner, A/C, AC, Air conditioning, null]
+  climate.a32_pro_van_hydronic_heating_pid:
+    aliases: [Heater, Heat, Espar, Hydronic heater, null]
+    area: Van
+  input_select.night_climate_mode:
+    aliases: [Night climate program, Climate program, null]
+    area: Van
+  sensor.night_climate_status:
+    aliases: [Climate status, null]
+    area: Van
+  script.voice_roof_fan:
+    aliases: [Roof fan control]
+  script.living_space_off:
+    aliases: [All heating and cooling off]
+
+  # ── Temperatures and air. BME280_1 (living area) is left out: the
+  #    inverter warms it; Living Space Temperature leaves it out when it does.
+  sensor.living_space_temperature:
+    aliases: [Inside temperature, Temperature inside the van, Room temperature, null]
+    area: Van
+  sensor.a32_pro_bme280_2_temperature:
+    aliases: [Cab temperature, Temperature sensor inside the cab, null]
+    area: Van
+  sensor.a32_pro_bme280_3_temperature:
+    aliases: [Shower temperature, Temperature sensor inside the shower, null]
+    area: Van
+  sensor.a32_pro_bme280_4_temperature:
+    aliases: [Under-van temperature, Temperature sensor outside, null]
+    area: Outside
+  weather.pirateweather:
+    aliases: [Weather, null]
+    area: Outside
+  sensor.apollo_msr_2_1731d8_co2:
+    aliases: [CO2, Carbon dioxide, null]
+
+  # ── Power
+  sensor.olins_van_bms_battery:
+    aliases: [House battery, Battery, Battery level, null]
+  sensor.olins_van_bms_power:
+    aliases: [Battery power, null]
+  sensor.battery_time_estimate:
+    aliases: [Battery time, null]
+  sensor.olins_van_bms_current: {}
+  sensor.olins_van_bms_temperature: {}
+  sensor.total_mppt_pv_power:
+    aliases: [Solar power, Solar, null]
+  sensor.total_mppt_yield_today:
+    aliases: [Solar today, null]
+  binary_sensor.shore_power_present:
+    aliases: [Shore power, null]
+  binary_sensor.inverter_on:
+    aliases: [Inverter, null]
+  sensor.inverter_power_24v:
+    aliases: [Inverter power, AC load, null]
+
+  # ── Water and propane. The two valves were exposed before 2026-10-07 and
+  #    stay so; the prompt only lets Claude open them when asked by name.
+  sensor.a32_pro_fresh_water_tank_level:
+    aliases: [Fresh water, Fresh water tank, null]
+  sensor.a32_pro_grey_water_tank_level:
+    aliases: [Grey water, Grey tank, Gray water, null]
+  sensor.propane_tank_percentage:
+    aliases: [Propane, Propane tank, null]
+  switch.a32_pro_switch16_lpg_valve:
+    aliases: [Propane valve, Gas valve, null]
+  switch.a32_pro_switch06_grey_water_tank_valve:
+    aliases: [Grey water valve, Grey tank valve, null]
+  switch.a32_pro_water_system_master_switch:
+    aliases: [Water system, Water pump, null]
+  switch.a32_pro_water_system_state_main: {}
+  switch.a32_pro_water_system_state_recirculating_shower: {}
+  switch.a32_pro_water_system_state_recirculating_shower_flush: {}
+  sensor.a32_pro_s5140_channel_38_temperature_fresh_water_tank:
+    aliases: [Fresh water temperature, null]
+  sensor.a32_pro_s5140_channel_39_temperature_grey_water_tank:
+    aliases: [Grey water temperature, null]
+  sensor.a32_pro_s5140_channel_40_temperature_shower_water_tank:
+    aliases: [Shower water temperature, null]
+  sensor.a32_pro_s5140_channel_34_temperature_blower_coolant: {}
+  sensor.a32_pro_s5140_channel_35_temperature_blower_air: {}
+  sensor.a32_pro_s5140_channel_36_temperature_battery_bottom_aluminum_plate: {}
+  sensor.a32_pro_s5140_channel_37_temperature_air_fryer_compartment: {}
+
+  # ── Modes. The booleans drive the automations (sleep_mode_on_actions and
+  #    friends), so turning one on by voice runs the same routine as the
+  #    dashboard. Shop Mode is left out on purpose.
+  input_boolean.sleep_mode:
+    aliases: [Sleep mode, Bedtime, null]
+  input_boolean.shower_mode:
+    aliases: [Shower mode, null]
+  input_boolean.power_saving_mode:
+    aliases: [Power saving mode, Away mode, null]
+  script.cook_mode:
+    aliases: [Cook mode]
+  script.cook_mode_off:
+    aliases: [Cook mode off]
+  switch.a32_pro_shop_lockout: {}
+
+  # ── Everything else that was exposed before and still makes sense
+  switch.a32_pro_do8_switch06_top_monitor:
+    aliases: [Top monitor, null]
+    area: Van
+  switch.a32_pro_do8_switch07_bottom_monitor:
+    aliases: [Bottom monitor, null]
+    area: Van
+  switch.a32_pro_coolant_blower_mode_auto_manual: {}
+  switch.starlink_sleep_schedule: {}
+  switch.starlink_stowed: {}
+  sensor.speedtest_download: {}
+  media_player.atlantis: {}
+  media_player.ha_airplay: {}
+  media_player.roku_streaming_stick: {}
+  media_player.roku_streaming_stick_plus: {}
+  media_player.vlc_telnet: {}
+  media_player.vlc_telnet_2: {}
+  sensor.192_168_10_90_05_enginecoolanttemp: {}
+  sensor.192_168_10_90_0f_intakeairtemperature: {}
+  sensor.192_168_10_90_46_ambientairtemp: {}
+  sensor.192_168_10_90_coolant_tmp: {}
+  sensor.192_168_10_90_intake_air_temp_2: {}
+  sensor.192_168_10_90_intake_air_tmp: {}
+  sensor.192_168_10_90_tran_f_temp: {}

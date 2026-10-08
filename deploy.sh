@@ -49,8 +49,13 @@ fi
 reloadable='^(automations\.yaml|scripts\.yaml|scenes\.yaml|input_[a-z_]+\.yaml|customize\.yaml|template/.*\.yaml|group\.yaml|timers?\.yaml|counters?\.yaml)$'
 needs_restart=""
 needs_reload=0
+services=""      # reloads that reload_all leaves out
+needs_voice=0
 while IFS= read -r f; do
     case "$f" in
+        voice/*) needs_voice=1 ;;   # areas, aliases, exposure, Claude: voice/apply.py
+        intent_scripts.yaml) services+="intent_script/reload " ;;
+        custom_sentences/*) services+="conversation/reload " ;;
         esphome/*|react-dashboard/*|relay/*|docs/*|*.md|*.py|*.js|*.sh|.github/*|.claude/*|.gitignore|.stignore) ;;   # not HA runtime config
         *) if grep -Eq "$reloadable" <<<"$f"; then needs_reload=1; else needs_restart+="$f "; fi ;;
     esac
@@ -58,6 +63,14 @@ done <<<"$changed"
 
 if [ "$needs_reload" = 1 ]; then
     ssh "$HA" 'curl -s -o /dev/null -w "reload_all: HTTP %{http_code}\n" -X POST -H "Authorization: Bearer $(cat /config/.gps_filter_token)" http://localhost:8123/api/services/homeassistant/reload_all'
+fi
+for svc in $(printf '%s\n' $services | sort -u); do
+    ssh "$HA" "curl -s -o /dev/null -w '$svc: HTTP %{http_code}\n' -X POST -H \"Authorization: Bearer \$(cat /config/.gps_filter_token)\" http://localhost:8123/api/services/$svc"
+done
+# After the reloads, so a new script exists before it is exposed
+if [ "$needs_voice" = 1 ]; then
+    echo "voice/apply.py:"
+    ssh "$HA" 'TOKEN=$(sudo cat /config/.gps_filter_token); sudo docker exec -e TOKEN="$TOKEN" homeassistant python3 /config/voice/apply.py' | sed 's/^/  /'
 fi
 if [ -n "$needs_restart" ]; then
     echo "These need an HA restart to take effect (not done automatically): $needs_restart"

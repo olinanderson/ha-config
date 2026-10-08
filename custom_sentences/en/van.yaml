@@ -1,0 +1,103 @@
+# Van voice sentences, matched on the HA box before Claude is asked (the
+# pipeline's prefer_local_intents), so these answer at once and cost nothing.
+# Each intent's action is in intent_scripts.yaml. Anything that doesn't match
+# here, or matches HA's own sentences but fails, goes to Claude.
+# Syntax: (a|b) one of, [a] optional, {list:slot} a value from lists: below.
+# Reload: conversation.reload (deploy.sh does it). Test without acting:
+# Developer tools > Assist, or docs/voice-assistant.md.
+language: en
+intents:
+  RoofFanTurnOn:
+    data:
+      - sentences:
+          - "(turn|switch) on [the] [roof] fan [[to|on|in] {fan_direction:direction}] [(at|to) {fan_speed:speed}[%| percent]]"
+          - "(turn|switch) [the] [roof] fan on [[to|on|in] {fan_direction:direction}] [(at|to) {fan_speed:speed}[%| percent]]"
+          - "(start|run) [the] [roof] fan [[on|in] {fan_direction:direction}] [(at|to) {fan_speed:speed}[%| percent]]"
+          - "(set|switch|put|turn|change) [the] [roof] fan (to|on) {fan_direction:direction} [(at|to) {fan_speed:speed}[%| percent]]"
+          - "(set|change|turn|put) [the] [roof] fan [speed] to {fan_speed:speed}[%| percent]"
+          - "[roof] fan [on|to] {fan_direction:direction} [[at|to] {fan_speed:speed}[%| percent]]"
+          - "[roof] fan [speed] [to] {fan_speed:speed}[%| percent]"
+
+  RoofFanTurnOff:
+    data:
+      - sentences:
+          - "(turn|switch|shut) off [the] [roof] fan"
+          - "(turn|switch|shut) [the] [roof] fan off"
+          - "stop [the] [roof] fan"
+          - "[roof] fan off"
+
+  CookModeStart:
+    data:
+      - sentences:
+          - "(start|turn on|switch on|enable) [the] (cook|cooking) mode"
+          - "(turn|switch) [the] (cook|cooking) mode on"
+          - "(cook|cooking) mode [on]"
+          - "I'm (cooking|going to cook)"
+
+  CookModeStop:
+    data:
+      - sentences:
+          - "(stop|end|turn off|switch off|disable|exit) [the] (cook|cooking) mode"
+          - "(turn|switch) [the] (cook|cooking) mode off"
+          - "(cook|cooking) mode off"
+          - "[I'm] done cooking"
+
+  StartBedtimeRoutine:
+    data:
+      - sentences:
+          - "(good night|goodnight)"
+          - "(start|begin) [the] bedtime [routine]"
+          - "(it's|time for) bed[time]"
+          - "I'm going to bed"
+
+  GoodMorning:
+    data:
+      - sentences:
+          - "good morning"
+          - "rise and shine"
+          - "I'm (up|awake)"
+
+  IndoorDimmersOff:
+    data:
+      - sentences:
+          - "(turn|switch|shut) off [all] [the] [{indoor_word}] (lights|lighting)"
+          - "(turn|switch|shut) [all] [the] [{indoor_word}] (lights|lighting) off"
+          - "[all] [the] [{indoor_word}] lights off"
+
+  IndoorDimmersOn:
+    data:
+      - sentences:
+          - "(turn|switch) on [all] [the] [{indoor_word}] (lights|lighting)"
+          - "(turn|switch) [all] [the] [{indoor_word}] (lights|lighting) on"
+          - "[all] [the] [{indoor_word}] lights on"
+
+  OutdoorLightsOff:
+    data:
+      - sentences:
+          - "(turn|switch|shut) off [all] [the] {outdoor_word} lights"
+          - "(turn|switch|shut) [all] [the] {outdoor_word} lights off"
+          - "{outdoor_word} lights off"
+
+  OutdoorLightsOn:
+    data:
+      - sentences:
+          - "(turn|switch) on [all] [the] {outdoor_word} lights"
+          - "(turn|switch) [all] [the] {outdoor_word} lights on"
+          - "{outdoor_word} lights on"
+
+lists:
+  fan_direction:
+    values:
+      - in: "(intake|in take)"
+        out: "intake"
+      - in: "exhaust"
+        out: "exhaust"
+  fan_speed:
+    range:
+      from: 10
+      to: 100
+  # Words only, no value: these lists just keep the sentences short
+  indoor_word:
+    values: [indoor, inside, interior, cabin, house, coach, van]
+  outdoor_word:
+    values: [outdoor, outside, exterior]

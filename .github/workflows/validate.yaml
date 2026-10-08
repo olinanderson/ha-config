@@ -32,8 +32,9 @@ jobs:
             scripts.yaml
             scenes.yaml
             shell_commands.yaml
-            conversations.yaml
             intent_scripts.yaml
+            custom_sentences
+            voice/spec.yaml
             input_boolean.yaml
             input_number.yaml
             input_text.yaml

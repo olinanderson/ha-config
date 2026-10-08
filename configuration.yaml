@@ -47,8 +47,9 @@ script: !include scripts.yaml
 scene: !include scenes.yaml
 shell_command: !include shell_commands.yaml
 
+# Voice: local sentences in custom_sentences/en/, their actions in
+# intent_scripts.yaml, the rest in voice/ (docs/voice-assistant.md)
 conversation:
-  intents: !include conversations.yaml
 intent_script: !include intent_scripts.yaml
 
 # --- Input helpers ---

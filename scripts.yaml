@@ -71,6 +71,9 @@ roof_fan_toggle_direction:
 ########################################################################
 cook_mode:
   alias: Cook Mode
+  description: >-
+    Get ready to cook: opens the propane valve, cabinet lights to full, roof
+    fan to exhaust at 60 percent. Cook Mode Off puts everything back.
   mode: single
   sequence:
     # ❶ Snapshot everything we’re about to change
@@ -115,6 +118,9 @@ cook_mode:
 ########################################################################
 cook_mode_off:
   alias: Cook Mode Off
+  description: >-
+    Done cooking: puts the cabinet lights and the roof fan back as they were
+    before Cook Mode and closes the propane valve.
   mode: single
   sequence:
     # ❶ Restore everything we captured earlier
@@ -1299,6 +1305,9 @@ night_climate_actuators_off:
 # only send when their appliance is on, so a second tap is silent.
 living_space_off:
   alias: "Living Space – everything off"
+  description: >-
+    All heating and cooling off: ends the Night Climate program and switches
+    the heater, the roof fan (lid closed) and the air conditioner off.
   mode: single
   max_exceeded: silent
   sequence:
@@ -1322,3 +1331,69 @@ living_space_off:
     # night_climate_mode_off runs the same script when the mode changes above;
     # it is queued, and the second pass finds everything off and sends nothing.
     - action: script.night_climate_actuators_off
+
+########################################################################
+#  Voice – the roof fan with direction and speed, which HA's own        #
+#  intents can't set. Exposed to Assist (voice/spec.yaml): Claude sees   #
+#  the description and the fields as a tool; the local sentences in      #
+#  custom_sentences/en/van.yaml reach it through intent_scripts.yaml.    #
+#  The night_climate_fan_* helpers only send IR when something differs.  #
+########################################################################
+voice_roof_fan:
+  alias: "Roof fan (voice)"
+  description: >-
+    Turn the roof fan on or off, or set its direction or speed. Intake pulls
+    outside air in, exhaust pushes inside air out. Leave direction or speed
+    out to keep the current one. Off also closes the lid.
+  mode: queued
+  fields:
+    power:
+      description: "on or off"
+      required: true
+      selector:
+        select:
+          options: ["on", "off"]
+    direction:
+      description: "intake or exhaust; leave out to keep the current direction"
+      selector:
+        select:
+          options: [intake, exhaust]
+    speed:
+      description: "Percent, 10 to 100; leave out to keep the current speed"
+      selector:
+        number:
+          min: 10
+          max: 100
+          step: 10
+  sequence:
+    - variables:
+        # The fan keeps its last direction and speed while it is off
+        dir_now: "{{ 'exhaust' if state_attr('fan.ag_pro_roof_fan', 'direction') == 'forward' else 'intake' }}"
+        dir_want: "{{ direction | default(dir_now, true) | lower }}"
+        pct_now: "{{ state_attr('fan.ag_pro_roof_fan', 'percentage') | int(0) }}"
+        pct_want: >-
+          {% set p = speed | default(pct_now if pct_now > 0 else 50, true) | float(50) %}
+          {{ [10, [100, (p / 10) | round(0) | int * 10] | min] | max }}
+    - if:
+        - "{{ power == 'off' }}"
+      then:
+        # Started, not waited for: its double off frame takes about 4 s,
+        # and Claude answers only when this script returns.
+        - action: script.turn_on
+          target:
+            entity_id: script.night_climate_fan_off
+      else:
+        - action: script.night_climate_fan_on
+          data:
+            direction: "{{ dir_want | title }}"
+            speed: "{{ pct_want }}"
+    # What Claude gets back; the program note lets it warn that the Night
+    # Climate controller may change the fan again at its next tick.
+    - variables:
+        result: >-
+          {%- set prog = states('input_select.night_climate_mode') -%}
+          {%- if power == 'off' -%}{{ {'fan': 'off, lid closing', 'night_climate_program': prog} }}
+          {%- else -%}{{ {'fan': 'on', 'direction': dir_want, 'speed_percent': pct_want | int, 'night_climate_program': prog} }}
+          {%- endif -%}
+    - stop: "done"
+      response_variable: result

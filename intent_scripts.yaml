@@ -1,131 +1,108 @@
 # config/intent_scripts.yaml
-RoofFanSetMode:
-  speech:
-    text: "Roof fan is now set to {{ mode }} mode."
-  action:
-    - variables:
-        _dir: >
-          {% set m = mode | lower %}
-          {% if m == 'exhaust' %}forward
-          {% elif m == 'intake' %}reverse
-          {% else %}{{ m }}{% endif %}
-    - service: fan.set_direction # <- service, not action
-      data:
-        entity_id: fan.ag_pro_roof_fan
-        direction: "{{ _dir }}"
+# What the local sentences in custom_sentences/en/van.yaml do. The pipeline
+# matches those before Claude is asked (prefer_local_intents), so they answer
+# at once. `platforms: [conversation]` keeps each intent to that path: HA
+# only handles it for the conversation agent and only offers it to an LLM
+# when an entity of that domain is exposed, and none is. Claude has its own
+# tools for the same jobs (script.voice_roof_fan, the Van area), see
+# docs/voice-assistant.md. Reload: intent_script.reload (deploy.sh does it).
 
 RoofFanTurnOn:
-  speech:
-    text: >
-      Turning roof fan on{% if percentage is defined %}
-      to {{ percentage }} %{% endif %} and opening the hatch for intake.
+  platforms: &local_only [conversation]
   action:
-    - service: cover.open_cover
-      target:
-        entity_id: cover.ag_pro_roof_fan_lid
-    - service: fan.set_direction
-      data:
-        entity_id: fan.ag_pro_roof_fan
-        direction: reverse
-    - service: fan.turn_on
-      data:
-        entity_id: fan.ag_pro_roof_fan
-        percentage: "{{ percentage | default(omit) }}"
+    - action: script.voice_roof_fan
+      data: >-
+        {%- set d = {'power': 'on'} -%}
+        {%- if direction is defined %}{% set d = dict(d, direction=direction) %}{% endif -%}
+        {%- if speed is defined %}{% set d = dict(d, speed=speed) %}{% endif -%}
+        {{ d }}
+      response_variable: fan
+    - stop: ""
+      response_variable: fan
+  speech:
+    text: "Roof fan on, {{ action_response.direction }} at {{ action_response.speed_percent }} percent."
 
 RoofFanTurnOff:
-  speech:
-    text: "Roof fan off and lid closed."
+  platforms: *local_only
   action:
-    - service: fan.turn_off
-      target:
-        entity_id: fan.ag_pro_roof_fan
-    - service: cover.close_cover
-      target:
-        entity_id: cover.ag_pro_roof_fan_lid
-
-AGRoofFanSetPercentage:
+    - action: script.voice_roof_fan
+      data:
+        power: "off"
   speech:
-    text: >
-      {% if percentage is defined %}
-        Roof fan set to {{ percentage }} %.
-      {% else %}
-        I didn’t catch the speed – please try again.
-      {% endif %}
-
-  action:
-    # Exit if no slot
-    - if: "{{ percentage is not defined }}"
-      then: []
-
-    # Snap to nearest 10 % *and* force an int           <── key line is “| int”
-    - variables:
-        _pct: "{{ ((percentage | int(default=60) / 10) | round(0) * 10) | int }}"
-
-    # Log value so you can watch it in HA logs
-    - service: system_log.write
-      data:
-        message: "Roof‑fan intent sending speed {{ _pct }}"
-        level: info
-
-    # Change speed only (direction & lid untouched)
-    - service: fan.set_percentage
-      target:
-        entity_id: fan.ag_pro_roof_fan
-      data:
-        percentage: "{{ _pct }}"
+    text: "Roof fan off, closing the lid."
 
 CookModeStart:
+  platforms: *local_only
   speech:
-    text: "Cook mode activated. Fan exhaust 60 %, lights 100 %, gas on."
+    text: "Cook mode on. Propane open, cabinet lights full, fan on exhaust."
   action:
-    - service: script.turn_on
+    - action: script.turn_on
       target:
         entity_id: script.cook_mode
 
 CookModeStop:
+  platforms: *local_only
   speech:
-    text: "Cook mode cancelled. Everything returned to normal."
+    text: "Cook mode off. Propane closed, everything back as it was."
   action:
-    - service: script.turn_on
+    - action: script.turn_on
       target:
         entity_id: script.cook_mode_off
 
 StartBedtimeRoutine:
+  platforms: *local_only
   speech:
-    text: "Starting bedtime."
+    text: "Good night."
   action:
-    - service: script.turn_on
+    - action: script.turn_on
       target:
         entity_id: script.sleep_mode_on
 
 GoodMorning:
+  platforms: *local_only
   speech:
     text: "Good morning."
   action:
-    - service: script.turn_on
+    - action: script.turn_on
       target:
         entity_id: script.wake_up_routine
 
+# The indoor lights are every light in the Van area (voice/spec.yaml)
 IndoorDimmersOff:
+  platforms: *local_only
   speech:
-    text: "Turning off the indoor lights."
+    text: "Indoor lights off."
   action:
-    - service: light.turn_off
+    - action: light.turn_off
       target:
-        entity_id:
-          - light.led_controller_cct_1
-          - light.led_controller_cct_2
-          - light.led_controller_sc_1
-          - light.led_controller_sc_2
+        area_id: van
 
 IndoorDimmersOn:
+  platforms: *local_only
   speech:
-    text: "Turning on the indoor lights."
+    text: "Indoor lights on."
   action:
-    - service: light.turn_on
+    - action: light.turn_on
       target:
-        entity_id:
-          - light.led_controller_cct_1
-          - light.led_controller_cct_2
-          - light.led_controller_sc_1
-          - light.led_controller_sc_2
+        area_id: van
+
+OutdoorLightsOff:
+  platforms: *local_only
+  speech:
+    text: "Outdoor lights off."
+  action:
+    - action: switch.turn_off
+      target:
+        entity_id: &outdoor_lights
+          - switch.a32_pro_switch21_left_outdoor_lights
+          - switch.a32_pro_switch22_right_outdoor_lights
+          - switch.a32_pro_switch23_rear_outdoor_lights
+
+OutdoorLightsOn:
+  platforms: *local_only
+  speech:
+    text: "Outdoor lights on."
+  action:
+    - action: switch.turn_on
+      target:
+        entity_id: *outdoor_lights

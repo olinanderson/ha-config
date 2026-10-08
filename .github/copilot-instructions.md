@@ -271,8 +271,9 @@ automations.yaml                # All automations (~750 lines)
 scripts.yaml                    # Named scripts (~467 lines)
 
 # --- Other config files ---
-conversations.yaml              # Voice assistant intent sentence patterns
-intent_scripts.yaml             # Intent handler actions
+custom_sentences/en/van.yaml    # Voice: local sentence patterns (docs/voice-assistant.md)
+intent_scripts.yaml             # Voice: what those sentences do
+voice/                          # Voice: areas, aliases, exposure, Claude prompt (apply.py)
 scenes.yaml                     # (empty)
 shell_commands.yaml             # SSH commands for PulseAudio & Scream
 secrets.yaml                    # NEVER edit via Copilot
@@ -788,7 +789,7 @@ against measured power every minute; the fan's off is sent twice (`button.ag_pro
 
 ## Voice Assistant
 
-Intents defined in `conversations.yaml` (sentence patterns) → `intent_scripts.yaml` (actions):
+Since 2026-10-07 the agent is Claude (Anthropic integration); see `docs/voice-assistant.md` for the whole setup. Local sentences in `custom_sentences/en/van.yaml` → `intent_scripts.yaml` (actions), matched before Claude is asked. The table below is from before that change:
 
 | Intent | Triggers | Action |
 |---|---|---|
