@@ -85,6 +85,15 @@ intents:
           - "(turn|switch) [all] [the] {outdoor_word} lights on"
           - "{outdoor_word} lights on"
 
+  # HA's own "what is the temperature" answers from the heater's or the
+  # A/C's sensor, which the inverter warms; this one is the room.
+  InsideTemperature:
+    data:
+      - sentences:
+          - "(what's|what is) the temperature [(inside|in here|in the van)]"
+          - "(what's|what is) the (inside|indoor|room) temperature"
+          - "how (warm|cold|hot) is it (inside|in here|in the van)"
+
 lists:
   fan_direction:
     values:
