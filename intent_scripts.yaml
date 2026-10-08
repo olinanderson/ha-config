@@ -114,3 +114,22 @@ InsideTemperature:
       {% set t = states('sensor.living_space_temperature') | float(none) %}
       {% if t is none %}The inside temperature isn't available right now.
       {% else %}It's {{ t | round(0) | int }} degrees inside.{% endif %}
+
+# The time and date where the van is (sensor.van_time_zone), with the zone
+# named: "It's 10:26 PM Pacific time." HA's clock if the zone isn't known yet.
+LocalTime:
+  platforms: *local_only
+  speech:
+    text: >-
+      {%- set off = state_attr('sensor.van_time_zone', 'utc_offset_seconds') | int(none) %}
+      {%- set t = utcnow() + timedelta(seconds=off) if off is not none else now() %}
+      {%- set zone = state_attr('sensor.van_time_zone', 'spoken_name') if off is not none else 'Mountain' -%}
+      It's {{ t.hour % 12 or 12 }}:{{ '%02d' | format(t.minute) }} {{ 'AM' if t.hour < 12 else 'PM' }} {{ zone }} time.
+
+LocalDate:
+  platforms: *local_only
+  speech:
+    text: >-
+      {%- set off = state_attr('sensor.van_time_zone', 'utc_offset_seconds') | int(none) %}
+      {%- set t = utcnow() + timedelta(seconds=off) if off is not none else now() -%}
+      It's {{ t.strftime('%A, %B') }} {{ t.day }}.

@@ -94,6 +94,25 @@ intents:
           - "(what's|what is) the (inside|indoor|room) temperature"
           - "how (warm|cold|hot) is it (inside|in here|in the van)"
 
+  # HA's own "what time is it" answers by HA's clock, Mountain time wherever
+  # the van is; these answer in the van's time zone (sensor.van_time_zone).
+  LocalTime:
+    data:
+      - sentences:
+          - "what time is it [now|right now|currently]"
+          - "(what's|what is) the [current] time [now|right now]"
+          - "[can you] (tell|give) me the [current] time"
+          - "do you know what time it is"
+
+  LocalDate:
+    data:
+      - sentences:
+          - "(what's|what is) [the] date [today]"
+          - "(what's|what is) today's date"
+          - "what day is (it|today)"
+          - "(what's|what is) today"
+          - "[can you] (tell|give) me (the|today's) date"
+
 lists:
   fan_direction:
     values:

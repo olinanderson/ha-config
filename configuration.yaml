@@ -97,6 +97,21 @@ rest:
           - expires
           - headline
 
+  # The time zone where the van is, so the voice can say the time there; HA's
+  # own clock stays on Mountain time wherever the van goes. Open-Meteo, no key;
+  # the position goes out rounded to about 1 km. template/van_time_zone.yaml
+  # keeps the last answer through no internet.
+  - resource_template: >-
+      https://api.open-meteo.com/v1/forecast?latitude={{ state_attr('zone.home', 'latitude') | round(2) }}&longitude={{ state_attr('zone.home', 'longitude') | round(2) }}&timezone=auto&forecast_days=1
+    scan_interval: 900
+    timeout: 20
+    sensor:
+      - name: "Van Time Zone Lookup"
+        unique_id: van_time_zone_lookup
+        value_template: "{{ value_json.timezone | default('') }}"
+        json_attributes:
+          - utc_offset_seconds
+
   # How fast driving refills a LOW house battery, averaged over the last 20
   # drives from the vanlife proxy's fuel-trips endpoint (the same per-trip
   # energy-based battery gain the map cards show: stored-Wh delta ÷ full-pack

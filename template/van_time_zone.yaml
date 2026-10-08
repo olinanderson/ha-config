@@ -1,0 +1,47 @@
+# ================================
+# template/van_time_zone.yaml
+# ================================
+# The time zone the van is in, for saying times where the van actually is
+# (the voice: intent_scripts.yaml LocalTime/LocalDate, voice/prompt.md). HA's
+# own clock stays on Mountain time (America/Edmonton) wherever the van goes.
+# Open-Meteo looks the zone up every 15 min (configuration.yaml, rest:); this
+# keeps the last answer through no internet and restarts.
+- triggers:
+    - trigger: state
+      entity_id: sensor.van_time_zone_lookup
+    # The lookup only changes when the zone or its offset does, so read it
+    # again whenever this sensor is (re)loaded
+    - trigger: homeassistant
+      event: start
+    - trigger: event
+      event_type: event_template_reloaded
+  conditions:
+    # A zone name, not unavailable/unknown or an empty answer
+    - condition: template
+      value_template: "{{ '/' in states('sensor.van_time_zone_lookup') }}"
+  sensor:
+    - name: Van Time Zone
+      unique_id: van_time_zone
+      icon: mdi:map-clock-outline
+      state: "{{ states('sensor.van_time_zone_lookup') }}"
+      attributes:
+        utc_offset_seconds: "{{ state_attr('sensor.van_time_zone_lookup', 'utc_offset_seconds') }}"
+        # What to call it out loud: "10:26 PM Pacific time". Zones that keep one
+        # clock all year inside a bigger one (Creston, Dawson Creek, Fort
+        # Nelson) are said by their town.
+        spoken_name: >-
+          {% set z = states('sensor.van_time_zone_lookup') %}
+          {% set names = {
+            'America/Vancouver': 'Pacific', 'America/Los_Angeles': 'Pacific',
+            'America/Edmonton': 'Mountain', 'America/Denver': 'Mountain', 'America/Boise': 'Mountain',
+            'America/Yellowknife': 'Mountain', 'America/Inuvik': 'Mountain',
+            'America/Phoenix': 'Arizona',
+            'America/Whitehorse': 'Yukon', 'America/Dawson': 'Yukon',
+            'America/Regina': 'Saskatchewan', 'America/Swift_Current': 'Saskatchewan',
+            'America/Winnipeg': 'Central', 'America/Chicago': 'Central',
+            'America/Toronto': 'Eastern', 'America/New_York': 'Eastern', 'America/Detroit': 'Eastern',
+            'America/Halifax': 'Atlantic', 'America/Moncton': 'Atlantic',
+            'America/St_Johns': 'Newfoundland',
+            'America/Anchorage': 'Alaska', 'America/Juneau': 'Alaska', 'America/Sitka': 'Alaska',
+          } %}
+          {{ names.get(z, z.split('/')[-1] | replace('_', ' ')) }}

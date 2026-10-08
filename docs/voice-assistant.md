@@ -69,6 +69,8 @@ for the same jobs.
 | `StartBedtimeRoutine` | "good night", "I'm going to bed" | `script.sleep_mode_on` |
 | `GoodMorning` | "good morning", "I'm up" | `script.wake_up_routine` |
 | `InsideTemperature` | "what's the temperature (inside)" | Speaks Living Space Temperature |
+| `LocalTime` | "what time is it" | Speaks the time where the van is, with the zone: "It's 10:26 PM Pacific time." |
+| `LocalDate` | "what's the date", "what day is it" | Speaks the date where the van is |
 
 HA's own sentences cover named devices: "turn off the main lights", "set the
 lights to 30 percent", "turn on the heater".
@@ -136,8 +138,15 @@ the model think when a request needs it.
 
 ## Things to know
 
-- HA's clock is Mountain time (America/Edmonton) wherever the van is, so
-  Claude says times as "… Mountain time".
+- HA's clock is Mountain time (America/Edmonton) wherever the van is.
+  Times are said where the van is, with the zone named ("10:26 PM Pacific
+  time"). `sensor.van_time_zone` (template/van_time_zone.yaml) has the zone,
+  its UTC offset and what to call it. Open-Meteo looks the zone up from
+  `zone.home`, rounded to about 1 km, every 15 min (configuration.yaml,
+  `rest:`), and the sensor keeps the last answer offline. `LocalTime` and
+  `LocalDate` replace HA's own time and date sentences, which use HA's
+  clock. Claude still gets Mountain times from GetDateTime; the prompt tells
+  it how far the van's zone is from Mountain and to name the zone.
 - Living Space Temperature jumps about 3 °C as the inverter load crosses
   60 W (BME280 1 drops in and out). In the benchmark it read 23.8 for a few
   seconds, then 20.8, and the answers followed it.
