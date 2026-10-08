@@ -599,13 +599,13 @@ entry, but its files are still in `custom_components/wican` (HACS).
 **User Custom PIDs (via WiCAN Automate → User Custom tab):**
 | Entity | PID | Expression | Description |
 |---|---|---|---|
-| `sensor.192_168_10_90_map` | `22F404` | `[B4:B5]/256` | Manifold Absolute Pressure (kPa) — Ford Mode 22; enables speed-density fuel calculation |
+| `sensor.192_168_10_90_map` | `22F404` | `[B4:B5]/256` | NOT manifold pressure: `F404` mirrors PID 04, so this is calculated load × 2.55 (255 = 100 %). The air term of the speed-density fuel estimate |
 | `sensor.192_168_10_90_stft_b1` | `0x06` | standard | Short-term fuel trim Bank 1 (%) |
 | `sensor.192_168_10_90_ltft_b1` | `0x07` | standard | Long-term fuel trim Bank 1 (%) |
 | `sensor.192_168_10_90_stft_b2` | `0x08` | standard | Short-term fuel trim Bank 2 (%) |
 | `sensor.192_168_10_90_ltft_b2` | `0x09` | standard | Long-term fuel trim Bank 2 (%) |
 | `sensor.192_168_10_90_lambda` | `0x44` | standard | Commanded equivalence ratio (lambda); 1.0 = stoich, <1 = rich, >1 = lean |
-| `sensor.192_168_10_90_inj_pw` | `22F44A` | `[B4:B5]` | Injector pulse width Bank 1 (raw µs; divide by 1000 for ms). Idle ~5000–6000 |
+| `sensor.192_168_10_90_inj_pw` | `22F44A` | `[B4:B5]` | NOT injector pulse width: `F44A` mirrors PID 4A (accelerator pedal E), so this is the pedal byte × 256 (5120 at rest, always a multiple of 256) |
 
 **NOT supported by this ECU** (tested, returns "no positive response" or "NO DATA"):
 - `FUEL_RATE` (Mode 22, PID 22F49D) — fuel consumption rate
@@ -980,12 +980,15 @@ Used in `old_home.yaml`:
   Of the discovery entities, ECU status and Intake Air Temp 2 have none and keep their last
   value; Octane Ratio has 60 s. ECU status (`binary_sensor.meatpi_pro_ecu_status`) reflects the
   retained `wican/status` LWT (`online`/`offline`).
-- **Fuel consumption uses speed-density estimation** — via Ford Mode 22 MAP PID (`22F404`)
-  combined with RPM + IAT. The formula uses a volumetric efficiency (VE) correction factor
-  (`input_number.fuel_ve_correction`, default 0.55) that should be calibrated against
-  fill-to-fill measurements. Three correction layers: (1) RPM-based VE curve (0.60× at idle
-  → 1.0× at 3000+ RPM), (2) fuel trim averaging across both banks, (3) lambda-based
-  commanded AFR instead of fixed 14.7. Overestimates at idle, most accurate at cruise.
+- **Fuel consumption uses speed-density estimation** — via Ford Mode 22 `22F404`, which is
+  PID 04 calculated load (× 2.55), not MAP, combined with RPM + IAT + barometer (Apollo
+  DPS310). The volumetric efficiency (VE) factor `input_number.fuel_ve_correction` is 0.80,
+  fitted by hand 2026-10-08 on 9 fill-to-fill windows (all within ±6 %; the old curve with
+  VE 0.475 read 15–30 % low). Layers: (1) RPM curve for the turbo's WOT air per rev, 0.30×
+  up to 1100 RPM → 1.0× at 2000+, (2) × baro/1013.25, (3) fuel trim averaging across both
+  banks, (4) lambda-based commanded AFR instead of fixed 14.7. The Espar heater's fuel
+  (≈0.25 L/h of on-time) is not in it. The fill-up auto-calibration (`ve_update.py`) is off
+  on purpose; see the note above `fill_up_detected` and docs/vehicle-obd.md.
   MAF (0x10, `22F410`), fuel rate (`22F49D`, 0x5E), and MAP (0x0B) via standard OBD all
   don't work.
 - **Jinja2 pipe + math precedence**: `states(x) | float(0) * N` parses as `float(0 * N)`.

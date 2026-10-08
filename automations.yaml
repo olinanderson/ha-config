@@ -691,10 +691,23 @@
 # ────────────────────────────────────────────────────────────────
 # Fill-up Detection — Auto-update VE Correction
 # ────────────────────────────────────────────────────────────────
+# OFF since 2026-09-26; leave it off (reviewed 2026-10-08, when the VE was refit
+# by hand, see template/sensors.yaml). It can't measure the fuel used:
+#   - from_state is not the pre-fill level. The trigger fires at 7 of the 9
+#     fills from 2026-09-05 to 10-05, each time with the mean already mid-ramp
+#     (63–81 % against a real 20–43 %), so the tank delta came out 30–75 %
+#     short. All its suggestions were 0.38–0.48 (09-25: 0.431 took VE 0.49 →
+#     0.475 while the real fuel was ~35 % above the estimate).
+#   - input_text.last_fillup_ts / ve_correction_history have `initial:`, so a
+#     restart wipes them (6 times 08-19 → 09-25) and the next fill is skipped.
+#   - No heater fuel is taken off (~11 of 64 L in one Calgary window), and the
+#     GPS distance can come up short (119 of 274 km on 09-25).
+# Even fixed, one gauge-read window is good to ±5 %, no better than the model,
+# so re-check the VE by hand every few fills (docs/vehicle-obd.md).
+#
 # Fires when the smoothed tank level (sensor.wican_fuel_5_min_mean) jumps up by
 # more than 15 percentage points (can't happen from normal consumption — must be
-# a fill-up). After a long engine-off + fill, the 5-min mean's first reading on
-# restart steps straight to the new high level, so a single >15 jump is reliable.
+# a fill-up).
 # Calls ve_update.py which:
 #   1. Queries /vanlife/fuel-stats for the period since the last fill-up
 #   2. Computes the actual fuel used (OBD tank delta) over that window

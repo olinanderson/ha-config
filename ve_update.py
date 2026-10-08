@@ -3,7 +3,9 @@
 ve_update.py  from_ts_ms  to_ts_ms
 
 Called automatically by the "Fill-up Detected" HA automation after stable_fuel_level
-rises more than 15 percentage points (indicating a fill-up occurred).
+rises more than 15 percentage points (indicating a fill-up occurred). That
+automation is off since 2026-09-26: its tank delta comes out short, see the note
+above it in automations.yaml.
 
 What it does:
   1. Queries /vanlife/fuel-stats?from_ts=...&to_ts=... to get GPS distance,
@@ -11,7 +13,7 @@ What it does:
   2. Derives a suggested VE correction: current_ve × (actual / estimated).
   3. Reads input_text.ve_correction_history (JSON array, last 10 entries).
   4. Appends the new entry, computes a rolling average of all stored corrections,
-     and clamps to a sane range [0.10 – 1.50].
+     and clamps to a sane range [0.60 – 1.00].
   5. Writes the averaged VE to input_number.fuel_ve_correction via HA REST API.
   6. Writes the updated history array to input_text.ve_correction_history.
 
@@ -34,8 +36,10 @@ TOKEN_FILE   = "/config/.gps_filter_token"
 HISTORY_MAX  = 5           # keep last 5 fill-up corrections (must fit in 255-char input_text)
 MIN_DISTANCE = 50          # km — don't update VE if the drive was very short
 MAX_ECON     = 40.0        # L/100km — reject implausibly-high actual economy
-MIN_VE       = 0.10
-MAX_VE       = 1.50
+# input_number.fuel_ve_correction's min/max, narrowed from 0.10–1.50 on 2026-10-08
+# around the hand-fitted 0.80. set_value refuses anything outside them anyway.
+MIN_VE       = 0.60
+MAX_VE       = 1.00
 
 
 # ─── HA REST helpers ─────────────────────────────────────────────────────────

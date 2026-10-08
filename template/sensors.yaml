@@ -289,21 +289,34 @@
       state: >
         {{ states('sensor.192_168_10_90_01_monitorstatus') | int(0) % 128 }}
 
-    # ─── Fuel Consumption (Speed-Density from MAP + RPM + IAT) ───
+    # ─── Fuel Consumption (Speed-Density from engine load + RPM + IAT + baro) ───
     #
-    # Improved formula with three corrections over base speed-density:
-    #   1. RPM-based VE curve — VE scales ~0.60 at idle to ~1.0 at 3000+ RPM
-    #   2. Fuel trim correction — real-time ECU STFT+LTFT avg both banks
+    # sensor.192_168_10_90_map is NOT manifold pressure. DID 22F404 mirrors PID 04,
+    # so the value is calculated load × 2.55 (255 = 100 %; its ratio to
+    # 04_calcengineload is 2.55). PID 04 is airflow ÷ the WOT airflow at this RPM at
+    # sea level, so the real airflow is load × WOT-airflow(RPM) × baro/1013.25:
+    #   1. RPM curve — the turbo's WOT air per rev: 0.30 up to 1100 RPM (idle),
+    #      rising linearly to 1.0 at 2000 RPM (full boost) and above
+    #   2. Barometer — × baro/1013.25 from the Apollo DPS310 in the cabin (same
+    #      pressure as outside): ≈0.88 in Calgary, 1.0 at sea level
+    #   3. Fuel trim correction — real-time ECU STFT+LTFT avg both banks
     #      trim_avg = ((STFT1+LTFT1)+(STFT2+LTFT2))/2 = mean of the two banks'
     #      TOTAL (STFT+LTFT) correction. The /2 averages the two bank-totals and
     #      is INTENTIONAL — do NOT "correct" it to /4 (verified correct).
-    #   3. Lambda correction — commanded AFR from ECU instead of fixed 14.7
+    #   4. Lambda correction — commanded AFR from ECU instead of fixed 14.7
     #
     # Falls back gracefully: if fuel trim / lambda entities don't exist
-    # or are unavailable, uses neutral defaults (0% trim, lambda 1.0).
+    # or are unavailable, uses neutral defaults (0% trim, lambda 1.0); a missing
+    # or out-of-range barometer counts as sea level.
     #
-    # VE base factor adjustable via input_number.fuel_ve_correction.
-    # The RPM curve multiplies this base, so set it to match cruise (~0.55).
+    # VE base = input_number.fuel_ve_correction, the value at 2000+ RPM. Fitted
+    # 2026-10-08 to 0.80 on 9 fill-to-fill windows (2026-08-31 → 10-05, ~570 L,
+    # Calgary + the BC trip): every window within ±6 %, with the Espar's fuel
+    # (≈0.25 L/h of heater on-time) counted separately, since it isn't in here.
+    # Before: curve 0.60 at 600 → 1.0 at 3000 RPM (floor 0.55), no barometer,
+    # VE 0.49 (0.475 from 2026-09-25). That read the engine's fuel 15–30 % low
+    # (least in Calgary, most on highway legs near sea level): highway a third
+    # low, while warm idle came out ~40 % above the new curve (5.2 vs 3.7 L/h).
 
     - name: "Estimated Fuel Rate"
       unique_id: estimated_fuel_rate
@@ -314,12 +327,16 @@
         {% set map_kpa = states('sensor.192_168_10_90_map') | float(0) %}
         {% set rpm = states('sensor.192_168_10_90_0c_enginerpm') | float(0) %}
         {% set iat_c = states('sensor.192_168_10_90_0f_intakeairtemperature') | float(20) %}
-        {% set ve_base = states('input_number.fuel_ve_correction') | float(0.55) %}
+        {% set ve_base = states('input_number.fuel_ve_correction') | float(0.80) %}
         {% if map_kpa > 0 and rpm > 0 %}
-          {# RPM-based VE curve: ~0.60 at idle, ~0.85 at 1500, ~1.0 at 3000+ #}
-          {% set rpm_factor = [0.60 + 0.40 * ((rpm - 600) / 2400), 1.0] | min %}
-          {% set rpm_factor = [rpm_factor, 0.55] | max %}
+          {# RPM curve: 0.30 up to 1100, ~0.61 at 1500, 1.0 at 2000+ #}
+          {% set rpm_factor = [0.30 + 0.70 * ((rpm - 1100) / 900), 1.0] | min %}
+          {% set rpm_factor = [rpm_factor, 0.30] | max %}
           {% set ve = ve_base * rpm_factor %}
+          {# Barometer: load is relative to sea-level air #}
+          {% set baro = states('sensor.apollo_msr_2_1731d8_dps310_pressure') | float(1013.25) %}
+          {% set baro = baro if 700 <= baro <= 1100 else 1013.25 %}
+          {% set baro_factor = baro / 1013.25 %}
           {# Fuel trims: average both banks (STFT + LTFT) #}
           {% set stft1 = states('sensor.192_168_10_90_stft_b1') | float(0) %}
           {% set ltft1 = states('sensor.192_168_10_90_ltft_b1') | float(0) %}
@@ -331,10 +348,10 @@
           {% set lambda_val = states('sensor.192_168_10_90_lambda') | float(1.0) %}
           {% set lambda_val = [lambda_val, 0.7] | max %}
           {% set afr = 14.7 * lambda_val %}
-          {# Speed-density: MAF = ρ_air × Vd × RPM/120 × VE #}
+          {# Speed-density: MAF = ρ × Vd × RPM/120 × VE × baro, ρ from the load byte #}
           {% set t_k = iat_c + 273.15 %}
           {% set air_density = (map_kpa * 1000) / (287 * t_k) %}
-          {% set maf_gs = (air_density * 0.0035 * rpm * ve * 1000) / 120 %}
+          {% set maf_gs = (air_density * 0.0035 * rpm * ve * baro_factor * 1000) / 120 %}
           {% set fuel_gs = (maf_gs / afr) * trim_factor %}
           {{ ((fuel_gs * 3600) / 750) | round(2) }}
         {% else %}
@@ -346,10 +363,19 @@
         rpm: "{{ states('sensor.192_168_10_90_0c_enginerpm') }}"
         ve_effective: >
           {% set rpm = states('sensor.192_168_10_90_0c_enginerpm') | float(0) %}
-          {% set ve_base = states('input_number.fuel_ve_correction') | float(0.55) %}
-          {% set rpm_factor = [0.60 + 0.40 * ((rpm - 600) / 2400), 1.0] | min %}
-          {% set rpm_factor = [rpm_factor, 0.55] | max %}
+          {% set ve_base = states('input_number.fuel_ve_correction') | float(0.80) %}
+          {% set rpm_factor = [0.30 + 0.70 * ((rpm - 1100) / 900), 1.0] | min %}
+          {% set rpm_factor = [rpm_factor, 0.30] | max %}
           {{ (ve_base * rpm_factor) | round(3) }}
+        # Only read with the engine running, so the barometer's updates don't
+        # rewrite this entity all day while parked.
+        baro_factor: >
+          {% if states('sensor.192_168_10_90_0c_enginerpm') | float(0) > 0 %}
+            {% set baro = states('sensor.apollo_msr_2_1731d8_dps310_pressure') | float(1013.25) %}
+            {{ ((baro if 700 <= baro <= 1100 else 1013.25) / 1013.25) | round(3) }}
+          {% else %}
+            {{ none }}
+          {% endif %}
         fuel_trim_avg: >
           {% set stft1 = states('sensor.192_168_10_90_stft_b1') | float(0) %}
           {% set ltft1 = states('sensor.192_168_10_90_ltft_b1') | float(0) %}
