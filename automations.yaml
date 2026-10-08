@@ -70,6 +70,92 @@
               seconds: 60
 
 # ───────────────────────────────────────────────
+#  BMS – notify on protection faults
+# ───────────────────────────────────────────────
+# binary_sensor.olins_van_bms_problem carries the JBD protection-status word
+# in its problem_code attribute: a hex string ("0x1") since bms_ble 2.17.0,
+# an int before; `int(0, 16)` reads both. The bits:
+#    0 cell over-voltage       1 cell under-voltage
+#    2 pack over-voltage       3 pack under-voltage
+#    4 charge over-temp        5 charge under-temp
+#    6 discharge over-temp     7 discharge under-temp
+#    8 charge over-current     9 discharge over-current
+#   10 short circuit          11 front-end IC error
+#   12 MOS software lock
+# Bit 0 alone is the known cell imbalance: since 2026-10-05 cell 6 reaches
+# ~3.65 V and the BMS pauses charging 4–14 h a day on shore power, so it only
+# gets a note for the first trip of the day. Any other bit is notified once it
+# has lasted a minute. persistent_notification, like the rest of this file.
+
+- id: bms_problem_notify
+  alias: "BMS - notify on a protection fault"
+  mode: single
+  trigger:
+    # > 1 means a bit other than bit 0 is set
+    - trigger: template
+      value_template: >
+        {{ is_state('binary_sensor.olins_van_bms_problem', 'on')
+           and state_attr('binary_sensor.olins_van_bms_problem', 'problem_code') | int(0, 16) > 1 }}
+      for: "00:01:00"
+  action:
+    - action: persistent_notification.create
+      data:
+        notification_id: bms_problem
+        title: "🔋 Battery BMS fault"
+        message: >
+          {%- set code = state_attr('binary_sensor.olins_van_bms_problem', 'problem_code') | int(0, 16) %}
+          {%- set names = ['cell over-voltage', 'cell under-voltage', 'pack over-voltage',
+              'pack under-voltage', 'charge over-temperature', 'charge under-temperature',
+              'discharge over-temperature', 'discharge under-temperature',
+              'charge over-current', 'discharge over-current', 'short circuit',
+              'front-end IC error', 'MOS software lock'] %}
+          {%- set found = namespace(list=[]) %}
+          {%- for i in range(16) if code | bitwise_and(2 ** i) %}
+            {%- set found.list = found.list + [names[i] if i < names | count else 'unknown bit ' ~ i] %}
+          {%- endfor %}
+          {%- set cells = namespace(list=[]) %}
+          {%- for i in range(1, 9) %}
+            {%- set cells.list = cells.list + [states('sensor.battery_cell_' ~ i ~ '_voltage') | float(0)] %}
+          {%- endfor %}
+          At {{ now().strftime('%H:%M') }} the BMS reported {{ found.list | join(', ') }}
+          (code {{ '%#x' | format(code) }}). Pack {{ states('sensor.olins_van_bms_voltage') }} V,
+          {{ states('sensor.olins_van_bms_current') }} A, {{ states('sensor.olins_van_bms_battery') }} %,
+          {{ states('sensor.olins_van_bms_temperature') }} °C. Highest cell
+          {{ cells.list.index(cells.list | max) + 1 }} at {{ '%.3f' | format(cells.list | max) }} V,
+          lowest cell {{ cells.list.index(cells.list | min) + 1 }} at {{ '%.3f' | format(cells.list | min) }} V.
+
+- id: bms_cell_overvoltage_daily_note
+  alias: "BMS - daily note when a cell hits over-voltage"
+  mode: single
+  trigger:
+    - trigger: template
+      value_template: >
+        {{ is_state('binary_sensor.olins_van_bms_problem', 'on')
+           and state_attr('binary_sensor.olins_van_bms_problem', 'problem_code') | int(0, 16) == 1 }}
+      for: "00:01:00"
+  condition:
+    # First trip of the day only: last_triggered moves only when the action runs.
+    - condition: template
+      value_template: "{{ as_timestamp(this.attributes.last_triggered, 0) < as_timestamp(today_at()) }}"
+  action:
+    - action: persistent_notification.create
+      data:
+        notification_id: bms_cell_overvoltage
+        title: "🔋 Battery: a cell reached its over-voltage limit"
+        message: >
+          {%- set cells = namespace(list=[]) %}
+          {%- for i in range(1, 9) %}
+            {%- set cells.list = cells.list + [states('sensor.battery_cell_' ~ i ~ '_voltage') | float(0)] %}
+          {%- endfor %}
+          {%- set top = cells.list | max %}
+          {%- set low = cells.list | min %}
+          At {{ now().strftime('%H:%M') }} the BMS paused charging: cell {{ cells.list.index(top) + 1 }}
+          is at {{ '%.3f' | format(top) }} V, the lowest is cell {{ cells.list.index(low) + 1 }}
+          at {{ '%.3f' | format(low) }} V (pack {{ states('sensor.olins_van_bms_voltage') }} V,
+          {{ states('sensor.olins_van_bms_battery') }} %). Charging resumes by itself once the cell
+          settles. Only the first trip of each day is shown.
+
+# ───────────────────────────────────────────────
 #  Kidde HomeSafe – reload while unavailable
 # ───────────────────────────────────────────────
 # The kidde_homesafe custom component (HACS; upstream 1.0.4 is the same
