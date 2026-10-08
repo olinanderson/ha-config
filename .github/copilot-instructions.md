@@ -277,14 +277,13 @@ voice/                          # Voice: areas, aliases, exposure, Claude prompt
 scenes.yaml                     # (empty)
 shell_commands.yaml             # SSH commands for PulseAudio & Scream
 secrets.yaml                    # NEVER edit via Copilot
-lovelace_resources.yaml         # Frontend card resources (mushroom, apexcharts, etc.)
+lovelace_resources.yaml         # NOT loaded: an old list; the card resources are in storage
 
-# --- Dashboards ---
-dashboards/
-  old_home_new.yaml             # ACTIVE rewritten Home dashboard (YAML mode, 704 lines)
-  Home.yaml                     # Original export of storage-mode Home dashboard
-  old_home.yaml                 # CORRUPTED — do not use
-  (other dashboards)            # Still in storage mode (.storage/lovelace.*)
+# --- Dashboards (all storage mode; see .github/dashboard-editing-reference.md) ---
+dashboards/                     # Archive of old YAML dashboards: HA never loads them, deploy.sh skips them
+  old_home*.yaml, *_v2.yaml, home_v3.yaml, van.yaml, map.yaml, vanlife_map.yaml
+  backups/                      # .bak copies of archive files
+react-dashboard/                # React panel at /dashboard (panel_custom); bundle goes to www/react-dashboard/
 
 # --- Backups ---
 yaml_backups/                   # Full backups of all original YAML files
@@ -330,9 +329,9 @@ zigbee2mqtt/                    # Zigbee2MQTT config
 
 ## Known Entity IDs (Real)
 
-> **CRITICAL**: The placeholder dashboards (`climate_control.yaml`, `power_energy.yaml`,
-> etc.) were auto-generated with **fabricated entity IDs** like `sensor.a32_battery_voltage`.
-> Those do **NOT** exist. Always use the real IDs below when creating or editing dashboards.
+> **CRITICAL**: Dashboards generated in the past used **fabricated entity IDs** like
+> `sensor.a32_battery_voltage`. Those do **NOT** exist. Always use the real IDs below when
+> creating or editing dashboards.
 
 ### Battery / BMS
 | Entity | Description |
@@ -822,15 +821,22 @@ Since 2026-10-07: Whisper → local sentences (`custom_sentences/en/van.yaml` �
 
 ## Custom Frontend Cards (HACS)
 
-Used in `old_home.yaml`:
+Installed through HACS and loaded as Lovelace resources, which live in storage (websocket
+`lovelace/resources`), not in `lovelace_resources.yaml`. A card type that isn't loaded shows
+an error; `config-template-card` and `meteogram-card` aren't installed. Used on the
+dashboards (checked 2026-10-08):
 - `custom:mushroom-template-badge` — status badges
 - `custom:mushroom-light-card` — light dimmers
 - `custom:mushroom-entity-card` — entity toggles
+- `custom:mushroom-template-card`, `custom:mushroom-fan-card`, `custom:mushroom-cover-card` — Van and Roof Fan
 - `custom:better-thermostat-ui-card` — PID thermostat
 - `custom:apexcharts-card` — time-series charts
 - `custom:weather-chart-card` — weather forecasts
 - `custom:power-flow-card-plus` — power flow diagram
 - `custom:scheduler-card` — schedule automations
+- `custom:map-card` — the Map dashboard
+
+Installed but unused: `button-card`, `mini-graph-card`, `ha-sankey-chart`.
 
 ---
 
@@ -838,17 +844,20 @@ Used in `old_home.yaml`:
 
 ### Critical Rules
 
-1. **Always use REAL entity IDs** from the tables above. The placeholder dashboards
-   use fake IDs like `sensor.a32_battery_voltage` — those don't exist.
+1. **Always use REAL entity IDs** from the tables above. Fake IDs like
+   `sensor.a32_battery_voltage` don't exist.
 
-2. **`old_home.yaml` is the active main dashboard.** Use it as reference for card patterns.
+2. **Every Lovelace dashboard is in storage mode** (17 of them, in `.storage/`). Nothing in
+   `dashboards/` is loaded, so editing those files changes nothing. Edit a dashboard in the
+   UI (raw configuration editor) or over the websocket (`lovelace/config`, then
+   `lovelace/config/save`), after backing it up. How to do that, the list of dashboards and
+   how to check for dead IDs: `.github/dashboard-editing-reference.md`.
 
 3. **Mushroom theme** is installed. Follow Mushroom card design for consistency.
 
-4. **Dashboard YAML structure:**
+4. **Dashboard config structure** (what the raw editor and `lovelace/config` show; the
+   dashboard's own title, icon and sidebar entry are set in Settings → Dashboards):
    ```yaml
-   title: Dashboard Title
-   icon: mdi:icon-name
    views:
      - title: View Title
        path: view-path
@@ -857,13 +866,18 @@ Used in `old_home.yaml`:
          - type: ...
    ```
 
-5. **Sections layout** (`old_home.yaml` uses the newer sections/grid layout with `column_span`).
+5. **Layouts:** most views are masonry (`cards:` as above). Weather (`dashboard-climate`)
+   and Roof Fan (`roof-fan`) use sections views (`type: sections`, cards inside
+   `sections:`, with `column_span`); Map is a panel view.
 
 6. **Never edit `secrets.yaml`** or files in `custom_components/`.
 
-7. **Reload after changes**: Developer Tools → YAML → Lovelace Dashboards (or restart HA).
+7. **No reload or restart:** a saved dashboard takes effect at once (refresh open tabs).
 
 ### Card Pattern Reference
+
+Example configs for the card types above, in the style of the archived YAML in
+`dashboards/`. For a live card, read its dashboard with `lovelace/config`.
 
 **Mushroom badge:**
 ```yaml
@@ -1427,32 +1441,19 @@ npm install
 
 ### Deploy Workflow
 
-**Quick deploy** (builds + deploys JS, CSS, and panel-loader.js in one command):
+`react-dashboard/deploy.sh` never writes to HA. `/config` on HA is a git checkout of this
+repo and `www/react-dashboard/*` is tracked, so a file copied straight onto HA leaves that
+checkout modified and the next top-level `deploy.sh` fails (it happened on 2026-10-04).
+Ship a change through git instead:
 ```bash
-cd react-dashboard && bash deploy.sh
+cd react-dashboard && bash deploy.sh   # npm test, npm run build, copy into ../www/react-dashboard/
+cd .. && git add react-dashboard/src www/react-dashboard && git commit   # source + bundle together
+bash deploy.sh                          # push to GitHub, fast-forward /config on HA
 ```
 
-**Manual deploy** (if `deploy.sh` doesn't work or for partial deploys):
-```bash
-# 1. Build
-cd react-dashboard && npm run build
-
-# 2. Deploy JS + CSS
-cat dist/van-dashboard.js | ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 \
-  "cat > /tmp/vd.js && sudo cp /tmp/vd.js /config/www/react-dashboard/van-dashboard.js"
-cat dist/van-dashboard.css | ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 \
-  "cat > /tmp/vd.css && sudo cp /tmp/vd.css /config/www/react-dashboard/van-dashboard.css"
-
-# 3. If panel-loader.js changed (bump __VAN_DASH_LOADER__ / LOADER_VERSION, not ?v=N):
-cat panel-loader.js | ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 \
-  "cat > /tmp/pl.js && sudo cp /tmp/pl.js /config/www/react-dashboard/panel-loader.js"
-
-# 4. If the panel_custom block in configuration.yaml changed:
-#    Wait for Syncthing (~10s), then restart HA via REST API:
-TOKEN=$(ssh -i ~/.ssh/id_ed25519 hassio@100.80.15.86 "cat /config/.gps_filter_token")
-curl -X POST "http://100.80.15.86:8123/api/services/homeassistant/restart" \
-  -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json"
-```
+If `panel-loader.js` changed, bump `__VAN_DASH_LOADER__` / `LOADER_VERSION`, not `?v=N` (see
+Cache Busting). A change to the `panel_custom` block in `configuration.yaml` needs an HA
+restart; ask the user first, since they live in the van.
 
 **Prerequisites** (must be in place on any machine that deploys):
 - **SSH key**: `~/.ssh/id_ed25519` must be authorized on HA (user `hassio@100.80.15.86`)
