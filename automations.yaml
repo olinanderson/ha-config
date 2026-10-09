@@ -1372,8 +1372,9 @@
 #   The monitors, the water system and the inverter go back to how they were
 #   before Sleep. The lights:
 #     • within 5 min of Sleep on (a cancel) → back as they were
-#     • later (the wake time, or by hand)   → the main light alone at 10 %
-#       (5000 K, 20 s fade)
+#     • later ("good morning", or by hand) → the main light alone at 10 %
+#       (5000 K, 20 s fade). The wake time leaves Sleep Mode on since
+#       2026-10-09 (night_climate_wake).
 #   The user's wish 2026-10-08; from 10-07 the morning was main and
 #   under-cabinet at 100 % plus the skylight at 100 %. Until 10-07 it restored the
 #   pre-sleep lights plus the under-cabinet at 30 %, forced the water on to
@@ -2438,8 +2439,8 @@
 #     Fan all night / A/C all night / Heater
 #                   one appliance until the wake time
 #   Sleep Mode ON starts the Program, and Night picked on the card turns
-#   Sleep Mode on; the wake time ends everything and turns Sleep Mode off
-#   (wake_up_routine). The heater is left where the
+#   Sleep Mode on; the wake time ends the program (roof fan and A/C off) but
+#   leaves Sleep Mode on until "good morning". The heater is left where the
 #   warm-up put it (the old 07:30 scheduler entry is gone since 2026-09-17,
 #   the warm-up is the morning heat). Sensors in template/night_climate.yaml.
 #   One-way IR is backed up three ways since the night of 2026-09-18: the AG
@@ -2501,11 +2502,10 @@
       data:
         option: "Off"
 
-# Ending the program stops the roof fan and the A/C; the heater is deliberately
-# left where it is. At the wake (the wake time, or Sleep Mode ending) a running
-# A/C stays on as a fan instead: set point to the unit's top, 32 °C, so the
-# compressor stays off. The user's wish 2026-10-08. Off picked by a person
-# (the card, voice) still switches it off.
+# Ending the program stops the roof fan and the A/C, however it ends (the wake
+# time, Sleep Mode ending, Off on the card); the heater is deliberately left
+# where it is. The user's wish 2026-10-09: from 10-08 the wake left a running
+# A/C on as a fan at 32 °C, and on 10-09 it ran on until switched off by hand.
 - id: night_climate_mode_off
   alias: "Night Climate – fan and A/C off when the program ends"
   mode: single
@@ -2514,18 +2514,7 @@
       entity_id: input_select.night_climate_mode
       to: "Off"
   action:
-    - if:
-        # Set by night_climate_wake or night_climate_stop_on_sleep_off: an
-        # automation's own state carries the context of its service calls.
-        - >-
-          {{ trigger.to_state.context.id in states.automation
-             | selectattr('attributes.id', 'in', ['night_climate_wake', 'night_climate_stop_on_sleep_off'])
-             | map(attribute='context.id') | list }}
-      then:
-        - action: script.night_climate_fan_off
-        - action: script.night_climate_ac_fan_only
-      else:
-        - action: script.night_climate_actuators_off
+    - action: script.night_climate_actuators_off
     - action: input_boolean.turn_off
       target:
         entity_id: input_boolean.night_climate_fan_by_room
@@ -2533,6 +2522,10 @@
 # The wake time is in HA's time zone, Mountain (America/Edmonton), wherever
 # the van is: the user wakes at 8:25 Mountain time (2026-10-07; the 07:30 they
 # had set read as Pacific to them and ended Sleep at 06:30 their time).
+# Since 2026-10-09 the wake time leaves Sleep Mode on: the lights, the water
+# and the monitors stay off until "good morning" (voice) or Sleep off on the
+# dashboard runs the morning restore (sleep_mode_off_restore). The user's
+# wish; from 10-07 the wake time ended Sleep Mode and everything came on.
 - id: night_climate_wake
   alias: "Night Climate – wake time"
   mode: single
@@ -2540,9 +2533,8 @@
     - trigger: time
       at: input_datetime.night_climate_wake_time
   action:
-    # Hold has no end; the night modes stop here. Mode Off also switches the
-    # roof fan off (night_climate_mode_off); a running A/C stays on as a fan
-    # at its top set point (until 2026-10-08 it went off here).
+    # Hold has no end; the night modes stop here. Mode Off switches the roof
+    # fan and the A/C off (night_climate_mode_off).
     - if:
         - "{{ states('input_select.night_climate_mode') not in ['Off', 'Hold'] }}"
       then:
@@ -2553,14 +2545,23 @@
             entity_id: input_select.night_climate_mode
           data:
             option: "Off"
-    # Sleep Mode ends at the wake time whatever the climate mode is (until
-    # 2026-10-07 only while a night mode was running).
+    # The Voice PE runs on the inverter, which Sleep Mode switched off, so it
+    # can't hear "good morning" until the inverter is back (seen 2026-10-09).
+    # Only while it is offline and only if the inverter was on at bedtime: on
+    # 12 V power it stays online, and the inverter then waits for the morning
+    # restore like the rest.
     - if:
         - condition: state
           entity_id: input_boolean.sleep_mode
           state: "on"
+        - condition: state
+          entity_id: input_boolean.sleep_restore_inverter
+          state: "on"
+        - condition: state
+          entity_id: assist_satellite.home_assistant_voice_096586_assist_satellite
+          state: unavailable
       then:
-        - action: script.wake_up_routine
+        - action: script.inverter_ensure_on
 
 # The loop. Every 5 min (and on any setting change) hold sensor.night_climate_
 # target with what the mode allows. The scripts only send a command when the

@@ -1082,9 +1082,10 @@ night_climate_ac_on:
 # The A/C as a fan: still cooling, at the unit's top set point, so the
 # compressor never starts and only the fan runs. The Night program puts a
 # running A/C here instead of switching it off: when the heater takes over
-# (the warm-up's, the user's wish 2026-10-07), back under the target and at the
-# wake (since 2026-10-08). The firmware walks the set point one IR press at a
-# time, 16 to 32 is about 17 beeps in 7 s, so only when it differs.
+# (the warm-up's, the user's wish 2026-10-07) and back under the target (since
+# 2026-10-08). At the wake it goes off (it stayed on here 10-08 to 10-09).
+# The firmware walks the set point one IR press at a time, 16 to 32 is about
+# 17 beeps in 7 s, so only when it differs.
 night_climate_ac_fan_only:
   alias: "Night Climate – A/C as a fan (top set point)"
   mode: queued
@@ -1228,9 +1229,9 @@ night_climate_actuators_off:
 # does nothing once the mode already reads Off (no state change, so
 # night_climate_mode_off never runs) and never reaches an A/C or heater started
 # from its own card: on 2026-09-21 five taps on Off left a hand-started A/C
-# running. Unlike the program's own end at the wake time, which leaves the
-# heater on and a running A/C on as a fan, this turns both off, because a
-# person asked for everything off. The fan and A/C scripts
+# running. Unlike the program's own end (the wake time, Sleep Mode ending),
+# which leaves the heater on, this turns it off too, because a person asked
+# for everything off. The fan and A/C scripts
 # only send when their appliance is on, so a second tap is silent.
 living_space_off:
   alias: "Living Space – everything off"

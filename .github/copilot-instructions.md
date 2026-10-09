@@ -765,16 +765,16 @@ by then) was removed through HACS on 2026-10-08, together with an empty MQTT dev
 | Mode | Script ON | Script OFF | Description |
 |---|---|---|---|
 | **Power Saving** | `script.power_saving_mode_on` | `script.power_saving_mode_off` | Lights off, monitors off, water off; auto-triggered by leaving or driving |
-| **Sleep Mode** | `script.sleep_mode_on` | `script.wake_up_routine` | All lights/monitors off, Starlink sleep scheduled, state snapshotted |
+| **Sleep Mode** | `script.sleep_mode_on` | `script.wake_up_routine` | All lights/monitors off, water and inverter off, the Night climate program starts, state snapshotted. Ends by "good morning" (voice) or by hand, not at the wake time (since 2026-10-09); the morning restore brings monitors, water and inverter back and the main light up to 10 % |
 | **Shower Mode** | `script.shower_mode_on` | `script.shower_mode_off` | Lights 100%, water recirc, roof fan exhaust 60% |
 | **Cook Mode** | `script.cook_mode` | `script.cook_mode_off` | LPG valve open, lights 100%, roof fan exhaust 60% |
 | **Bedtime** | `script.bedtime_routine` | — | Progressive 10-min shutdown |
-| **Night Climate** | `input_select.night_climate_mode` (Tonight card) | wake time / Sleep Mode off | What runs tonight: **Program** (15 °C night hold, warm-up to 23 °C for the wake time; heater below target − 1; above target + 2 the roof fan while it is cooler outside, the A/C only above "A/C above" on shore power), **Fan all night**, **A/C all night**, **Heater**. Sleep Mode on starts the Program; the wake time ends it and Sleep Mode. See *Night Climate* below |
+| **Night Climate** | `input_select.night_climate_mode` (Tonight card) | wake time / Sleep Mode off | What runs tonight: **Program** (15 °C night hold, warm-up to 23 °C for the wake time; heater below target − 1; above target + 2 the roof fan while it is cooler outside, the A/C only above "A/C above" on shore power), **Fan all night**, **A/C all night**, **Heater**. Sleep Mode on starts the Program; the wake time ends it (roof fan and A/C off) and leaves Sleep Mode on. See *Night Climate* below |
 
 ### Night Climate (Tonight card on the Climate page)
 
 Anything but **Off** in `input_select.night_climate_mode` runs until `input_datetime.night_climate_wake_time`
-(07:30). **Program** holds `sensor.night_climate_target` (night target 15 °C, wake target 23 °C from *wake −
+(08:25 Mountain). **Program** holds `sensor.night_climate_target` (night target 15 °C, wake target 23 °C from *wake −
 warm-up*): heater below target − 1 °C; above target + 2 °C the roof fan while outside is cooler, on its own
 thermostat (`esphome.ag_pro_roof_fan_thermostat`, set point = target in °F) or, when that sits idle
 (`binary_sensor.roof_fan_running` off 10 min), run by HA from the room sensor
@@ -785,7 +785,8 @@ while it is more than 3 °C colder outside; 30-min dwell; fan and A/C never toge
 **Hold** is the same logic at `input_number.night_climate_hold_target` with no end (daytime).
 **Fan all night** / **A/C all night** / **Heater** run one appliance. The Schedule page's Night preset (a
 scheduler entry, 00:30 daily: targets + wake time, then the mode) or Sleep Mode starts the Program, the
-wake time ends it (fan + A/C off, heater left as the warm-up set it) and Sleep Mode. Room reading =
+wake time ends it (fan + A/C off, heater left as the warm-up set it) but leaves Sleep Mode on until
+"good morning"; it turns the inverter on only so the Voice PE, which runs on it, can hear that. Room reading =
 `sensor.living_space_temperature` (gated median, `template/night_climate.yaml`). Scripts
 `night_climate_heater_to/_fan_on/_ac_on/_ac_off/_actuators_off` only send when something has to change (IR
 beeps). The warm-up is the morning heat (the old 07:30 scheduler entry was deleted 2026-09-17). IR is one-way
