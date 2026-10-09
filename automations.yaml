@@ -665,7 +665,7 @@
               {% set van_battery_pct = states('sensor.olins_van_bms_battery') | default('unknown') %}
               {% set inside_temp = states('sensor.a32_pro_bme280_1_temperature') | default('unknown') %}
               {% set outside_temp = states('sensor.a32_pro_bme280_4_temperature') | default('unknown') %}
-              Welcome back. You were away for
+              Welcome back. You were away for{{ ' ' }}
               {%- if days > 0 -%}
                 {{ days }} day{% if days != 1 %}s{% endif %}
                 {%- if hours > 0 %} and {{ hours }} hour{% if hours != 1 %}s{% endif %}{% endif -%}
