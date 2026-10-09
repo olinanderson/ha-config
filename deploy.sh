@@ -59,9 +59,10 @@ while IFS= read -r f; do
         intent_scripts.yaml) services+="intent_script/reload " ;;
         custom_sentences/*) services+="conversation/reload " ;;
         custom_components/*) needs_restart+="$f " ;;   # integration code loads only at startup
+        custom_templates/*.jinja) needs_reload=1 ;;   # reload_all includes homeassistant.reload_custom_templates
         www/*/gps_filter.py|www/*/gps_ublox.py|www/*/osrm_proxy.py|www/*/dvr_proxy.py)
             n=${f##*/}; daemons+="shell_command.restart_${n%.py} " ;;
-        esphome/*|react-dashboard/*|dashboards/*|relay/*|docs/*|*.md|*.py|*.js|*.sh|.github/*|.claude/*|*.gitignore|.stignore) ;;   # not HA runtime config (dashboards/: lovelace is in storage mode)
+        esphome/*|react-dashboard/*|dashboards/*|relay/*|docs/*|vban/*|"piping diagram"/*.svg|www/*.html|www/*.css|*.md|*.py|*.js|*.sh|*.example|.github/*|.claude/*|.vscode/*|.openclaw/*|*.gitignore|.stignore) ;;   # not HA runtime config (dashboards/: lovelace is in storage mode; www/ html and css are static files under /local/)
         *) if grep -Eq "$reloadable" <<<"$f"; then needs_reload=1; else needs_restart+="$f "; fi ;;
     esac
 done <<<"$changed"
