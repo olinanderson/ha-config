@@ -1574,6 +1574,24 @@
       target:
         entity_id: input_boolean.inverter_state
 
+# The ping comes back from a restart already on or off, so the two triggers
+# above don't fire then, and the flag kept its `initial: off` while the
+# inverter ran. Copy the ping's state once it has one after every HA start.
+- id: inverter_state_sync_at_start
+  alias: "Inverter State • Sync at HA start"
+  mode: single
+  trigger:
+    - trigger: homeassistant
+      event: start
+  action:
+    - wait_template: "{{ states('binary_sensor.192_168_10_174') in ['on', 'off'] }}"
+      timeout: "00:02:00"
+      continue_on_timeout: false
+    - action: >-
+        input_boolean.turn_{{ states('binary_sensor.192_168_10_174') }}
+      target:
+        entity_id: input_boolean.inverter_state
+
 # ───────────────────────────────────────────────
 #  Inverter manual lock (respect a manual off)
 # ───────────────────────────────────────────────

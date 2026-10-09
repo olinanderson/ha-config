@@ -51,10 +51,13 @@ hot_water_mode:
   icon: mdi:water-boiler
   initial: off
 
+# No `initial:`, so the lockout survives a restart. With `initial: off` every
+# HA start cleared it, and the A32 took that as "refuelled" and relit the
+# heater if the thermostat was still on. Cleared when the fuel is back above
+# 30 % (heater_fuel_lockout_auto_clear) or by hand.
 heater_low_fuel_lockout:
   name: "Heater Low Fuel Lockout"
   icon: mdi:fuel-cell
-  initial: off
 
 inverter_state:
   name: "Inverter State"
