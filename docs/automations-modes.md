@@ -9,7 +9,7 @@
 | **Shower Mode** | `script.shower_mode_on` | `script.shower_mode_off` | Lights 100%, water recirc, roof fan exhaust 60% |
 | **Cook Mode** | `script.cook_mode` | `script.cook_mode_off` | LPG valve open, lights 100%, roof fan exhaust 60% |
 | **Bedtime** | `script.bedtime_routine` | — | Progressive 10-min shutdown |
-| **Night Climate** | `input_select.night_climate_mode` (Tonight card) | wake time / Sleep Mode off | What runs tonight: **Program** (15 °C night hold, warm-up to 23 °C for the wake time; heater below target − 1; above target + 2 the A/C on shore power (from "A/C above"), the roof fan off shore while it is cooler outside), **Fan all night**, **A/C all night**, **Heater**. Sleep Mode on starts the Program; the wake time ends it (roof fan and A/C off) and leaves Sleep Mode on until "good morning". See *Night Climate* below |
+| **Night Climate** | `input_select.night_climate_mode` (Tonight card) | wake time / Sleep Mode off | What runs tonight: **Program** (15 °C night hold, warm-up to 23 °C for the wake time; heater below target − 1; above target + 2 the A/C on shore power (from "A/C above"), the roof fan off shore while it is cooler outside), **Fan all night**, **A/C all night**, **Heater**. Sleep Mode on starts the Program; on workdays the wake time ends it (roof fan and A/C off) and leaves Sleep Mode on until "good morning"; on weekends and stat holidays it runs on until "good morning". See *Night Climate* below |
 
 ### Night Climate (Tonight card)
 
@@ -18,6 +18,19 @@
 Mountain (`America/Edmonton`), wherever the van is: the user wakes at 8:25 Mountain, which is 7:25 on the
 coast. The card labels it "Wake time (Mountain)" and shows the phone's own time beside it when that differs.
 (On 2026-10-07 a 07:30 meant as local time ended Sleep Mode at 06:30 Pacific.)
+
+**Workdays only** (the user's wish 2026-10-09): the wake time acts only when `binary_sensor.workday_today`
+is on. On a weekend or stat holiday nothing changes at the wake time: the warm-up still runs, and the wake
+time sets `input_boolean.night_climate_sleep_in` (if a night mode is running), so the target holds the wake
+target (phase `sleep_in`) until the program ends. "Good morning" ends Sleep Mode, which ends the program
+(roof fan and A/C off) and runs the morning restore. A forgotten "good morning" holds the wake target until
+midnight, then the next night's targets apply. The Workday integration was set up in the UI on 2026-10-09
+(config entries, not YAML): Canada, Alberta, Mon–Fri, excluding Sat, Sun and holidays (python-holidays'
+public list: no Boxing Day, Heritage Day or Easter Monday; BC's list adds BC Day and Sept 30). Two entries:
+"Workday Today" (`binary_sensor.workday_today`) and "Workday Tomorrow" (`binary_sensor.workday_tomorrow`,
+days offset 1, its duplicate calendar entity disabled), which only tells the status line whether the next
+wake is a workday ("until 08:25" or "until good morning"). Unknown or unavailable counts as a workday. To
+change the province or add a day off: Settings → Devices & services → Workday → Configure, on both entries.
 
 | Mode | What it does |
 |---|---|
@@ -30,7 +43,7 @@ coast. The card labels it "Wake time (Mountain)" and shows the phone's own time 
 Hooks: the Schedule page's **Night** preset (a scheduler entry, 00:30 daily by default) sets the targets and
 the wake time and picks the mode, which starts the program; Sleep Mode on → Program (only if the mode was
 Off or Hold); Night picked on the card by a person → Sleep Mode on (`night_climate_night_starts_sleep`, not
-for the schedule, so it never switches the lights off by itself); Sleep Mode off → Off. The wake time sets the
+for the schedule, so it never switches the lights off by itself); Sleep Mode off → Off. On a workday the wake time sets the
 mode to Off unless it is Off or Hold already (roof fan and A/C off; the heater is left where the warm-up put it)
 and leaves Sleep Mode on: the lights, the water and the monitors stay off until "good morning" or Sleep off
 by hand (the user's wish 2026-10-09; from 10-07 the wake time ended Sleep Mode, and from 10-08 to 10-09 a

@@ -84,8 +84,10 @@ Mode switches the inverter off, so it is offline all night. Since "good
 morning" is what ends Sleep Mode (the wake time leaves it on since
 2026-10-09), the wake time turns the inverter back on while the Voice PE is
 offline, if the inverter was on at bedtime; before then only the dashboard
-ends Sleep. A 12 V USB-C supply (5 V, 2 A) keeps it listening all night, and
-the inverter then stays off until "good morning".
+ends Sleep. That is on workdays only: on weekends and stat holidays the wake
+time changes nothing, so the Voice PE stays offline until Sleep is ended on
+the dashboard. A 12 V USB-C supply (5 V, 2 A) keeps it listening all night,
+and the inverter then stays off until "good morning".
 
 ## Changing things
 

@@ -79,6 +79,9 @@
     # controller's 5-min tick fires in the same second as night_climate_wake,
     # and with the target already back at the night value it switched the
     # heater off and started cooling before the mode went Off (2026-09-26).
+    # On a weekend or stat holiday the wake time doesn't end the program: it
+    # sets input_boolean.night_climate_sleep_in, and the wake target holds from
+    # then until the program ends ("good morning") or midnight (phase sleep_in).
     - name: "Night Climate Target"
       unique_id: night_climate_target
       unit_of_measurement: "°C"
@@ -91,11 +94,15 @@
         {% set wake = wake if wake not in ['unknown', 'unavailable'] else '08:25:00' %}
         {% set warm = states('input_number.night_climate_warmup_minutes') | int(45) %}
         {% set t = today_at(wake) %}
+        {% if is_state('input_boolean.night_climate_sleep_in', 'on') and now() >= t %}
+          {{ states('input_number.night_climate_wake_target') | float(23) }}
+        {% else %}
         {% set t = t if t + timedelta(minutes=5) > now() else t + timedelta(days=1) %}
         {% if now() >= t - timedelta(minutes=warm) %}
           {{ states('input_number.night_climate_wake_target') | float(23) }}
         {% else %}
           {{ states('input_number.night_climate_night_target') | float(15) }}
+        {% endif %}
         {% endif %}
         {% endif %}
       attributes:
@@ -105,8 +112,10 @@
           {% set wake = wake if wake not in ['unknown', 'unavailable'] else '08:25:00' %}
           {% set warm = states('input_number.night_climate_warmup_minutes') | int(45) %}
           {% set t = today_at(wake) %}
+          {% if is_state('input_boolean.night_climate_sleep_in', 'on') and now() >= t %}sleep_in{% else %}
           {% set t = t if t + timedelta(minutes=5) > now() else t + timedelta(days=1) %}
           {{ 'warmup' if now() >= t - timedelta(minutes=warm) else 'night' }}
+          {% endif %}
           {% endif %}
         next_wake: >
           {% set wake = states('input_datetime.night_climate_wake_time') %}
@@ -152,7 +161,16 @@
               {% set parts = parts + ['Shop Mode blocks the heater'] %}
             {% endif %}
           {% endif %}
-          {% if wake and mode != 'Hold' %}{% set parts = parts + ['until ' ~ as_datetime(wake).strftime('%H:%M')] %}{% endif %}
+          {# No wake on weekends and stat holidays (binary_sensor.workday_*): the
+             program runs until "good morning" ends Sleep Mode #}
+          {% if wake and mode != 'Hold' %}
+            {% set day = 'binary_sensor.workday_today' if as_datetime(wake).date() == now().date() else 'binary_sensor.workday_tomorrow' %}
+            {% if ph == 'sleep_in' or is_state(day, 'off') %}
+              {% set parts = parts + ['until good morning'] %}
+            {% else %}
+              {% set parts = parts + ['until ' ~ as_datetime(wake).strftime('%H:%M')] %}
+            {% endif %}
+          {% endif %}
           {{ parts | join(' · ') }}
         {% endif %}
 

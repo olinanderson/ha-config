@@ -769,7 +769,7 @@ by then) was removed through HACS on 2026-10-08, together with an empty MQTT dev
 | **Shower Mode** | `script.shower_mode_on` | `script.shower_mode_off` | Lights 100%, water recirc, roof fan exhaust 60% |
 | **Cook Mode** | `script.cook_mode` | `script.cook_mode_off` | LPG valve open, lights 100%, roof fan exhaust 60% |
 | **Bedtime** | `script.bedtime_routine` | — | Progressive 10-min shutdown |
-| **Night Climate** | `input_select.night_climate_mode` (Tonight card) | wake time / Sleep Mode off | What runs tonight: **Program** (15 °C night hold, warm-up to 23 °C for the wake time; heater below target − 1; above target + 2 the roof fan while it is cooler outside, the A/C only above "A/C above" on shore power), **Fan all night**, **A/C all night**, **Heater**. Sleep Mode on starts the Program; the wake time ends it (roof fan and A/C off) and leaves Sleep Mode on. See *Night Climate* below |
+| **Night Climate** | `input_select.night_climate_mode` (Tonight card) | wake time / Sleep Mode off | What runs tonight: **Program** (15 °C night hold, warm-up to 23 °C for the wake time; heater below target − 1; above target + 2 the roof fan while it is cooler outside, the A/C only above "A/C above" on shore power), **Fan all night**, **A/C all night**, **Heater**. Sleep Mode on starts the Program; on workdays the wake time ends it (roof fan and A/C off) and leaves Sleep Mode on; weekends and stat holidays run on until "good morning". See *Night Climate* below |
 
 ### Night Climate (Tonight card on the Climate page)
 
@@ -786,7 +786,10 @@ while it is more than 3 °C colder outside; 30-min dwell; fan and A/C never toge
 **Fan all night** / **A/C all night** / **Heater** run one appliance. The Schedule page's Night preset (a
 scheduler entry, 00:30 daily: targets + wake time, then the mode) or Sleep Mode starts the Program, the
 wake time ends it (fan + A/C off, heater left as the warm-up set it) but leaves Sleep Mode on until
-"good morning"; it turns the inverter on only so the Voice PE, which runs on it, can hear that. Room reading =
+"good morning"; it turns the inverter on only so the Voice PE, which runs on it, can hear that. Workdays
+only (`binary_sensor.workday_today`, Workday integration in the UI: Alberta, Mon–Fri less stat holidays):
+on a weekend or holiday the wake time sets `input_boolean.night_climate_sleep_in` instead, and the program
+holds the wake target until "good morning". Room reading =
 `sensor.living_space_temperature` (gated median, `template/night_climate.yaml`). Scripts
 `night_climate_heater_to/_fan_on/_ac_on/_ac_off/_actuators_off` only send when something has to change (IR
 beeps). The warm-up is the morning heat (the old 07:30 scheduler entry was deleted 2026-09-17). IR is one-way

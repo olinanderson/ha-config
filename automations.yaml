@@ -2517,7 +2517,9 @@
     - action: script.night_climate_actuators_off
     - action: input_boolean.turn_off
       target:
-        entity_id: input_boolean.night_climate_fan_by_room
+        entity_id:
+          - input_boolean.night_climate_fan_by_room
+          - input_boolean.night_climate_sleep_in
 
 # The wake time is in HA's time zone, Mountain (America/Edmonton), wherever
 # the van is: the user wakes at 8:25 Mountain time (2026-10-07; the 07:30 they
@@ -2526,6 +2528,11 @@
 # and the monitors stay off until "good morning" (voice) or Sleep off on the
 # dashboard runs the morning restore (sleep_mode_off_restore). The user's
 # wish; from 10-07 the wake time ended Sleep Mode and everything came on.
+# Workdays only, the user's wish 2026-10-09: on weekends and stat holidays
+# (binary_sensor.workday_today, the Workday integration: Mon–Fri less
+# Alberta's stat holidays) nothing changes at the wake time. The program goes
+# on, holding the wake target the warm-up reached
+# (input_boolean.night_climate_sleep_in), until "good morning" ends it.
 - id: night_climate_wake
   alias: "Night Climate – wake time"
   mode: single
@@ -2533,35 +2540,51 @@
     - trigger: time
       at: input_datetime.night_climate_wake_time
   action:
-    # Hold has no end; the night modes stop here. Mode Off switches the roof
-    # fan and the A/C off (night_climate_mode_off).
-    - if:
-        - "{{ states('input_select.night_climate_mode') not in ['Off', 'Hold'] }}"
-      then:
-        # No heater call here on purpose: the warm-up already put the heater
-        # at the wake target, and it stays there until someone changes it.
-        - action: input_select.select_option
-          target:
-            entity_id: input_select.night_climate_mode
-          data:
-            option: "Off"
-    # The Voice PE runs on the inverter, which Sleep Mode switched off, so it
-    # can't hear "good morning" until the inverter is back (seen 2026-10-09).
-    # Only while it is offline and only if the inverter was on at bedtime: on
-    # 12 V power it stays online, and the inverter then waits for the morning
-    # restore like the rest.
-    - if:
-        - condition: state
-          entity_id: input_boolean.sleep_mode
-          state: "on"
-        - condition: state
-          entity_id: input_boolean.sleep_restore_inverter
-          state: "on"
-        - condition: state
-          entity_id: assist_satellite.home_assistant_voice_096586_assist_satellite
-          state: unavailable
-      then:
-        - action: script.inverter_ensure_on
+    - choose:
+        # Weekend or stat holiday. Unknown or unavailable (Workday not
+        # loaded) counts as a workday.
+        - conditions:
+            - condition: state
+              entity_id: binary_sensor.workday_today
+              state: "off"
+          sequence:
+            - if:
+                - "{{ states('input_select.night_climate_mode') not in ['Off', 'Hold'] }}"
+              then:
+                - action: input_boolean.turn_on
+                  target:
+                    entity_id: input_boolean.night_climate_sleep_in
+      default:
+        # Hold has no end; the night modes stop here. Mode Off switches the
+        # roof fan and the A/C off (night_climate_mode_off).
+        - if:
+            - "{{ states('input_select.night_climate_mode') not in ['Off', 'Hold'] }}"
+          then:
+            # No heater call here on purpose: the warm-up already put the
+            # heater at the wake target, and it stays there until someone
+            # changes it.
+            - action: input_select.select_option
+              target:
+                entity_id: input_select.night_climate_mode
+              data:
+                option: "Off"
+        # The Voice PE runs on the inverter, which Sleep Mode switched off,
+        # so it can't hear "good morning" until the inverter is back (seen
+        # 2026-10-09). Only while it is offline and only if the inverter was
+        # on at bedtime: on 12 V power it stays online, and the inverter then
+        # waits for the morning restore like the rest.
+        - if:
+            - condition: state
+              entity_id: input_boolean.sleep_mode
+              state: "on"
+            - condition: state
+              entity_id: input_boolean.sleep_restore_inverter
+              state: "on"
+            - condition: state
+              entity_id: assist_satellite.home_assistant_voice_096586_assist_satellite
+              state: unavailable
+          then:
+            - action: script.inverter_ensure_on
 
 # The loop. Every 5 min (and on any setting change) hold sensor.night_climate_
 # target with what the mode allows. The scripts only send a command when the
