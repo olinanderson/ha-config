@@ -1034,9 +1034,12 @@
                 message: "Power saving mode disabled – engine off and someone inside"
 
 # ────────────────────────────────────────────────────────────────
-# Ducking in pulseaudio
+# VBAN audio receiver (PC audio → van SPDIF)
 # ────────────────────────────────────────────────────────────────
-# The following automation is used to setup the ducking module in pulse audio which lowers the volume of music from airplay/audio from PC when HA is playing audio through the VLC media player
+# Starts the VBAN receiver 15 s after HA boots, so audio a PC streams with
+# VoiceMeeter (VBAN stream "Stream1", UDP 6980) plays on the van's USB-SPDIF
+# output. shell_command.start_vban_receptor runs vban/start-receiver.sh on the
+# HAOS host, which copies the receiver into hassio_audio and (re)starts it.
 - alias: "VBAN audio receiver"
   mode: single
   trigger:
