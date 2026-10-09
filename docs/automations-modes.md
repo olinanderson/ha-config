@@ -20,8 +20,8 @@ coast. The card labels it "Wake time (Mountain)" and shows the phone's own time 
 (On 2026-10-07 a 07:30 meant as local time ended Sleep Mode at 06:30 Pacific.)
 
 **Workdays only** (the user's wish 2026-10-09): the wake time acts only when `binary_sensor.workday_today`
-is on. On a weekend or stat holiday nothing changes at the wake time: the warm-up still runs, and the wake
-time sets `input_boolean.night_climate_sleep_in` (if a night mode is running), so the target holds the wake
+is on. On a weekend or stat holiday the wake time only turns the inverter on for the Voice PE (see below; the
+user's OK 2026-10-09). The warm-up still runs, and the wake time sets `input_boolean.night_climate_sleep_in` (if a night mode is running), so the target holds the wake
 target (phase `sleep_in`) until the program ends. "Good morning" ends Sleep Mode, which ends the program
 (roof fan and A/C off) and runs the morning restore. A forgotten "good morning" holds the wake target until
 midnight, then the next night's targets apply. The Workday integration was set up in the UI on 2026-10-09
