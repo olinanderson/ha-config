@@ -37,11 +37,6 @@ shower_mode:
   name: "Shower Mode"
   icon: mdi:shower
 
-windows_audio_stream:
-  name: "Windows Audio Stream"
-  icon: mdi:music-note-bluetooth
-  initial: on
-
 inverter_toggle_pending:
   name: Inverter toggle pending
   icon: mdi:progress-clock

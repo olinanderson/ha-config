@@ -4,9 +4,8 @@ import { ToggleButton } from '@/components/ToggleButton';
 import { SparklineStat } from '@/components/ClickableValue';
 import { StatValue } from '@/components/StatValue';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
-import { Switch } from '@/components/ui/switch';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
-import { useToggle, useService } from '@/hooks/useService';
+import { useService } from '@/hooks/useService';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
 import { fmt } from '@/lib/utils';
 import {
@@ -17,7 +16,6 @@ import {
   Monitor,
   Bed,
   Flame,
-  Music,
   Loader2,
 } from 'lucide-react';
 
@@ -164,24 +162,6 @@ function SwitchesCard() {
     </Card>
   );
 }
-function AudioCard() {
-  const audioStream = useEntity('input_boolean.windows_audio_stream');
-  const toggleAudio = useToggle('input_boolean.windows_audio_stream');
-
-  return (
-    <Card>
-      <CardContent className="pt-4">
-        <div className="flex items-center justify-between">
-          <span className="text-sm flex items-center gap-1.5">
-            <Music className="h-3.5 w-3.5" />
-            Windows Audio Stream
-          </span>
-          <Switch checked={audioStream?.state === 'on'} onCheckedChange={toggleAudio} />
-        </div>
-      </CardContent>
-    </Card>
-  );
-}
 
 export default function System() {
   return (
@@ -189,7 +169,6 @@ export default function System() {
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="space-y-4">
           <StarlinkCard />
-          <AudioCard />
         </div>
         <div className="space-y-4">
           <ModesCard />

@@ -735,7 +735,6 @@ by then) was removed through HACS on 2026-10-08, together with an empty MQTT dev
 | `input_boolean.shower_mode` | Shower mode flag |
 | `input_boolean.shore_power_charger_enabled` | Shore charger manual enable |
 | `input_boolean.speedtest_running` | Speedtest in progress |
-| `input_boolean.windows_audio_stream` | Windows Scream audio enabled |
 | `input_boolean.inverter_toggle_pending` | Inverter toggle in progress |
 | `input_boolean.hot_water_mode` | Hot water mode — keeps hydronic heater on when climate turns off |
 | `input_boolean.heater_low_fuel_lockout` | Low fuel heater lockout — auto-set when fuel < 25% after failed retry, auto-cleared when fuel > 30% |

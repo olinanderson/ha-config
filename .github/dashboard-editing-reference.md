@@ -194,7 +194,6 @@ input_boolean.speedtest_running
 media_player.vlc_telnet
 switch.a32_pro_do8_switch06_top_monitor
 switch.a32_pro_do8_switch07_bottom_monitor
-input_boolean.windows_audio_stream
 ```
 
 ### Modes / Input Helpers
