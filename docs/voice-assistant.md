@@ -71,13 +71,18 @@ for the same jobs.
 | `RoofFanTurnOff` | "roof fan off" | Same script, off; the lid closes |
 | `CookModeStart/Stop` | "cook mode on", "done cooking" | `script.cook_mode` / `script.cook_mode_off` |
 | `StartBedtimeRoutine` | "good night", "I'm going to bed" | `script.sleep_mode_on` |
-| `GoodMorning` | "good morning", "I'm up" | `script.wake_up_routine` |
+| `GoodMorning` | "good morning", "morning", "good morning Jarvis", "I'm up" | `script.wake_up_routine`, which ends Sleep Mode; says "Good morning. Sleep mode off." when it was on |
 | `InsideTemperature` | "what's the temperature (inside)" | Speaks Living Space Temperature |
 | `LocalTime` | "what time is it" | Speaks the time where the van is, with the zone: "It's 10:26 PM Pacific time." |
 | `LocalDate` | "what's the date", "what day is it" | Speaks the date where the van is |
 
 HA's own sentences cover named devices: "turn off the main lights", "set the
 lights to 30 percent", "turn on the heater".
+
+The Voice PE was powered from the inverter (checked 2026-10-09), and Sleep
+Mode switches the inverter off, so it is offline all night: "good morning"
+works only once the inverter is back on (the wake time, or Sleep ended on
+the dashboard). A 12 V USB-C supply (5 V, 2 A) keeps it listening.
 
 ## Changing things
 

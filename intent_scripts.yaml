@@ -58,14 +58,21 @@ StartBedtimeRoutine:
       target:
         entity_id: script.sleep_mode_on
 
+# Says whether it ended Sleep Mode, read before the wake-up turns it off
 GoodMorning:
   platforms: *local_only
-  speech:
-    text: "Good morning."
   action:
+    - variables:
+        result:
+          say: >-
+            {{ 'Good morning. Sleep mode off.' if is_state('input_boolean.sleep_mode', 'on') else 'Good morning.' }}
     - action: script.turn_on
       target:
         entity_id: script.wake_up_routine
+    - stop: ""
+      response_variable: result
+  speech:
+    text: "{{ action_response.say }}"
 
 # The indoor lights are every light in the Van area (voice/spec.yaml)
 IndoorDimmersOff:

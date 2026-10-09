@@ -50,10 +50,12 @@ intents:
           - "(it's|time for) bed[time]"
           - "I'm going to bed"
 
+  # The wake word ("Hey Jarvis") isn't normally in what's heard; Jarvis is
+  # allowed at either end in case it is, or the user adds it
   GoodMorning:
     data:
       - sentences:
-          - "good morning"
+          - "[hey jarvis|jarvis] [good] morning [jarvis]"
           - "rise and shine"
           - "I'm (up|awake)"
 
