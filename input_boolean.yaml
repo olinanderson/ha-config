@@ -5,9 +5,12 @@ speedtest_running:
   name: "Speedtest Running"
   initial: off
 
+# No `initial:`, so it restores across restarts like the charger relay does
+# (A32 RESTORE_DEFAULT_ON). With `initial: off` every HA start turned it off
+# before the sync automation ran: the relay stayed on, the toggle read off and
+# the 97 % power-cycle (shore_charger_reset_on_low_soc) was disarmed.
 shore_power_charger_enabled:
   name: "Shore Power Charger On/Off"
-  initial: off
 
 power_saving_mode:
   name: "Power Saving Mode"
