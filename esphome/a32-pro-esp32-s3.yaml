@@ -99,7 +99,7 @@ logger:
 # Enable Home Assistant API
 api:
   encryption:
-    key: "RPIb2C8lYPlFQY3YCdd0p+X/IRgFoodz01ywDlWjHLI="
+    key: !secret a32_pro_api_key
 
 esp32_ble_tracker:
   scan_parameters:
@@ -113,7 +113,7 @@ bluetooth_proxy:
 
 ota:
   platform: esphome
-  password: "d35448720d5d7813fe49d7d79b98d308"
+  password: !secret a32_pro_ota_password
 
 # Victron Bluetooth Stuff
 
@@ -123,22 +123,22 @@ victron_ble:
   #   2x 60W Walk-On semi-rigid (HJT cells)
   - id: MPPT_Controller_1
     mac_address: "d9601c9c69b2"  # Replace with the Bluetooth MAC address of MPPT 1
-    bindkey: "fcee7ed9507bb605fba0c8ebd5ab3422"  # Replace with the encryption key for MPPT 1
+    bindkey: !secret victron_mppt_1_bindkey
 
   # MPPT 2: 400W array — one CMP25400H semi-flexible panel
   #   (108 PERC cells 6x18, 31V / 12.9A, 1127 x 1728 mm, junction box mid-panel)
   - id: MPPT_Controller_2
     mac_address: "c6a19a580ead"  # Replace with the Bluetooth MAC address of MPPT 2
-    bindkey: "74d155c02b86c64b572853306bc74694"  # Replace with the encryption key for MPPT 2
+    bindkey: !secret victron_mppt_2_bindkey
 
   - id: Smart_Battery_Sense_12V
     mac_address: "e4a576a4b459"
-    bindkey: "8741db6dda477fa0ea0e82ea5d85f6ee"
+    bindkey: !secret victron_battery_sense_bindkey
 
   # Orion-Tr Smart 12/24-15 DC-DC charger (alternator -> 24V house bank, alongside 2x Sterling B2Bs)
   - id: Orion_DCDC_Charger
     mac_address: "cefc6f3bf6e5"
-    bindkey: "d9cfee225265053b82c201b9c7dbe5d9"
+    bindkey: !secret victron_orion_bindkey
 
 time:
   - platform: sntp

@@ -51,7 +51,7 @@ bluetooth_proxy:
   active: true
 
 ota:
-  password: "5f17bccba50c65f60200db69f1b1ebbe"
+  password: !secret a32_pro_ota_password
   platform: esphome
 
 # Victron Bluetooth Stuff
@@ -59,24 +59,24 @@ ota:
 victron_ble:
   - id: MPPT_Controller_1
     mac_address: "d9601c9c69b2"  # Replace with the Bluetooth MAC address of MPPT 1
-    bindkey: "fcee7ed9507bb605fba0c8ebd5ab3422"  # Replace with the encryption key for MPPT 1
+    bindkey: !secret victron_mppt_1_bindkey
 
   - id: MPPT_Controller_2
     mac_address: "c6a19a580ead"  # Replace with the Bluetooth MAC address of MPPT 2
-    bindkey: "74d155c02b86c64b572853306bc74694"  # Replace with the encryption key for MPPT 2
+    bindkey: !secret victron_mppt_2_bindkey
 
   - id: Smart_Battery_Sense_12V
     mac_address: "e4a576a4b459"
-    bindkey: "8741db6dda477fa0ea0e82ea5d85f6ee"
+    bindkey: !secret victron_battery_sense_bindkey
 
 # wifi:
-#   ssid: KinCony
-#   password: a12345678
+#   ssid: !secret wifi_ssid
+#   password: !secret wifi_password
 
 #   # Enable fallback hotspot (captive portal) in case wifi connection fails
 #   ap:
 #     ssid: "A32-Pro Fallback Hotspot"
-#     password: "25JYfblp8QJP"
+#     password: !secret a32_pro_ap_password
 
 # captive_portal:
 
