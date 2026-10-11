@@ -15672,7 +15672,7 @@ function _p({ name: t, tempEntity: s, humidityEntity: o }) {
 }
 const zj = {
   fresh: "sensor.stable_fresh_water_level",
-  grey: "sensor.stable_grey_water_level"
+  grey: "sensor.grey_water_estimate"
 };
 function Wc(t) {
   const s = zj[t], { value: o } = he(s);
