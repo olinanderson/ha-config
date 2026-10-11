@@ -2530,14 +2530,9 @@ sensor:
       - lambda: "return x / 100.0;"
 
   # 2) volume percentage (linear) + 10‑sample moving average
-  # Full scale is 190 Ω = 0.76 V at 12 V nominal.  The sender is excited
-  # through a fixed series R (~3 kΩ) from the 12 V bus, so the measured
-  # voltage scales proportionally with bus voltage.  At 14.4 V (bulk charge)
-  # a full tank would read ~0.86 V — above the 0.80 V guard — and return
-  # unknown.  Fix: read the actual 12 V bus voltage from the SmartBatterySense
-  # and normalise V to what it would be at 12 V nominal before computing R.
-  # The over-range cutoff is also scaled to avoid false unknowns on a charged
-  # battery.  Falls back to 12 V nominal if BLE is unavailable.
+  # Full scale is 190 Ω = 0.76 V. Over 0.80 V is a bad contact or an open
+  # sender (up to 1.15 V seen while driving), so the reading is skipped instead
+  # of averaged in as 100 %. No valid reading for 5 min ➜ unknown.
   - platform: template
     name: "Grey Water Tank Level (%)"
     id: grey_water_level
@@ -2546,17 +2541,9 @@ sensor:
     update_interval: 1s
     lambda: |-
       float V = id(grey_water_level_voltage).state;
-      if (std::isnan(V)) return {};
-      // Battery-voltage compensation: scale the open-circuit guard and
-      // normalise the reading to 12 V nominal so R is always computed
-      // against the same reference current (4 mA at 12 V / 3 kΩ).
-      float V_bat = id(smart_battery_sense_voltage).state;
-      if (std::isnan(V_bat) || V_bat < 10.0f || V_bat > 17.0f) V_bat = 12.0f;
-      float cutoff = 0.80f * (V_bat / 12.0f);  // open-circuit guard scales with Vbus
-      if (V > cutoff) return {};                // bad contact / open sender ➜ skip
-      float V_norm = V * (12.0f / V_bat);       // normalise to 12 V nominal
-      float R = V_norm / 0.004f;               // V → Ω  (4 mA at 12 V nominal)
-      float pct = (R / 190.0f) * 100.0f;       // linear height → %
+      if (std::isnan(V) || V > 0.80f) return {};  // invalid ➜ don't publish
+      float R = V / 0.004;                    // V➜Ω
+      float pct = (R / 190.0) * 100.0;        // linear height ➜ %
       return pct < 0 ? 0 : (pct > 100 ? 100 : pct);
     filters:
       - sliding_window_moving_average:
@@ -3018,10 +3005,9 @@ sensor:
     type: LOAD_CURRENT
 
 # 12V Smart Battery Sense
-  - platform: victron_ble
+  - platform: victron_ble 
     victron_ble_id: Smart_Battery_Sense_12V
     name: "Smart Battery Sense (12V) Voltage"
-    id: smart_battery_sense_voltage   # used by grey/fresh sender V-correction
     type: BATTERY_VOLTAGE
 
   - platform: victron_ble
