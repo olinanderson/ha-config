@@ -400,29 +400,6 @@ shower_mode_off:
       target:
         entity_id: input_boolean.shower_mode
 
-# Sets sensor.grey_water_estimate (template/triggered.yaml), which counts grey
-# from fresh water use from then on. For when the tank was emptied without the
-# dump valve switch, or the estimate has drifted from what you know is in it.
-grey_water_estimate_set:
-  alias: "Grey water estimate • set level"
-  icon: mdi:water-opacity
-  mode: single
-  fields:
-    level:
-      description: How full the grey tank is now (%)
-      required: true
-      default: 0
-      selector:
-        number:
-          min: 0
-          max: 100
-          step: 5
-          unit_of_measurement: "%"
-  sequence:
-    - event: grey_water_estimate_set
-      event_data:
-        level: "{{ level }}"
-
 # ─────────────────────────────────────────────────────────────────
 # Starlink • PoE power-cycle recovery
 # ─────────────────────────────────────────────────────────────────
