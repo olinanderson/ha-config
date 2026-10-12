@@ -79,14 +79,14 @@ for the same jobs.
 HA's own sentences cover named devices: "turn off the main lights", "set the
 lights to 30 percent", "turn on the heater".
 
-The Voice PE was powered from the inverter (checked 2026-10-09), and Sleep
-Mode switches the inverter off, so it is offline all night. Since "good
-morning" is what ends Sleep Mode (the wake time leaves it on since
-2026-10-09), the wake time turns the inverter back on while the Voice PE is
-offline, if the inverter was on at bedtime, on weekends and stat holidays
-too; before then only the dashboard ends Sleep. Always-on power (the van's
-always-on USB hub, or a 12 V USB-C supply, 5 V 2 A) keeps it listening all
-night, and the inverter then stays off until "good morning".
+The Voice PE needs always-on power to hear "good morning", which is what
+ends Sleep Mode (the wake time leaves it on since 2026-10-09). Sleep Mode
+switches the inverter off and it stays off until "good morning". On the
+inverter the Voice PE was offline all night (checked 2026-10-09: 00:14 to
+08:25), so from 10-09 the wake time turned the inverter back on for it; on
+2026-10-12 the user moved it to the van's always-on USB power (a 12 V USB-C
+supply, 5 V 2 A, also works) and the wake time stopped touching the
+inverter.
 
 ## Changing things
 

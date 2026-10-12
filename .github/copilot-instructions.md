@@ -786,7 +786,7 @@ while it is more than 3 °C colder outside; 30-min dwell; fan and A/C never toge
 **Fan all night** / **A/C all night** / **Heater** run one appliance. The Schedule page's Night preset (a
 scheduler entry, 00:30 daily: targets + wake time, then the mode) or Sleep Mode starts the Program, the
 wake time ends it (fan + A/C off, heater left as the warm-up set it) but leaves Sleep Mode on until
-"good morning"; it turns the inverter on only so the Voice PE, which runs on it, can hear that. Workdays
+"good morning" (the inverter too: the Voice PE is on always-on USB power since 2026-10-12). Workdays
 only (`binary_sensor.workday_today`, Workday integration in the UI: Alberta, Mon–Fri less stat holidays):
 on a weekend or holiday the wake time sets `input_boolean.night_climate_sleep_in` instead, and the program
 holds the wake target until "good morning". Room reading =

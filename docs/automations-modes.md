@@ -20,8 +20,7 @@ coast. The card labels it "Wake time (Mountain)" and shows the phone's own time 
 (On 2026-10-07 a 07:30 meant as local time ended Sleep Mode at 06:30 Pacific.)
 
 **Workdays only** (the user's wish 2026-10-09): the wake time acts only when `binary_sensor.workday_today`
-is on. On a weekend or stat holiday the wake time only turns the inverter on for the Voice PE (see below; the
-user's OK 2026-10-09). The warm-up still runs, and the wake time sets `input_boolean.night_climate_sleep_in` (if a night mode is running), so the target holds the wake
+is on. On a weekend or stat holiday the warm-up still runs, and the wake time sets `input_boolean.night_climate_sleep_in` (if a night mode is running), so the target holds the wake
 target (phase `sleep_in`) until the program ends. "Good morning" ends Sleep Mode, which ends the program
 (roof fan and A/C off) and runs the morning restore. A forgotten "good morning" holds the wake target until
 midnight, then the next night's targets apply. The Workday integration was set up in the UI on 2026-10-09
@@ -47,9 +46,9 @@ for the schedule, so it never switches the lights off by itself); Sleep Mode off
 mode to Off unless it is Off or Hold already (roof fan and A/C off; the heater is left where the warm-up put it)
 and leaves Sleep Mode on: the lights, the water and the monitors stay off until "good morning" or Sleep off
 by hand (the user's wish 2026-10-09; from 10-07 the wake time ended Sleep Mode, and from 10-08 to 10-09 a
-running A/C stayed on as a fan at 32 °C). The Voice PE runs on the inverter, which Sleep switched off, so
-while it is offline, and if the inverter was on at bedtime, the wake time turns the inverter on to let it
-hear "good morning". The target stays at the wake target until 5 min past the wake time: the controller's
+running A/C stayed on as a fan at 32 °C). The inverter waits for "good morning" as well, every day since
+2026-10-12 (the user's wish): from 10-09 the wake time turned it on so the Voice PE, then powered from it,
+could hear "good morning"; the user moved the Voice PE to always-on USB power. The target stays at the wake target until 5 min past the wake time: the controller's
 5-min tick fires in the same second, and until 2026-10-05 it saw the night target first and switched the
 heater off at the wake time (seen 2026-09-26). The warm-up is the morning heat: the old daily 07:30 scheduler entry
 (`switch.schedule_55e88d`, heater to 26 °C) was deleted from the Schedule page on 2026-09-17, and the heater
