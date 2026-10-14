@@ -636,7 +636,7 @@
     # "cheapest" mode around HA's home coordinates, which follow the van via the
     # Keep-Home-zone automation; posted credit price, refreshed hourly. US
     # prices (USD/gallon) are converted there, and the last good price is kept.
-    # Until the 2026-10-24 trip the station searches postal code V9Y 8Y5 (Port
+    # Until the 2026-10-18 trip the station searches postal code V9Y 8Y5 (Port
     # Alberni) instead, as neither Ucluelet station has current prices; clear it
     # when leaving (automation gasbuddy_postal_code_reminder says when).
     # All emit unknown (never a fake 0) while the price or a fuel figure is missing.

@@ -121,7 +121,7 @@ HACS `firstof9/ha-gasbuddy` 1.5.0 (1.6.1 and later need HA 2026.8+; 1.6.1 failed
 here on 2026.4 and was rolled back), hub "GasBuddy Hub" with one station subentry in
 *cheapest* mode: regular, posted credit price. With no postal code it searches around
 HA's home coordinates, which the "Keep Home zone on GPS" automation moves with the van.
-Until the 2026-10-24 trip it has postal code V9Y 8Y5 (Port Alberni) instead: neither
+Until the 2026-10-18 trip it has postal code V9Y 8Y5 (Port Alberni) instead: neither
 Ucluelet station posts current prices, and the integration fails setup when nothing in
 the search has one. Automation `gasbuddy_postal_code_reminder` says when to clear it.
 Refreshes hourly. Add more stations under Settings → Integrations → GasBuddy → Add station.

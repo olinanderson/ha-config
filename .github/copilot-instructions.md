@@ -494,7 +494,7 @@ next knobs are the I²C clock (400 kHz in `i2c:`) and the chip's address jumpers
 
 ### Fuel prices (GasBuddy, HACS `firstof9/ha-gasbuddy`)
 One hub + one *cheapest* station subentry (regular, credit price). No postal code → HA's
-home coordinates, which follow the van; until the 2026-10-24 trip it has V9Y 8Y5 (Port
+home coordinates, which follow the van; until the 2026-10-18 trip it has V9Y 8Y5 (Port
 Alberni), as Ucluelet posts no current prices (automation `gasbuddy_postal_code_reminder`
 says when to clear it). GasBuddy reports CAD/liter in Canada and USD/gallon in the US;
 `sensor.regular_gas_price` (`template/gas_price.yaml`) makes both CAD/L (÷ 3.785 ×
