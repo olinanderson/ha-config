@@ -1,5 +1,6 @@
 import { PageContainer } from '@/components/layout/PageContainer';
 import { CurrentTripCard } from '@/components/CurrentTripCard';
+import { GasPerDayCard } from '@/components/GasPerDayCard';
 import { LivingSpaceCard } from '@/components/LivingSpaceCard';
 import { VanBadges } from '@/components/VanBadges';
 import { FuelTripHistory } from '@/components/FuelTripHistory';
@@ -379,6 +380,9 @@ function MainHeroCard() {
   // pack change (solar in, loads out); negative means drives have been
   // DRAINING the pack, which is the DC-DC-failure symptom worth surfacing.
   const { value: driveChargeRate } = useEntityNumeric('sensor.average_drive_charge_rate');
+  // What that charging costs in extra gas right now (template/gas_living.yaml:
+  // the chargers' output × ≈0.75 L/kWh × today's price) — an estimate.
+  const { value: chargeCostPerHour } = useEntityNumeric('sensor.charging_gas_cost_per_hour');
   const { value: solarA } = useEntityNumeric('sensor.total_mppt_output_current');
   const estimateEntity = useEntity('sensor.battery_time_estimate');
   const ecoEntity = useEntity('input_boolean.power_saving_mode');
@@ -484,6 +488,20 @@ function MainHeroCard() {
                       >
                         ≈{driveChargeRate >= 0 ? '+' : ''}{driveChargeRate.toFixed(1)}%/h
                         <span className="max-sm:hidden"> driving</span>
+                      </span>
+                    </>
+                  )}
+                  {/* The gas that charging costs, while the chargers put out
+                      something: same line on a phone, its own on wider screens */}
+                  {engineRunning && chargeCostPerHour != null && chargeCostPerHour >= 0.05 && (
+                    <>
+                      <span className="sm:hidden"> · </span>
+                      <span
+                        className="font-medium text-amber-400/90 sm:block"
+                        title="Extra gas the alternator chargers cost at their present output: ≈0.75 L per kWh delivered (engine ≈30 %, alternator ≈55 %, chargers ≈90 %) × today's price — an estimate"
+                      >
+                        ≈${chargeCostPerHour.toFixed(2)}/h
+                        <span className="max-sm:hidden"> gas to charge</span>
                       </span>
                     </>
                   )}
@@ -675,6 +693,7 @@ export default function Van() {
           <DiagnosticsCard />
           <EngineCard />
           <FuelCard />
+          <GasPerDayCard />
           <FuelTripHistory />
         </div>
         <div className="space-y-4">

@@ -22,6 +22,9 @@ export function BatteryCard({ compact = false }: { compact?: boolean }) {
   // trip data. NET pack change: solar counts toward it, house loads against it.
   const { value: driveRate } = useEntityNumeric('sensor.average_drive_charge_rate');
   const { value: drivePower } = useEntityNumeric('sensor.average_drive_charge_power');
+  // Gas for a tenth of the pack from the chargers while driving, at today's
+  // price (template/gas_living.yaml) — an estimate, null without a gas price.
+  const { value: gasPer10 } = useEntityNumeric('sensor.charging_gas_per_10_percent');
   const estimateEntity = useEntity('sensor.battery_time_estimate');
 
   const { data: socHistory } = useHistory('sensor.olins_van_bms_battery', 12);
@@ -86,6 +89,17 @@ export function BatteryCard({ compact = false }: { compact?: boolean }) {
               color="#4ade80"
               hours={24}
               title="Avg net W into the pack over your last 20 drives — includes solar, minus house loads (not raw charger output)"
+            />
+          )}
+          {gasPer10 != null && (
+            <SparklineStat
+              entityId="sensor.charging_gas_per_10_percent"
+              label="Gas per 10%"
+              value={`$${fmt(gasPer10, 2)}`}
+              unit=""
+              color="#f59e0b"
+              hours={24}
+              title="Extra gas for 10 % of the pack from the alternator chargers while driving (≈0.57 L), at today's price — an estimate. Idling barely charges"
             />
           )}
           <SparklineStat entityId="sensor.olins_van_bms_stored_energy" label="Stored" value={fmt(stored, 0)} unit="Wh" color="#8b5cf6" />

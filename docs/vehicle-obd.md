@@ -92,3 +92,28 @@ litres bought at the second fill, minus 0.25 L/h × heater hours; estimate = the
 change in `sensor.estimated_fuel_used_total_l`. New VE = VE × real ÷ estimate.
 Average 3+ fills before changing it: one fill is only good to about ±5 % (where
 the pump clicks off, slosh).
+
+## Gas for living (template/gas_living.yaml)
+
+Asked 2026-10-16: what living in the van costs in gas per day, apart from going
+somewhere — the engine's fuel plus the Espar's — and what charging the house
+battery costs. Everything is in `template/gas_living.yaml`; the Van page's "Gas
+per day" card (`GasPerDayCard.tsx`) and the battery cards read these sensors:
+
+| Sensor | What |
+|---|---|
+| `sensor.engine_fuel_today`, `heater_on_time_today`, `heater_fuel_today`, `alternator_energy_today`, `distance_today` | Since midnight: the lifetime counters minus their value at midnight, latched by the trigger-based `*_at_midnight` sensors (restored over restarts; a template reload latches "now") |
+| `sensor.gas_cost_today` | (engine L + heater L) × `sensor.regular_gas_price`; attributes split it and add the charging estimate |
+| `sensor.gas_cost_per_day_7d` | The last 7 whole days from `recorder.get_statistics` (long-term statistics, so it is right straight away), refreshed at 00:10, at start and on reload; attributes `summary` and `days` |
+| `sensor.charging_gas_cost_per_hour` | Live: alternator chargers' output × 0.75 L/kWh × price — shown next to the drive %/h on the Van page |
+| `sensor.charging_gas_per_10_percent` | 10 % of the 7.4 kWh pack ÷ 0.97 × 0.75 L/kWh × price (≈0.57 L) |
+
+Heater fuel is 0.25 L per hour of on-time (above). Charging fuel is an estimate,
+not a measurement: 0.75 L per kWh the chargers deliver (gasoline 8.9 kWh/L, the
+engine ≈30 % at cruise, the alternator ≈55 %, the DC-DC chargers ≈90 %), i.e.
+the extra fuel while driving anyway. Idling is not costed because it hardly
+charges: in the five full idle hours in the statistics (2026-08-30 → 10-02) the
+chargers averaged 0–240 W, even at 19 % SoC, against ~2 kW on the road — the
+Transit's smart alternator sits low at idle and the chargers throttle. The fuel
+estimate also reads those idle hours at 0.0–0.6 L/h, far below a real idle
+(≈1.5–2 L/h), so idle fuel is undercounted everywhere it appears.
