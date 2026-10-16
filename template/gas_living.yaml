@@ -219,14 +219,18 @@
       unit_of_measurement: CAD/d
       state_class: measurement
       icon: mdi:cash-multiple
+      # Only the 7 buckets that start before today: the service also returns
+      # the bucket that STARTS at end_time (today, part-way through; seen
+      # 2026-10-16), which would otherwise be summed in.
       state: >
         {% set s = stats.statistics %}
         {% set price = states('sensor.regular_gas_price') | float(none) %}
+        {% set cutoff = as_timestamp(today_at('00:00')) %}
         {% set ns = namespace(l=0.0, h=0.0) %}
-        {% for r in s.get('sensor.estimated_fuel_used_total_l', []) %}
+        {% for r in s.get('sensor.estimated_fuel_used_total_l', []) if as_timestamp(r.start) < cutoff %}
           {% set ns.l = ns.l + ([r.change | float(0), 0] | max) %}
         {% endfor %}
-        {% for r in s.get('sensor.hydronic_heater_total_on_time', []) %}
+        {% for r in s.get('sensor.hydronic_heater_total_on_time', []) if as_timestamp(r.start) < cutoff %}
           {% set ns.h = ns.h + ([(r.max | float(0)) - (r.min | float(0)), 0] | max) %}
         {% endfor %}
         {{ none if price is none else ((ns.l + ns.h * 0.25) / 7 * price) | round(2) }}
@@ -237,17 +241,18 @@
         summary: >
           {% set s = stats.statistics %}
           {% set price = states('sensor.regular_gas_price') | float(0) %}
+          {% set cutoff = as_timestamp(today_at('00:00')) %}
           {% set ns = namespace(l=0.0, h=0.0, wh=0.0, km=0.0) %}
-          {% for r in s.get('sensor.estimated_fuel_used_total_l', []) %}
+          {% for r in s.get('sensor.estimated_fuel_used_total_l', []) if as_timestamp(r.start) < cutoff %}
             {% set ns.l = ns.l + ([r.change | float(0), 0] | max) %}
           {% endfor %}
-          {% for r in s.get('sensor.hydronic_heater_total_on_time', []) %}
+          {% for r in s.get('sensor.hydronic_heater_total_on_time', []) if as_timestamp(r.start) < cutoff %}
             {% set ns.h = ns.h + ([(r.max | float(0)) - (r.min | float(0)), 0] | max) %}
           {% endfor %}
-          {% for r in s.get('sensor.alternator_charger_energy_wh', []) %}
+          {% for r in s.get('sensor.alternator_charger_energy_wh', []) if as_timestamp(r.start) < cutoff %}
             {% set ns.wh = ns.wh + ([r.change | float(0), 0] | max) %}
           {% endfor %}
-          {% for r in s.get('sensor.vehicle_distance_odometer', []) %}
+          {% for r in s.get('sensor.vehicle_distance_odometer', []) if as_timestamp(r.start) < cutoff %}
             {% set ns.km = ns.km + ([r.change | float(0), 0] | max) %}
           {% endfor %}
           {{ dict(engine_l_per_day=(ns.l / 7) | round(2), engine_cad_per_day=(ns.l / 7 * price) | round(2),
