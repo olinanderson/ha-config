@@ -15554,7 +15554,7 @@ function Gy({ compact: t = !1 }) {
             unit: "",
             color: "#f59e0b",
             hours: 24,
-            title: "Extra gas for 10 % of the pack from the alternator chargers while driving (≈0.57 L), at today's price — an estimate. Idling barely charges"
+            title: "Extra gas for 10 % of the pack from the alternator chargers while driving (≈0.57 L), at today's price — an estimate. Idling just to charge burns ≈1.3 L for it"
           }
         ),
         /* @__PURE__ */ r.jsx(Je, { entityId: "sensor.olins_van_bms_stored_energy", label: "Stored", value: ye(f, 0), unit: "Wh", color: "#8b5cf6" }),
@@ -26513,7 +26513,7 @@ function $5() {
           label: "Driving, 7 d",
           value: eo(h == null ? void 0 : h.engine_cad_per_day),
           detail: `${ye(h == null ? void 0 : h.engine_l_per_day, 1)} L · ${ye(h == null ? void 0 : h.km_per_day, 0)} km a day`,
-          title: "The engine's fuel per day (OBD estimate; idling reads low), at today's price"
+          title: "The engine's fuel per day (OBD estimate), at today's price"
         }
       ),
       /* @__PURE__ */ r.jsx(
@@ -26543,7 +26543,7 @@ function $5() {
           unit: "",
           color: "#22c55e",
           hours: 24,
-          title: "Extra gas for a tenth of the pack from the chargers while driving (≈0.57 L), at today's price. Idling barely charges — the chargers throttle with the alternator at idle"
+          title: "Extra gas for a tenth of the pack from the chargers while driving (≈0.57 L), at today's price. Idling just to charge burns ≈1.3 L for it"
         }
       ),
       g.length > 0 && /* @__PURE__ */ r.jsxs("div", { className: "pt-1", children: [

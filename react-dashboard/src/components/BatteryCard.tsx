@@ -99,7 +99,7 @@ export function BatteryCard({ compact = false }: { compact?: boolean }) {
               unit=""
               color="#f59e0b"
               hours={24}
-              title="Extra gas for 10 % of the pack from the alternator chargers while driving (≈0.57 L), at today's price — an estimate. Idling barely charges"
+              title="Extra gas for 10 % of the pack from the alternator chargers while driving (≈0.57 L), at today's price — an estimate. Idling just to charge burns ≈1.3 L for it"
             />
           )}
           <SparklineStat entityId="sensor.olins_van_bms_stored_energy" label="Stored" value={fmt(stored, 0)} unit="Wh" color="#8b5cf6" />

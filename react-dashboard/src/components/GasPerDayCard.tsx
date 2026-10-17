@@ -90,7 +90,7 @@ export function GasPerDayCard() {
           label="Driving, 7 d"
           value={cad(summary?.engine_cad_per_day)}
           detail={`${fmt(summary?.engine_l_per_day, 1)} L · ${fmt(summary?.km_per_day, 0)} km a day`}
-          title="The engine's fuel per day (OBD estimate; idling reads low), at today's price"
+          title="The engine's fuel per day (OBD estimate), at today's price"
         />
         <Row
           label="Heater, 7 d"
@@ -111,7 +111,7 @@ export function GasPerDayCard() {
           unit=""
           color="#22c55e"
           hours={24}
-          title="Extra gas for a tenth of the pack from the chargers while driving (≈0.57 L), at today's price. Idling barely charges — the chargers throttle with the alternator at idle"
+          title="Extra gas for a tenth of the pack from the chargers while driving (≈0.57 L), at today's price. Idling just to charge burns ≈1.3 L for it"
         />
         {days.length > 0 && (
           <div className="pt-1">

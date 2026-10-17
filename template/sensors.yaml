@@ -317,7 +317,18 @@
     # Before: curve 0.60 at 600 → 1.0 at 3000 RPM (floor 0.55), no barometer,
     # VE 0.49 (0.475 from 2026-09-25). That read the engine's fuel 15–30 % low
     # (least in Calgary, most on highway legs near sea level): highway a third
-    # low, while warm idle came out ~40 % above the new curve (5.2 vs 3.7 L/h).
+    # low, while warm idle came out ~40 % above the new curve (4.2 vs 3.0 L/h
+    # on the warm stops before 2026-10-08).
+    #
+    # Idle, checked 2026-10-17: the 40 stops of 2+ min with the engine running
+    # (2026-08-22 → 10-17, 208 min; ~1,100 RPM, load ~42 %, chargers ~1.7 kW)
+    # read 2.1–4.5 L/h, 2.9 on average, plausible for this idle with the
+    # alternator loaded. 22F404 comes with the RPM (missing only in the first
+    # seconds after a start, 5 min in 66 engine-hours): no PID 04 fallback.
+    # Don't judge idle from hourly statistics: the WiCAN sensors go unavailable
+    # 30 s after the engine stops and the hourly mean/min/max carry their last
+    # number to the end of the hour, so half a minute of idle looks like an
+    # idle hour while this sensor (0 without OBD data) rightly averages ~0.
 
     - name: "Estimated Fuel Rate"
       unique_id: estimated_fuel_rate

@@ -86,6 +86,24 @@ cold-weather fills.
 The Espar heater's fuel is not in the estimate. Allow ≈0.25 L/h of on-time of
 `switch.a32_pro_switch24_hydronic_heater` (the same windows fit 0.15–0.3).
 
+Idle, checked 2026-10-17: the 40 stops of 2 min or more with the engine running
+(2026-08-22 → 10-17, 208 min in all; ~1,100 RPM, load ~42 %, the chargers making
+~1.7 kW) read 2.1–4.5 L/h, 2.9 on average, which is plausible for this idle with
+the alternator loaded. Stopped with the engine running is ~16 % of engine time
+but ~4 % of the fuel. `22F404` arrives with the RPM (it is missing only in the
+first seconds after a start, 5 min in 66 engine-hours), so the template has no
+PID 04 fallback.
+
+Don't judge the estimate from hourly statistics of the WiCAN sensors. They go
+unavailable 30 s after the engine stops (`expire_after`), and HA's hourly
+mean/min/max skip unavailable states and carry the last number to the end of the
+hour. An hour in which the engine ran for half a minute then shows a whole hour
+at ~1,050 RPM and 35 % load, while `sensor.estimated_fuel_rate` (0 with no OBD
+data) rightly averages ~0. That made five hours (2026-08-30 → 10-02) look like
+idle read at 0.0–0.6 L/h: the engine ran 0.5–8.4 min in each, and on those
+minutes the model reads 2.1–5.3 L/h. Use raw states, and count engine time as
+the time the RPM sensor has a number.
+
 Re-checking the VE by hand (the fill-up auto-calibration is off, see the note
 above `fill_up_detected` in automations.yaml): between two fills to full, real =
 litres bought at the second fill, minus 0.25 L/h × heater hours; estimate = the
@@ -111,9 +129,10 @@ per day" card (`GasPerDayCard.tsx`) and the battery cards read these sensors:
 Heater fuel is 0.25 L per hour of on-time (above). Charging fuel is an estimate,
 not a measurement: 0.75 L per kWh the chargers deliver (gasoline 8.9 kWh/L, the
 engine ≈30 % at cruise, the alternator ≈55 %, the DC-DC chargers ≈90 %), i.e.
-the extra fuel while driving anyway. Idling is not costed because it hardly
-charges: in the five full idle hours in the statistics (2026-08-30 → 10-02) the
-chargers averaged 0–240 W, even at 19 % SoC, against ~2 kW on the road — the
-Transit's smart alternator sits low at idle and the chargers throttle. The fuel
-estimate also reads those idle hours at 0.0–0.6 L/h, far below a real idle
-(≈1.5–2 L/h), so idle fuel is undercounted everywhere it appears.
+the extra fuel while driving anyway; charging at idle is costed the same. Idling
+does charge: in the 40 stops above the chargers made ~1.7 kW (1.5–2.0 kW in 32
+of them), against ~2 kW on the road. Idling only to charge, though, spends all of
+the idle fuel on it: ≈2.9 L/h for ≈1.7 kWh, ≈1.7 L per kWh, so ≈1.3 L per 10 %
+of the pack instead of 0.57 L. Corrected 2026-10-17: this said idling hardly
+charges and the estimate reads idle at ~0 L/h, both from the hourly-statistics
+artifact above.
