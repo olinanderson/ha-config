@@ -2446,6 +2446,8 @@
 #   One-way IR is backed up three ways since the night of 2026-09-18: the AG
 #   Pro spaces fan and A/C frames, the fan's off is sent twice, and
 #   night_climate_fan_watchdog re-sends it if the motor still draws power.
+#   A roof fan speed or direction set by hand while a program runs becomes
+#   the card's setting (night_climate_fan_set_by_hand, 2026-10-17).
 # ────────────────────────────────────────────────────────────────
 - id: night_climate_start_on_sleep
   alias: "Night Climate – start with Sleep Mode"
@@ -2866,6 +2868,62 @@
                     - action: script.night_climate_heater_to
                       data:
                         target: "{{ target }}"
+
+# The roof fan set by hand while a program runs: its speed and direction
+# become the program's settings (the card's Fan speed and Fan direction), so
+# the next tick holds what the user chose. Until 2026-10-17 the controller
+# put the card's 30 % back every 5 min against the user's 100 %: Fan all night
+# re-sent it (script.night_climate_fan_on), and the Program re-armed the fan's
+# thermostat at it after the hand frame had ended auto mode. The controller's
+# own writes carry its run context (the fan's state lands within HA's 5 s
+# context window after the call); the thermostat frame's state comes back from
+# the AG Pro under a fresh context, but it is built from these settings, so
+# adopting it changes nothing. The controller runs at once when a setting
+# changes, and the fan scripts send nothing when the fan already matches.
+- id: night_climate_fan_set_by_hand
+  alias: "Night Climate – fan set by hand keeps its speed"
+  mode: queued
+  max_exceeded: silent
+  trigger:
+    - trigger: state
+      entity_id: fan.ag_pro_roof_fan
+      attribute: percentage
+    - trigger: state
+      entity_id: fan.ag_pro_roof_fan
+      attribute: direction
+    - trigger: state
+      entity_id: fan.ag_pro_roof_fan
+      to: "on"
+  condition:
+    - "{{ states('input_select.night_climate_mode') in ['Fan all night', 'Program', 'Hold'] }}"
+    - condition: state
+      entity_id: fan.ag_pro_roof_fan
+      state: "on"
+    # Not the controller's own write
+    - >-
+      {{ states.automation.night_climate_controller is none
+         or trigger.to_state.context.id != states.automation.night_climate_controller.context.id }}
+  action:
+    - variables:
+        pct: "{{ state_attr('fan.ag_pro_roof_fan', 'percentage') | int(0) }}"
+        dir_now: "{{ state_attr('fan.ag_pro_roof_fan', 'direction') }}"
+        want_dir: "{{ 'Exhaust' if dir_now == 'forward' else 'Intake' }}"
+    - if:
+        - "{{ pct >= 10 and pct != states('input_number.night_climate_fan_speed') | int(0) }}"
+      then:
+        - action: input_number.set_value
+          target:
+            entity_id: input_number.night_climate_fan_speed
+          data:
+            value: "{{ pct }}"
+    - if:
+        - "{{ dir_now in ['forward', 'reverse'] and not is_state('input_select.night_climate_fan_direction', want_dir) }}"
+      then:
+        - action: input_select.select_option
+          target:
+            entity_id: input_select.night_climate_fan_direction
+          data:
+            option: "{{ want_dir }}"
 
 # The A/C fan level on the Climate Program card: the program starts the A/C at
 # it (script.night_climate_ac_on), and a change while a program mode has the
