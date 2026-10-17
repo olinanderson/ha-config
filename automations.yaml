@@ -2797,7 +2797,15 @@
                             - action: script.night_climate_ac_on
                               data:
                                 target: "{{ target }}"
-                        - conditions: "{{ use_fan and fan_ok and not ac_ok }}"
+                        # A fan the program runs (its thermostat armed, or HA's from
+                        # the room sensor) keeps going down to the keep margin
+                        # (0.3 °C); only a start needs the full 1 °C. Until
+                        # 2026-10-17 this band used the start margin for both, and
+                        # the underneath-van reading, swinging about 2 °C every
+                        # 10 min, switched a running fan off within minutes.
+                        - conditions: >-
+                            {{ use_fan and not ac_ok
+                               and (fan_keep if (fan_thermo or (fan_on and fan_by_room)) else fan_ok) }}
                           sequence:
                             - choose:
                                 # Its own thermostat sat idle: HA runs the fan from
