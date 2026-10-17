@@ -383,6 +383,7 @@ zigbee2mqtt/                    # Zigbee2MQTT config
 
 ### Energy Sensors (Riemann integration, Wh)
 Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.mppt1_energy_wh` and `sensor.mppt2_energy_wh`.
+`method: left` + `max_sub_interval` 5 min since 2026-10-17 (needs a restart to load). Trapezoidal over-counted after every silent 0 W stretch (2026-09-28: +5.7 kWh phantom on the alternator), so totals from before read high: the bias per channel and the days to ignore are in `docs/entities.md` → Energy Sensors. For past days use the power sensor's statistics mean × hours. The 12 V bus's integrator is `sensor.all_24v_devices_energy_wh_2`.
 
 ### Water System
 | Entity | Description |

@@ -79,6 +79,66 @@ Two Victron controllers, read over BLE by the a32-pro ESP32. Panels are Custom M
 
 ## Energy Sensors (Riemann integration, Wh)
 Pattern: `sensor.*_energy_wh` — one for each power sensor, plus `sensor.mppt1_energy_wh` and `sensor.mppt2_energy_wh`.
+Defined in `integrations/sensor.yaml`. The 12 V bus's integrator is `sensor.all_24v_devices_energy_wh_2`
+(unique_id `all_12v_devices_energy_wh`); `sensor.all_24v_devices_energy_wh` is the 24 V bus.
+
+**Method:** `method: left` + `max_sub_interval: 5 min` since 2026-10-17, loaded at the first HA restart
+after that. They were trapezoidal before and over-counted. A power template writes only when its value
+changes, so an idle channel sits at exactly 0 W with no writes for hours (an A32 or BMS dropout reads
+0 W too). The trapezoid then booked the next step at half its value over the whole silent stretch.
+On 2026-09-28 the alternator template held 0 W from 21:25 to 09:48; the engine started, the first
+sample was 736 W, and the integral jumped 4,556 Wh at once, in an hour that really had 287 Wh.
+Nothing was offline that night: the A32 reported 0.0 A and the BMS voltage kept updating.
+
+**Totals recorded before the fix read high.** For any past hour or day, the truth is the power
+sensor's time-weighted mean from the long-term statistics × the hours (statistics card or
+`recorder/statistics_during_period`, type `mean`): e.g. `sensor.shore_power_charger_power_24v`'s
+daily mean × 24 = Wh that day. Replaying the raw states with the left rule matches those means to
+within 1 Wh an hour. Hour-by-hour check of every integrator against its source's mean, 2026-10-17:
+
+| Channel | Aug 18 – Oct 16 2026 | Feb 18 2025 – Aug 17 2026 |
+|---|---|---|
+| Alternator chargers | +22 % | +32 % |
+| Inverter | +11 % (quiet days +0.15–0.25 kWh) | +33 % |
+| Shore charger | +7 % (Oct 6–15: +10 %, 0.2–1.3 kWh a day) | +35 % (winter 2025–26 often 2–3× the truth) |
+| A/C | +15 % | +28 % |
+| Roof fan | +27 % | +20 % |
+| 24 V bus / 12 V bus | +1 % / 0 % | +5 % / +3 % |
+| MPPT1 / MPPT2 | +5 % / +2 % | +10 % / +2 % |
+| Bed motor, battery heater | almost all phantom (true use ≈ 0) | +47 % / +41 % |
+
+Days to ignore since 2026-04 (a phantom of ≥ 1 kWh, or ≥ 300 Wh and ≥ 50 % of the day):
+
+| Day | Channel | Counted | True |
+|---|---|---|---|
+| 2026-10-13 | Shore charger | 8,092 Wh | 6,782 Wh |
+| 2026-10-04 | Alternator chargers | 9,838 Wh | 7,730 Wh |
+| 2026-10-02 | Alternator chargers | 4,890 Wh | 3,770 Wh |
+| 2026-09-28 | Alternator chargers | 7,377 Wh | 1,711 Wh |
+| 2026-09-28 | Roof fan | 248 Wh | 7 Wh |
+| 2026-09-23 | Shore charger | 5,853 Wh | 4,730 Wh |
+| 2026-09-16 | Inverter | 3,126 Wh | 2,047 Wh |
+| 2026-09-14 | Shore charger | 7,101 Wh | 6,074 Wh |
+| 2026-09-04 | Alternator chargers | 2,306 Wh | 819 Wh |
+| 2026-08-22 | Alternator chargers | 2,200 Wh | 754 Wh |
+| 2026-06-21 | MPPT1 | 1,381 Wh | 138 Wh |
+| 2026-06-19 | Inverter | 485 Wh | 115 Wh |
+| 2026-05-05 | MPPT1 | 640 Wh | 231 Wh |
+| 2026-05-03 | MPPT1 | 2,685 Wh | 63 Wh |
+| 2026-04-20 | MPPT1 | 1,002 Wh | 464 Wh |
+| 2026-04-17, 04-15, 04-01 | Alternator chargers | 976, 1,334, 694 Wh | 430, 565, 359 Wh |
+| 2026-04-01 | Shore charger | 2,177 Wh | 1,219 Wh |
+
+Older: 2025-03-07 is wrong on every channel (+2.7 to +94 kWh each, one step after 125 silent
+hours). The shore charger is wrong on most shore days from Aug 2025 to Apr 2026 (1–5 kWh a day too
+much). The alternator is wrong on drive days after a long park (0.3–3.3 kWh: 2025-09-03, 09-04,
+10-02, and most drive days of Nov 2025 – Mar 2026). MPPT1 also on 2025-10-03, 2025-10-12, 2026-01-31
+and 2026-03-17 (+5.2 kWh).
+
+**HA down:** 2025-08-05 23:00 → 08-06 08:00, 2025-11-09 16:00–17:00, 2026-06-07 19:00 → 06-08 10:00
+and 2026-09-30 11:00–17:00 (the whole-van power-off). The integrators counted nothing then, and lost
+up to 15 min more at the restart, when they restored their last saved value. The statistics' means
+are no truth for those hours either: the recorder carries the last value through the gap.
 
 ## Water System
 | Entity | Description |

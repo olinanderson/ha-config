@@ -67,53 +67,86 @@
   end: "{{ now() }}"
 
 # ─── Riemann sum energy integrations (Wh) ───
+# method: left + max_sub_interval 5 min since 2026-10-17 (trapezoidal before).
+# The power templates (template/sensors.yaml) write only when their value
+# changes, so a channel that is off sits at exactly 0 W with no writes for
+# hours (an A32 or BMS dropout reads 0 W too, through float(0)). Trapezoidal
+# then books the next step at half its value over the whole silent stretch:
+# on 2026-09-28 the alternator template held 0 W from 21:25 to 09:48, the
+# engine started, the first sample was 736 W, and the integral jumped
+# 4,556 Wh at once (that hour really had 287 Wh). Noise blips and the shore
+# charger's float pulses did the same on a small scale every day: Aug 18 –
+# Oct 16 2026 the alternator total read 22 % high, the inverter 11 %, the
+# shore charger 7 %. HA's docs prefer left for sources that hold their state
+# for long periods, and max_sub_interval for sources that stay constant
+# (their energy example uses 5 min). Left holds each value until the next
+# one, which is what these step-like sources do: replaying the raw states
+# with it matches the recorder's time-weighted means to within 1 Wh an hour.
+# The timer books a steady load in the hour it happens instead of at the
+# next change.
+# Legacy platform: loaded at an HA restart only, no reload. Days whose totals
+# are wrong from before the change: docs/entities.md, Energy Sensors.
 - platform: integration
   name: "Air Conditioning Energy (Wh)"
   unique_id: "air_conditioning_energy_wh"
   source: sensor.air_conditioning_power_24v
-  method: trapezoidal
+  method: left
+  max_sub_interval:
+    minutes: 5
   round: 2
 
 - platform: integration
   name: "All 24V Devices Energy (Wh)"
   unique_id: "all_24v_devices_energy_wh"
   source: sensor.all_24v_devices_power_24v
-  method: trapezoidal
+  method: left
+  max_sub_interval:
+    minutes: 5
   round: 2
 
 - platform: integration
   name: "All 12 Devices Energy (Wh)"
   unique_id: "all_12v_devices_energy_wh"
   source: sensor.all_12v_devices_power_24v
-  method: trapezoidal
+  method: left
+  max_sub_interval:
+    minutes: 5
   round: 2
 
 - platform: integration
   name: "Inverter Energy (Wh)"
   unique_id: "inverter_energy_wh"
   source: sensor.inverter_power_24v
-  method: trapezoidal
+  method: left
+  max_sub_interval:
+    minutes: 5
   round: 2
 
 - platform: integration
   name: "Alternator Charger Energy (Wh)"
   unique_id: "alternator_charger_energy_wh"
   source: sensor.alternator_charger_power_24v
-  method: trapezoidal
+  method: left
+  max_sub_interval:
+    minutes: 5
   round: 2
 
 - platform: integration
   name: "Battery Heater Energy (Wh)"
   unique_id: "battery_heater_energy_wh"
   source: sensor.battery_heater_power_12v
-  method: trapezoidal
+  method: left
+  max_sub_interval:
+    minutes: 5
   round: 2
 
 - platform: integration
   name: "Roof Fan Energy (Wh)"
   unique_id: "roof_fan_energy_wh"
   source: sensor.roof_fan_power_12v
-  method: trapezoidal
+  method: left
+  max_sub_interval:
+    minutes: 5
   round: 2
 
 # Unbounded LIFETIME Riemann total of the speed-density fuel rate (L). This is
@@ -121,6 +154,11 @@
 # fuel-trips/fuel-stats endpoints read DELTAS of this sensor (litres burned over
 # a window) and divide by GPS distance to get L/100km. Resets to 0 on HA restart,
 # so consumers must guard delta < 0. Never surface it raw on a fuel-level card.
+# Stays trapezoidal (checked 2026-10-17): its rpm attribute rewrites the
+# template every second once the engine turns, so the first non-zero rate is
+# never booked over a silent stretch; the hourly check found no phantom
+# litres after its first day (2026-06-03). The VE fit in template/sensors.yaml
+# was made on this method's totals.
 - platform: integration
   name: "Estimated Fuel Used Total (L)"
   unique_id: "estimated_fuel_used_total_l"
@@ -133,26 +171,34 @@
   name: "Bed Motor Energy (Wh)"
   unique_id: "bed_motor_energy_wh"
   source: sensor.bed_motor_power_24v
-  method: trapezoidal
+  method: left
+  max_sub_interval:
+    minutes: 5
   round: 2
 
 - platform: integration
   name: "Shore Power Charger Energy (Wh)"
   unique_id: "shore_power_charger_energy_wh"
   source: sensor.shore_power_charger_power_24v
-  method: trapezoidal
+  method: left
+  max_sub_interval:
+    minutes: 5
   round: 2
 
 - platform: integration
   name: "MPPT1 Energy (Wh)"
   unique_id: "mppt1_energy_wh"
   source: sensor.a32_pro_mppt1_pv_power
-  method: trapezoidal
+  method: left
+  max_sub_interval:
+    minutes: 5
   round: 2
 
 - platform: integration
   name: "MPPT2 Energy (Wh)"
   unique_id: "mppt2_energy_wh"
   source: sensor.a32_pro_mppt2_pv_power
-  method: trapezoidal
+  method: left
+  max_sub_interval:
+    minutes: 5
   round: 2
