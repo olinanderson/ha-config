@@ -102,10 +102,12 @@
         {% set h = states('sensor.heater_on_time_today') | float(none) %}
         {{ none if h is none else (h * 0.25) | round(2) }}
 
+    # No device_class, like the other "today" sensors: energy allows only
+    # total/total_increasing, and HA logged measurement + energy at every
+    # template reload. Wh alone keeps the statistics' unit class (energy).
     - name: Alternator Energy Today
       unique_id: alternator_energy_today
       unit_of_measurement: Wh
-      device_class: energy
       state_class: measurement
       icon: mdi:engine
       state: >
