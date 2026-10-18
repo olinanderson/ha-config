@@ -279,9 +279,15 @@
 # A lifetime trip odometer built by integrating OBD vehicle speed (trapezoidal)
 # on each speed update — accurate, GPS-independent, and updates ~1 Hz while
 # driving. Live trip distance = this − input_number.trip_baseline_distance_km.
-# Mirrors "Vehicle Acceleration": dt from the trigger states' last_updated, a
-# 30 s dt cap so a WiCAN dropout can't inject a huge phantom segment, and a
-# speed sanity gate so a negative or 255-style sentinel can't spike it.
+# dt comes from the trigger states' last_updated, and a speed sanity gate keeps
+# a negative or 255-style sentinel from spiking it. A WiCAN dropout can't add a
+# phantom segment: expire_after: 30 turns the speed unavailable and those ends
+# are skipped. An unchanged integer speed writes no new state, so a steady
+# cruise arrives as one long gap (up to 124 s in 60 days of driving): under
+# 30 s is a trapezoid, 30 s – 10 min counts at the held speed, longer is
+# skipped. Until 2026-10-17 every gap over 30 s was dropped, which read 8 % low
+# overall and ~20 % low on highway legs (Oct 4–17: 1,353 km against 1,561 by
+# GPS). The OBD speed itself also reads ~5 % below GPS (not corrected here).
 # Trigger-based template sensors restore their last state across a Core restart
 # and across a template.reload (this.state survives), so the lifetime total
 # persists. Checked in the recorder: the reloads of 2026-09-18 and 2026-09-25
@@ -306,10 +312,12 @@
           {% set prev = f | float(-1) %}
           {% set curr = t | float(-1) %}
           {% set dt = (trigger.to_state.last_updated - trigger.from_state.last_updated).total_seconds() %}
-          {# Skip implausible speeds (negative / 255-style sentinel) and dropout
-             gaps (>30 s) so neither inflates the one-directional lifetime total. #}
-          {% if prev >= 0 and curr >= 0 and prev <= 180 and curr <= 180 and dt > 0 and dt < 30 %}
-            {{ (base + (prev + curr) / 2 * dt / 3600) | round(4) }}
+          {# Skip implausible speeds (negative / 255-style sentinel) and gaps of
+             10 min or more so neither inflates the one-directional lifetime total.
+             A gap of 30 s or more is a steady speed: count it at the held one. #}
+          {% if prev >= 0 and curr >= 0 and prev <= 180 and curr <= 180 and dt > 0 and dt < 600 %}
+            {% set v = (prev + curr) / 2 if dt < 30 else prev %}
+            {{ (base + v * dt / 3600) | round(4) }}
           {% else %}
             {{ base }}
           {% endif %}
@@ -353,8 +361,10 @@
 # ─── Moving Seconds Total (triggered, s) ─────────────────────────────────────
 # Lifetime driving time (seconds the van is actually moving), summing dt between
 # OBD speed updates while vehicle_is_moving is on. The live trip's "driving" time
-# and avg speed come from this, so a long idle doesn't inflate them. Same 30 s
-# dt dropout cap as the odometer.
+# and avg speed come from this, so a long idle doesn't inflate them. Gaps follow
+# the odometer: a gap of 30 s – 10 min is a steady speed, counted when the held
+# speed is over the stopped threshold (vehicle_is_moving at the gap's end would
+# also count a long wait at 0 km/h).
 - trigger:
     - trigger: state
       entity_id: sensor.192_168_10_90_0d_vehiclespeed
@@ -368,7 +378,11 @@
         {% set base = this.state | float(0) %}
         {% set dt = (trigger.to_state.last_updated - trigger.from_state.last_updated).total_seconds()
                     if (trigger.from_state and trigger.to_state) else 0 %}
+        {% set held = trigger.from_state.state | float(-1) if trigger.from_state else -1 %}
         {% if dt > 0 and dt < 30 and is_state('binary_sensor.vehicle_is_moving','on') %}
+          {{ (base + dt) | round(1) }}
+        {% elif dt >= 30 and dt < 600 and held <= 180
+                and held > states('input_number.vehicle_stopped_threshold') | float(2) %}
           {{ (base + dt) | round(1) }}
         {% else %}
           {{ base }}
@@ -383,7 +397,7 @@
 # stays high → resumes highway on departure). The smoothing itself supplies the
 # dwell, so one fast pass in town or a slow patch on the freeway can't mislabel a
 # whole trip. dt-aware alpha (tau≈45 s) so a variable OBD update rate / dropout
-# can't bias it; 30 s dt cap + speed sanity gate mirror the odometer.
+# can't bias it; dt capped at 30 s, plus the odometer's speed sanity gate.
 - trigger:
     - trigger: state
       entity_id: sensor.192_168_10_90_0d_vehiclespeed
@@ -475,9 +489,10 @@
           {% set prev = f | float(-1) %}
           {% set curr = t | float(-1) %}
           {% set dt = (trigger.to_state.last_updated - trigger.from_state.last_updated).total_seconds() %}
-          {% if prev >= 0 and curr >= 0 and prev <= 180 and curr <= 180 and dt > 0 and dt < 30
+          {% if prev >= 0 and curr >= 0 and prev <= 180 and curr <= 180 and dt > 0 and dt < 600
                 and is_state('sensor.drive_class','highway') %}
-            {{ (base + (prev + curr) / 2 * dt / 3600) | round(4) }}
+            {% set v = (prev + curr) / 2 if dt < 30 else prev %}
+            {{ (base + v * dt / 3600) | round(4) }}
           {% else %}
             {{ base }}
           {% endif %}

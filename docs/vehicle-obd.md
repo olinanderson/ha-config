@@ -62,6 +62,27 @@ web UI at `http://192.168.10.90` (use browser automation).
 | `binary_sensor.low_tire_pressure` | Any tire < 35 psi |
 | `binary_sensor.vehicle_is_moving` | Speed > threshold AND engine running |
 | `binary_sensor.engine_is_running` | RPM > 0 (freshness-based) |
+| `sensor.vehicle_distance_odometer` | Lifetime km, the OBD speed integrated on each update (template/triggered.yaml, see below) |
+| `sensor.moving_seconds_total` | Lifetime seconds moving, same gap rule |
+| `sensor.highway_distance_total` | Lifetime km while `sensor.drive_class` is highway, same gap rule |
+
+### Odometer
+
+The speed sensor writes a state only when the integer km/h changes, so a steady
+cruise arrives as one long gap (up to 124 s in 60 days of driving). Under 30 s
+between updates counts as a trapezoid, 30 s – 10 min at the held speed, longer
+is skipped. A dropout can't add distance: `expire_after: 30` turns the speed
+unavailable. Until 2026-10-17 every gap over 30 s was dropped, 8 % low overall
+and ~20 % on highway legs (Oct 4–17: 1,353 km, 1,479 with the new rule, 1,561
+by GPS). Totals from before then stay low, and so do the lifetime ratios built
+on them (highway/city fuel cost per 100 km).
+
+The OBD speed itself reads ~5.5 % below GPS (−5.2 to −5.5 % on every leg), so
+the odometer still reads ~5 % short and `estimated_fuel_consumption` ~5 % high.
+No factor is applied. To check a drive against GPS, sum the
+`device_tracker.ublox_gps_filtered` segments whose midpoint falls while the
+speed is over 1 km/h. Gating on a segment's start counts ferry crossings: the
+filtered tracker holds still on board and jumps once on the far side.
 
 ## Fuel Estimation Notes
 
