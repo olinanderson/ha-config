@@ -561,10 +561,12 @@ export function CurrentTripCard() {
                   <span>since {fmtClock(startTs)}</span>
                 </>
               )}
+              {/* A calibration constant, so a phone leaves it out: with the idle
+                  litres in, the line would wrap and the card grow 16 px. */}
               {veCorrection != null && (
                 <>
-                  <span aria-hidden>·</span>
-                  <span title="Fuel model VE calibration factor (learned from fill-ups)">
+                  <span aria-hidden className="max-sm:hidden">·</span>
+                  <span className="max-sm:hidden" title="Fuel model VE calibration factor (learned from fill-ups)">
                     VE {veCorrection.toFixed(2)}
                   </span>
                 </>

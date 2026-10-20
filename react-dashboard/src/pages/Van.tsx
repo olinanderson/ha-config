@@ -704,12 +704,17 @@ export default function Van() {
     <PageContainer title="Van & Vehicle" compactOnPhone>
       <DTCBanner placement="top" />
       <StarlinkBanner />
-      {/* On a phone, with no banner above it, it takes half the top padding */}
-      <ElevationBar className="max-sm:first:-mt-2" />
-      <VanBadges />
-      <MainHeroCard />
-      <CurrentTripCard />
-      <LivingSpaceCard />
+      {/* The elevation runs down the right of the driving screen. On a phone
+          it takes most of the page's right padding, so the cards lose 7 px. */}
+      <div className="flex gap-3 max-sm:-mr-[13px] max-sm:gap-1">
+        <div className="min-w-0 flex-1 space-y-4 max-sm:space-y-3">
+          <VanBadges />
+          <MainHeroCard />
+          <CurrentTripCard />
+          <LivingSpaceCard />
+        </div>
+        <ElevationBar />
+      </div>
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
         <div className="space-y-4">
           <DiagnosticsCard />

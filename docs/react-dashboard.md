@@ -196,26 +196,31 @@ drive away from shore power neither will cool.
 
 ## Van Page on a Phone
 
-On a phone the top of the Van page is the driving screen: the elevation bar, the badges, hero (Power +
-Driving), Current Trip, Living Space, all visible without scrolling. The target is an iPhone 16 Pro Max in
-the HA app, which renders the page at 87.5 % zoom: 503 × 1022 CSS px, the tab bar ends at 45 and the Living
-Space card has to end by 999 to clear the home indicator. Driving on the highway with the gas cost of
-charging showing, it ends at 994 (2026-10-20); Auto with three running pills and the fuel averages add
-nothing (the pills sit in the header; in the narrow band tiles "12.6 worse" wraps into room the taller
-Overall tile leaves). Below `sm` the fit comes from:
-`PageContainer compactOnPhone` (no page title, `space-y-2` between cards), the elevation bar 20 px tall and
-pulled up into the page's top padding when no banner is above it (`max-sm:first:-mt-2`), the single-line
-badges, the hero card's tighter padding (`max-sm:py-1` tiles), the Battery tile's line under the % holding
-two of Wh, drive rate and gas cost (the Wh gives way when both others show; wider screens give each its
-own line), the "Net amps" tile's alternator charger output ("alt 19.8 A",
-`sensor.a32_pro_s5140_channel_8_current_24v_alternator_charger`, shown from 0.5 A, tap for history) on the
-same line as the pack watts, the trip stats as one row of four with the range, the city/highway explainer
-hidden (it is also on the trip history card), `pt-4` headers and `pt-2` card content on the trip and
-living space cards, and the living space status kept to one truncated line. The band tile's NOW chip
-wraps under HIGHWAY there rather than being clipped (the Overall tile is taller anyway). Still over: once
-the trip has burned more than 0.05 L idling, "x.x L idle" wraps the trip's stats line to two lines and the
-card ends at 1010. Alert banners (DTC with the CEL on, Starlink recovery, Shop Mode) push the cards down
-on purpose. Anything added to these three cards or above them needs re-measuring on that screen.
+On a phone the top of the Van page is the driving screen: the badges, hero (Power + Driving), Current
+Trip, Living Space, all visible without scrolling, with the elevation bar running down their right side.
+The target is an iPhone 16 Pro Max in the HA app, which renders the page at 87.5 % zoom: 503 × 1022 CSS
+px, the tab bar ends at 45 and the Living Space card has to end by 999 to clear the home indicator. It
+ends at 986 with a current trip showing (980 with the last trip, 2026-10-20), and the widest driving
+values add nothing: "+105.3", "-10.5%" and the like fit the hero tiles, the Battery and Net amps lines
+stay one line, the trip's stats line "102 km/h avg · 12.3 km/L · 12.3 L idle · since 12:32 PM · trim
+-10.2%" keeps 15 px to spare, and Auto with every running pill and the fuel averages add nothing either
+(the pills sit in the header; in the narrow band tiles "12.6 worse" wraps into room the taller Overall
+tile leaves). Below `sm` the fit comes from: `PageContainer compactOnPhone` (no page title, `space-y-3`
+between cards); the elevation bar in the page's right padding (the row reaches 13 px into it,
+`max-sm:-mr-[13px]`, with a 4 px gap; the bar is 16 px wide and its reading runs up the bar, rotated), so
+the cards are 464 px wide, 7 px less than without it, which leaves the L/100km units 6 px (Overall) and
+8 px (City, Highway) from their tile edges; the single-line badges; the hero card's tighter padding
+(`max-sm:py-1` tiles); the Battery tile's line under the % holding two of Wh, drive rate and gas cost (the
+Wh gives way when both others show; wider screens give each its own line); the "Net amps" tile's
+alternator charger output ("alt 19.8 A", `sensor.a32_pro_s5140_channel_8_current_24v_alternator_charger`,
+shown from 0.5 A, tap for history) on the same line as the pack watts; the trip stats as one row of four
+with the range; the city/highway explainer hidden (it is also on the trip history card); the trip's stats
+line without "VE 0.80" (a calibration constant; with "x.x L idle" in, the line wrapped and the card grew
+16 px; wider screens keep it); `pt-4` headers and `pt-2` card content on the trip and living space cards;
+and the living space status kept to one truncated line. The band tile's NOW chip wraps under HIGHWAY there
+rather than being clipped (the Overall tile is taller anyway). Alert banners (DTC with the CEL on,
+Starlink recovery, Shop Mode) push the cards down on purpose; the bar starts under them. Anything added to
+these three cards or above them, or anything wider in their tiles, needs re-measuring on that screen.
 
 ## CSS Scoping
 
