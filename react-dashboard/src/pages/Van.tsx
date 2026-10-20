@@ -1,5 +1,6 @@
 import { PageContainer } from '@/components/layout/PageContainer';
 import { CurrentTripCard } from '@/components/CurrentTripCard';
+import { ElevationBar } from '@/components/ElevationBar';
 import { GasPerDayCard } from '@/components/GasPerDayCard';
 import { LivingSpaceCard } from '@/components/LivingSpaceCard';
 import { VanBadges } from '@/components/VanBadges';
@@ -422,6 +423,10 @@ function MainHeroCard() {
   // Engine turning? Decides which voltage scale applies (charging vs resting SOC).
   const engineRunning = (rpm ?? 0) > 400;
   const chargerVColor = chargerVoltageColor(chargerV, engineRunning);
+  // A phone's battery tile has room for two of Wh, drive rate and gas cost on
+  // one line; with all three the line wrapped and the card grew 14 px.
+  const batteryLineFull =
+    engineRunning && driveChargeRate != null && chargeCostPerHour != null && chargeCostPerHour >= 0.05;
 
   const estimate = estimateEntity?.state;
   const estimateDisplay =
@@ -430,6 +435,8 @@ function MainHeroCard() {
       : estimate === 'Idle'
         ? 'Idle'
         : estimate;
+  // The %/h that time assumes (template attribute; none while Idle or Full)
+  const estimateRate = estimateEntity?.attributes?.pct_per_hour;
 
   return (
     <Card>
@@ -475,10 +482,13 @@ function MainHeroCard() {
                     no taller with the engine running (the driving screen). Wider
                     screens give it its own line. */}
                 <p className="text-[9px] tabular-nums text-muted-foreground/70">
-                  {storedWh != null ? `${Math.round(storedWh)} Wh` : '—'}
+                  {/* The Wh gives way on a phone: the % above says the same */}
+                  <span className={cn(batteryLineFull && 'max-sm:hidden')}>
+                    {storedWh != null ? `${Math.round(storedWh)} Wh` : '—'}
+                  </span>
                   {engineRunning && driveChargeRate != null && (
                     <>
-                      <span className="sm:hidden"> · </span>
+                      <span className={batteryLineFull ? 'hidden' : 'sm:hidden'}> · </span>
                       <span
                         className={cn(
                           'font-medium sm:block',
@@ -548,7 +558,17 @@ function MainHeroCard() {
             {/* Long SOC bar, with the time to full / empty at its end */}
             <div className="mt-2 flex items-center gap-3 px-1">
               <Progress value={soc ?? 0} className="h-2.5 flex-1" indicatorClassName={(soc ?? 0) < 20 ? 'bg-red-500' : (soc ?? 0) < 40 ? 'bg-orange-400' : 'bg-green-500'} />
-              <span className="shrink-0 text-sm font-medium tabular-nums text-muted-foreground">{estimateDisplay}</span>
+              <span className="shrink-0 text-sm font-medium tabular-nums text-muted-foreground">
+                {estimateDisplay}
+                {typeof estimateRate === 'number' && (
+                  <span
+                    className="ml-1 text-xs"
+                    title="The % of the pack per hour this time assumes: the 5-min average power, slower above 90 % where the charge tapers"
+                  >
+                    ({estimateRate >= 0 ? '+' : ''}{estimateRate.toFixed(1)}%/h)
+                  </span>
+                )}
+              </span>
             </div>
           </div>
 
@@ -684,6 +704,8 @@ export default function Van() {
     <PageContainer title="Van & Vehicle" compactOnPhone>
       <DTCBanner placement="top" />
       <StarlinkBanner />
+      {/* On a phone, with no banner above it, it takes half the top padding */}
+      <ElevationBar className="max-sm:first:-mt-2" />
       <VanBadges />
       <MainHeroCard />
       <CurrentTripCard />

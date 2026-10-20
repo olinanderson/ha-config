@@ -21,7 +21,7 @@ export function PageContainer({ title, subtitle, children, className, compactOnP
         <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
         {subtitle && <span className="text-xs text-muted-foreground">{subtitle}</span>}
       </div>
-      <div className={cn('space-y-4', compactOnPhone && 'max-sm:space-y-3')}>{children}</div>
+      <div className={cn('space-y-4', compactOnPhone && 'max-sm:space-y-2')}>{children}</div>
     </div>
   );
 }

@@ -38,6 +38,8 @@ export function BatteryCard({ compact = false }: { compact?: boolean }) {
       : estimate === 'Idle'
         ? 'Idle'
         : estimate;
+  // The %/h that time assumes (template attribute; none while Idle or Full)
+  const estimateRate = estimateEntity?.attributes?.pct_per_hour;
   const socNum = soc ?? 0;
   const socColor = socNum < 30 ? 'text-red-500' : socNum < 65 ? 'text-orange-500' : 'text-green-500';
   const barColor =
@@ -122,6 +124,8 @@ export function BatteryCard({ compact = false }: { compact?: boolean }) {
           )}
         >
           {estimateDisplay}
+          {typeof estimateRate === 'number' &&
+            ` (${estimateRate >= 0 ? '+' : ''}${estimateRate.toFixed(1)}%/h)`}
         </p>
       </CardContent>
     </Card>
