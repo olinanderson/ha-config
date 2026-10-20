@@ -485,6 +485,16 @@
     - name: "Battery Time Estimate"
       unique_id: battery_time_estimate
       icon: mdi:battery-clock-outline
+      # Calibrated from 60 days of history (5-min stats):
+      #   • 83.7 Wh per 1% SOC (so "full" target is SOC-based, reaches 0)
+      #   • charge rate is flat up to ~90% SOC, then the CV taper drops it to
+      #     ~0.78x for the last 10% (95-100% measured at ~0.74x of bulk).
+      # Shared by the state and pct_per_hour (rendered once, at load).
+      variables:
+        wh_per_pct: 84.0
+        knee: 90
+        taper: 0.78
+        reserve: 10
       state: >
         {% set soc = states('sensor.olins_van_bms_battery') | float(0) %}
         {% set current = states('sensor.olins_van_bms_current') | float(0) %}
@@ -495,14 +505,6 @@
         {% set p_mean = states('sensor.olins_van_bms_power_5_min_mean') | float(p_inst) %}
         {% set power = p_mean if (p_mean | abs) > 1 else (p_inst if (p_inst | abs) > 1 else current * voltage) %}
         {% set p = power | abs %}
-        {# Calibrated from 60 days of history (5-min stats):
-             • 83.7 Wh per 1% SOC (so "full" target is SOC-based, reaches 0)
-             • charge rate is flat up to ~90% SOC, then the CV taper drops it to
-               ~0.78x for the last 10% (95-100% measured at ~0.74x of bulk). #}
-        {% set wh_per_pct = 84.0 %}
-        {% set knee = 90 %}
-        {% set taper = 0.78 %}
-        {% set reserve = 10 %}
         {% if (current | abs) < 0.4 or p < 6 %}
           Idle
         {% elif current > 0 %}
@@ -537,6 +539,30 @@
             ~{{ m }}m until empty
           {% endif %}
         {% endif %}
+      attributes:
+        # The pace that time assumes, in % of the pack per hour (+ charging,
+        # − discharging): the % still to go (to 100, or down to the reserve)
+        # over the hours, so below the knee it blends the present rate with the
+        # taper. None while Idle or Full. The dashboard shows it in brackets.
+        # Same inputs and model as the state above: change both together.
+        pct_per_hour: >
+          {% set soc = states('sensor.olins_van_bms_battery') | float(0) %}
+          {% set current = states('sensor.olins_van_bms_current') | float(0) %}
+          {% set voltage = states('sensor.olins_van_bms_voltage') | float(26.2) %}
+          {% set p_inst = states('sensor.olins_van_bms_power') | float(0) %}
+          {% set p_mean = states('sensor.olins_van_bms_power_5_min_mean') | float(p_inst) %}
+          {% set power = p_mean if (p_mean | abs) > 1 else (p_inst if (p_inst | abs) > 1 else current * voltage) %}
+          {% set p = power | abs %}
+          {% if (current | abs) < 0.4 or p < 6 or (current > 0 and soc >= 99.5) %}
+            {{ none }}
+          {% elif current > 0 %}
+            {% set bulk = [knee - soc, 0] | max %}
+            {% set taper_pct = [100 - ([soc, knee] | max), 0] | max %}
+            {% set hours = (bulk * wh_per_pct / p) + (taper_pct * wh_per_pct / (p * taper)) %}
+            {{ ((bulk + taper_pct) / hours) | round(1) }}
+          {% else %}
+            {{ (-p / wh_per_pct) | round(1) }}
+          {% endif %}
 
 # ─── Live Trip computer ──────────────────────────────────────────────────────
 # Live, ~1 Hz trip stats for the dashboard's Current Trip card. Distance = OBD
@@ -993,3 +1019,19 @@
         {% set c = (state_attr('sensor.olins_van_bms_delta_voltage', 'cell_voltages') or [])
                    | map('float', 0) | list %}
         {{ ((c[0] - (c[1:8] | sum) / 7) * 1000) | round(0) | int if c | count >= 8 else none }}
+
+# ─── Van elevation (u-blox GPS) ──────────────────────────────────────────────
+# Feet above sea level for the Van page's elevation bar (feet by the user's
+# choice, as the tyres are in psi). From the filtered tracker, which follows the
+# GPS at 1 Hz while moving and keeps the fix from where the van stopped, so a
+# parked van doesn't wander with the GPS's vertical noise. Its elevation is the
+# GGA altitude, above mean sea level.
+- sensor:
+    - name: "Van Elevation"
+      unique_id: van_elevation
+      icon: mdi:image-filter-hdr
+      unit_of_measurement: "ft"
+      device_class: distance
+      state_class: measurement
+      availability: "{{ state_attr('device_tracker.ublox_gps_filtered', 'elevation') is number }}"
+      state: "{{ (state_attr('device_tracker.ublox_gps_filtered', 'elevation') * 3.28084) | round(0) | int }}"
