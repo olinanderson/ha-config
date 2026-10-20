@@ -1025,13 +1025,13 @@
 # choice, as the tyres are in psi). From the filtered tracker, which follows the
 # GPS at 1 Hz while moving and keeps the fix from where the van stopped, so a
 # parked van doesn't wander with the GPS's vertical noise. Its elevation is the
-# GGA altitude, above mean sea level.
+# GGA altitude, above mean sea level. No device_class, as with the tyres: with
+# `distance` this metric install converts feet to metres (seen 2026-10-20).
 - sensor:
     - name: "Van Elevation"
       unique_id: van_elevation
       icon: mdi:image-filter-hdr
       unit_of_measurement: "ft"
-      device_class: distance
       state_class: measurement
       availability: "{{ state_attr('device_tracker.ublox_gps_filtered', 'elevation') is number }}"
       state: "{{ (state_attr('device_tracker.ublox_gps_filtered', 'elevation') * 3.28084) | round(0) | int }}"
