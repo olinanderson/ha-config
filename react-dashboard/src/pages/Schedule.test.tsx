@@ -173,6 +173,8 @@ describe('Schedule — night preset', () => {
     const body = calls.find((c) => c.url.endsWith('/add'))!.body;
     expect(body.timeslots[0].start).toBe('00:30:00');
     expect(body.timeslots[0].actions[0]).toEqual({ ...nightActions[0], service_data: { value: 16 } });
+    // The user's 8:25 Mountain wake, not 07:30
+    expect(body.timeslots[0].actions[2]).toEqual({ ...nightActions[2], service_data: { time: '08:25:00' } });
     expect(body.timeslots[0].actions[3]).toEqual(nightActions[3]);
   });
 });

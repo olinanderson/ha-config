@@ -169,6 +169,9 @@ const CUSTOM_FIELDS = { domain: 'switch', entityId: '', service: 'switch.turn_on
 // Night preset: one scheduler entry sets the Night Climate targets and wake
 // time, then picks the mode, which starts the program (automations
 // night_climate_*). Its enable switch is the "on/off" for the whole thing.
+// The wake time starts at the user's 8:25 Mountain (HA's time zone, as on the
+// Tonight card); until 2026-10-21 a new Night entry would have written 07:30.
+const NIGHT_DEFAULT_WAKE = '08:25';
 const NIGHT_FIELDS = {
   domain: 'input_select',
   entityId: NIGHT_MODE_ID,
@@ -177,7 +180,7 @@ const NIGHT_FIELDS = {
   nightMode: 'Program' as NightMode,
   nightTarget: '15',
   wakeTarget: '23',
-  wakeTime: '07:30',
+  wakeTime: NIGHT_DEFAULT_WAKE,
 };
 const NIGHT_DEFAULT_TIME = '00:30';
 
@@ -192,7 +195,7 @@ export const DEFAULT_EDITOR: EditorState = {
   nightMode: 'Program',
   nightTarget: '15',
   wakeTarget: '23',
-  wakeTime: '07:30',
+  wakeTime: NIGHT_DEFAULT_WAKE,
 };
 
 // ─── Helpers ──────────────────────────────────────────────────────────────
@@ -242,7 +245,7 @@ export function nightFromTimeslot(ts: Timeslot | undefined): {
     mode: (NIGHT_MODES as readonly string[]).includes(option) ? (option as NightMode) : 'Program',
     nightTarget: String(find(NIGHT_TARGET_ID).value ?? '15'),
     wakeTarget: String(find(WAKE_TARGET_ID).value ?? '23'),
-    wakeTime: String(find(WAKE_TIME_ID).time ?? '07:30:00').substring(0, 5),
+    wakeTime: String(find(WAKE_TIME_ID).time ?? NIGHT_DEFAULT_WAKE).substring(0, 5),
   };
 }
 
@@ -351,7 +354,7 @@ export function editorFromSchedule(s: ScheduleEntry): EditorState {
     nightMode: night?.mode ?? 'Program',
     nightTarget: night?.nightTarget ?? '15',
     wakeTarget: night?.wakeTarget ?? '23',
-    wakeTime: night?.wakeTime ?? '07:30',
+    wakeTime: night?.wakeTime ?? NIGHT_DEFAULT_WAKE,
   };
 }
 
