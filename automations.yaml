@@ -1331,29 +1331,13 @@
             entity_id: input_boolean.inverter_manual_lock
         - action: script.inverter_ensure_off
 
-    # Schedule Starlink sleep start (+30 min). continue_on_error so a Starlink
-    # hiccup (e.g. time entity unavailable) can never abort the routine
-    # before the 5-min cancel window below.
+    # Starlink asleep from 30 min from now until the wake time (08:25
+    # Mountain; only while its own sleep schedule is on). Until 2026-10-21 the
+    # end was "08:15 MST", a fixed UTC-7, so 09:15 on MDT. continue_on_error
+    # so a Starlink hiccup can never abort the routine before the 5-min
+    # cancel window below.
     - action: script.starlink_sleep_start_after_30m
       continue_on_error: true
-
-    # Set Starlink sleep END to 08:15 MST equivalent in current local time
-    - continue_on_error: true
-      choose:
-        - conditions:
-            - condition: template
-              value_template: "{{ states('time.starlink_sleep_end') not in ['unknown', 'unavailable'] }}"
-          sequence:
-            - action: time.set_value
-              target:
-                entity_id: time.starlink_sleep_end
-              data:
-                time: >
-                  {% set mst_offset = -7 %}  {# MST fixed UTC-7 #}
-                  {% set local_offset = (now().utcoffset().total_seconds() / 3600) | int %}
-                  {% set delta = local_offset - mst_offset %}
-                  {% set hour = (8 + delta) % 24 %}
-                  {{ '%02d:%02d:%02d' % (hour, 15, 0) }}
 
     # 5 min in which Sleep off is a cancel (everything back as it was, the
     # lights too); after that mark as asleep so the next OFF is the morning.
@@ -1381,7 +1365,8 @@
 #   Main, and re-applied scene.last_active_state, which
 #   rolling_last_active_snapshot_1hz rewrites every second, so it held the
 #   sleeping state.
-#   Always clears the flag and resets the Starlink schedule (1 AM MST).
+#   Always clears the flag and resets the Starlink window (01:00 until the
+#   wake time).
 # ────────────────────────────────────────────────────────────────
 - id: sleep_mode_off_restore
   alias: "Sleep Mode – Cancel restore / morning wake on toggle OFF"
@@ -1434,8 +1419,8 @@
       target:
         entity_id: input_boolean.sleep_winddown_complete
 
-    # Revert Starlink sleep start to the default nightly window
-    # (1 AM MST), undoing the +30 min override set on sleep-on.
+    # Starlink back to its default nightly window, 01:00 until the wake
+    # time, undoing the +30 min start set on sleep-on.
     - action: script.starlink_sleep_start_default
       continue_on_error: true
 

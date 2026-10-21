@@ -261,40 +261,79 @@ inverter_ensure_off:
         - action: script.inverter_toggle
 
 ########################################################################
-#  Starlink – sleep start after 30 minutes (placeholder)                #
+#  Starlink – sleep window, from `start` until the wake time            #
+#  The dish's own sleep schedule: its time entities are unavailable     #
+#  while switch.starlink_sleep_schedule is off (since 2026-09-25), and  #
+#  then this does nothing. Times are in HA's time zone, Mountain, like  #
+#  the wake (input_datetime.night_climate_wake_time, 08:25): the user   #
+#  wakes at 8:25 Mountain wherever the van is. Until 2026-10-21 the     #
+#  dish woke at "8:15 MST", a fixed UTC-7, so 09:15 on MDT.             #
+#  The dish keeps a start and a duration: a new start keeps the         #
+#  duration (the end moves with it), and HA turns an end into a         #
+#  duration from the start it last polled (every 5 s), which it sends   #
+#  back too. So the end waits until HA reads the new start; sent at     #
+#  once it put the old start back (the +30 min never took).             #
 ########################################################################
-starlink_sleep_start_after_30m:
-  alias: Starlink – Sleep start after 30 minutes
-  mode: single
+starlink_sleep_window:
+  alias: Starlink – Sleep window until the wake time
+  mode: restart
+  fields:
+    start:
+      description: Sleep start, "HH:MM:SS" in HA's time zone
+      example: "01:00:00"
   sequence:
-    # Set Starlink sleep start time to 30 minutes from now
+    - condition: template
+      value_template: >-
+        {{ states('time.starlink_sleep_start') not in ['unknown', 'unavailable']
+           and states('time.starlink_sleep_end') not in ['unknown', 'unavailable'] }}
     - action: time.set_value
       target:
         entity_id: time.starlink_sleep_start
       data:
-        time: "{{ (now() + timedelta(minutes=30)).strftime('%H:%M:%S') }}"
+        time: "{{ start }}"
+    - wait_template: "{{ states('time.starlink_sleep_start')[:5] == start[:5] }}"
+      timeout: "00:00:30"
+      continue_on_timeout: false
+    - action: time.set_value
+      target:
+        entity_id: time.starlink_sleep_end
+      data:
+        time: >-
+          {% set wake = states('input_datetime.night_climate_wake_time') %}
+          {{ wake if wake not in ['unknown', 'unavailable'] else '08:25:00' }}
 
 ########################################################################
-#  Starlink – sleep start back to default (1 AM MST)                    #
-#  Called when Sleep Mode is cancelled, so the dish reverts to its      #
-#  normal nightly window (1:00 – 8:15 MST) instead of the +30 min       #
-#  override set on sleep-on.                                            #
+#  Starlink – sleep from 30 minutes from now until the wake time        #
+#  Sleep Mode on and the Bedtime routine. In the background, so they    #
+#  don't wait for the dish.                                             #
 ########################################################################
-starlink_sleep_start_default:
-  alias: Starlink – Sleep start back to default (1 AM MST)
+starlink_sleep_start_after_30m:
+  alias: Starlink – Sleep from 30 minutes from now until the wake time
   mode: single
   sequence:
-    # 1 AM MST converted to current local time (mirrors the 8:15 MST wake)
-    - action: time.set_value
+    - action: script.turn_on
       target:
-        entity_id: time.starlink_sleep_start
+        entity_id: script.starlink_sleep_window
       data:
-        time: >
-          {% set mst_offset = -7 %}  {# MST fixed UTC-7 #}
-          {% set local_offset = (now().utcoffset().total_seconds() / 3600) | int %}
-          {% set delta = local_offset - mst_offset %}
-          {% set hour = (1 + delta) % 24 %}
-          {{ '%02d:%02d:%02d' % (hour, 0, 0) }}
+        variables:
+          start: "{{ (now() + timedelta(minutes=30)).strftime('%H:%M:%S') }}"
+
+########################################################################
+#  Starlink – sleep window back to the default, 01:00 until the wake    #
+#  Sleep Mode off (a cancel or the morning), undoing the +30 min start. #
+#  01:00 Mountain; until 2026-10-21 "1 AM MST" (fixed UTC-7), so 02:00  #
+#  on MDT.                                                              #
+########################################################################
+starlink_sleep_start_default:
+  alias: Starlink – Sleep window back to 01:00 until the wake time
+  mode: single
+  sequence:
+    - action: script.turn_on
+      target:
+        entity_id: script.starlink_sleep_window
+      data:
+        variables:
+          start: "01:00:00"
 
 ########################################################################
 #  Bedtime Routine                                                      #
@@ -302,13 +341,13 @@ starlink_sleep_start_default:
 #  - Under-cabinet: 100% for 5 minutes                                  #
 #  - Roof hatch lighting: 20% for 10 minutes                            #
 #  - After 10 minutes: inverter OFF, water OFF, all lights OFF          #
-#  - Starlink sleep start scheduled for +30 minutes                     #
+#  - Starlink asleep from +30 minutes until the wake time               #
 ########################################################################
 bedtime_routine:
   alias: Bedtime Routine
   mode: single
   sequence:
-    # Schedule Starlink sleep start (runs independently)
+    # Starlink asleep from +30 min until the wake time (in the background)
     - action: script.starlink_sleep_start_after_30m
 
     # Ensure water system is on and set to Main

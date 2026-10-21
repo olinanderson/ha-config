@@ -745,7 +745,7 @@ by then) was removed through HACS on 2026-10-08, together with an empty MQTT dev
 | `input_boolean.night_climate_use_heater` / `_use_ac` / `_use_fan` | What the Night Climate Program may run |
 | `input_boolean.night_climate_fan_by_room` | Set by the controller when the fan's own thermostat sat idle: HA runs the fan from the room sensor until the program ends |
 | `input_datetime.shore_power_last_seen` | When the shore charger last drew power (automation `shore_power_seen`); feeds `binary_sensor.shore_power_present` |
-| `input_datetime.night_climate_wake_time` | Night Climate wake time (07:30, time only; `input_datetime.yaml`) |
+| `input_datetime.night_climate_wake_time` | Night Climate wake time (08:25 Mountain, HA's time zone; time only; `input_datetime.yaml`). Sleep Mode's Starlink window ends at it too |
 | `input_number.main_light_warmth` | Main light CCT (250–500 mireds) |
 | `input_number.shore_charge_reset_threshold` | Shore charger reset SOC % |
 | `input_number.acceleration_stability_threshold` | Accel threshold (km/h/s) |
