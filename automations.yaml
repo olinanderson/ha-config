@@ -3336,8 +3336,9 @@
 # The BIOS option "State After G3" was "S5 State" on 2026-10-22: after an outage
 # the box stayed off until someone pressed its button. The BIOS writes that into
 # the chipset at every boot, so this clears the bit again at every HA start and
-# notes it in the logbook. A notification says when it couldn't. Once the BIOS
-# option is "S0 State" it finds the bit already clear and only notes that.
+# logs a warning when it had to. A notification says when it couldn't. Once the
+# BIOS option is "S0 State" it finds the bit already clear and does nothing.
+# No logbook here (the integration isn't loaded): the traces keep what it found.
 - id: ha_box_power_on_after_power_loss
   alias: "HA box • Boot by itself after a power loss"
   description: "Clears the stay-off-after-power-loss bit the BIOS sets at every boot (docs/ha-box.md)."
@@ -3356,28 +3357,34 @@
         message: >-
           {% set out = hook.stdout | default('') if hook is defined else '' %}
           {{ (out | from_json(default={})).get('message', '') }}
-    - if: "{{ status in ['set', 'already'] }}"
-      then:
-        - action: logbook.log
-          data:
-            name: "HA box"
-            message: "{{ message }}"
-      else:
-        - action: persistent_notification.create
-          data:
-            notification_id: ha_box_power_on_after_power_loss
-            title: "The HA box may stay off after a power loss"
-            message: >-
-              At this start Home Assistant couldn't set the box to boot by itself
-              when power comes back.
-              {% set err = (hook.stderr | default('')) if hook is defined else '' %}
-              {% if message %}HA box {{ message }}.
-              {% elif err %}The script failed: {{ err | truncate(300) }}.
-              {% else %}The shell command failed.{% endif %}
-              After an outage, press the box's power button. The BIOS setting
-              that fixes it for good is in docs/ha-box.md.
-        - action: system_log.write
-          data:
-            level: error
-            logger: ha_box.power
-            message: "Boot after a power loss not set: {{ message or 'no usable output' }}"
+    # "already": nothing to do or log.
+    - choose:
+        - conditions: "{{ status == 'set' }}"
+          sequence:
+            - action: system_log.write
+              data:
+                level: warning
+                logger: ha_box.power
+                message: >-
+                  HA box {{ message }}. With the BIOS option "State After G3" on
+                  "S0 State" this isn't needed (docs/ha-box.md).
+        - conditions: "{{ status != 'already' }}"
+          sequence:
+            - action: persistent_notification.create
+              data:
+                notification_id: ha_box_power_on_after_power_loss
+                title: "The HA box may stay off after a power loss"
+                message: >-
+                  At this start Home Assistant couldn't set the box to boot by
+                  itself when power comes back.
+                  {% set err = (hook.stderr | default('')) if hook is defined else '' %}
+                  {% if message %}HA box {{ message }}.
+                  {% elif err %}The script failed: {{ err | truncate(300) }}.
+                  {% else %}The shell command failed.{% endif %}
+                  After an outage, press the box's power button. The BIOS
+                  setting that fixes it for good is in docs/ha-box.md.
+            - action: system_log.write
+              data:
+                level: error
+                logger: ha_box.power
+                message: "Boot after a power loss not set: {{ message or 'no usable output' }}"

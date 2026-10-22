@@ -29,11 +29,12 @@ then:
 
 - Automation `ha_box_power_on_after_power_loss` runs
   `ha_box/power_on_after_power_loss.py` through
-  `shell_command.ha_box_power_on_after_power_loss` at every HA start. It
-  clears the bit if the BIOS set it and notes what it found in the logbook
-  ("HA box set to boot by itself after a power loss. The BIOS had set it to
-  stay off at this boot", or "HA box already boots by itself"). If it can't,
-  it raises a notification and logs an error.
+  `shell_command.ha_box_power_on_after_power_loss` at every HA start. When
+  the BIOS had set the bit, it clears it and logs a warning: "HA box set to
+  boot by itself after a power loss. The BIOS had set it to stay off at this
+  boot…". When the bit is already clear it does nothing. If it can't set it,
+  it raises a notification and logs an error. Its traces keep what the script
+  printed at the last five starts. This HA has no logbook.
 - The script writes nothing unless the DMI reads AZW, MINI S and BIOS
   ADLNV105, and /proc/iomem has the chipset's region at 0xFE000000. It changes
   only bit 0, with the 8-bit read-modify-write coreboot uses. The HA container
@@ -58,14 +59,16 @@ It needs a keyboard and an HDMI screen on the box.
    isn't there, look for the same option under Advanced or Power.
 3. Press **F4** to save and exit.
 
-After that the startup hook finds the bit already clear and only notes it.
+After that the startup hook finds the bit already clear and does nothing.
 
 ### Testing it
 
 With HA up, unplug the box's power for about 10 seconds and plug it back in.
-It should boot by itself. The logbook then shows what the BIOS did at that
-boot: "set to boot by itself… The BIOS had set it to stay off at this boot"
-means the BIOS option is still "S5 State" and the hook did the work.
+It should boot by itself. The system log (Settings, System, Logs) then shows
+what the BIOS did at that boot. The warning "HA box set to boot by itself…
+The BIOS had set it to stay off at this boot" means the BIOS option is still
+"S5 State" and the hook did the work. No warning means the bit was already
+clear.
 
 ### Undo
 
