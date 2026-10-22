@@ -33,8 +33,8 @@ then:
   the BIOS had set the bit, it clears it and logs a warning: "HA box set to
   boot by itself after a power loss. The BIOS had set it to stay off at this
   boot…". When the bit is already clear it does nothing. If it can't set it,
-  it raises a notification and logs an error. Its traces keep what the script
-  printed at the last five starts. This HA has no logbook.
+  it raises a notification and logs an error. Its traces keep the status and
+  message the script printed, for the last five runs. This HA has no logbook.
 - The script writes nothing unless the DMI reads AZW, MINI S and BIOS
   ADLNV105, and /proc/iomem has the chipset's region at 0xFE000000. It changes
   only bit 0, with the 8-bit read-modify-write coreboot uses. The HA container
