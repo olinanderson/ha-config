@@ -127,3 +127,9 @@ restart_dvr_proxy: >
 # entry to input_text.ve_correction_history.
 # Arguments: from_ts (epoch ms of previous fill-up), to_ts (epoch ms of now)
 update_ve_from_fillup: "python3 /config/ve_update.py {{ from_ts }} {{ to_ts }}"
+
+# The HA box boots by itself after a power loss: the BIOS sets it to stay off at
+# every boot, and this clears that chipset bit again. Run at every HA start by
+# automation ha_box_power_on_after_power_loss (docs/ha-box.md). Prints one JSON
+# line. It writes /dev/mem, which works because the HA container is privileged.
+ha_box_power_on_after_power_loss: "python3 /config/ha_box/power_on_after_power_loss.py"

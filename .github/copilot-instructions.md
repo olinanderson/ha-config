@@ -38,6 +38,7 @@ entertainment, and safety subsystems for full-time van life.
 
 | Device | Role | Protocol |
 |---|---|---|
+| **HA box** (Beelink MINI S, Intel N95) | Runs Home Assistant OS. Boots by itself after a power loss through a startup hook, because its BIOS is set to stay off (`docs/ha-box.md`) | Host |
 | **Simarine A32 Pro** (ESP32-S3) | Primary controller — switches, sensors, MPPT, tank levels, BME280s, S5140 current sensors, DAC outputs | ESPHome via WiFi |
 | **AG Pro** (ESPHome) | Roof fan (speed, direction, lid), additional controls | ESPHome via WiFi |
 | **WiCAN Pro** (v4.48) | Vehicle OBD2 data — speed, fuel, RPM, coolant, tire pressure, gear, trans temp, etc. | MQTT (native WiCAN MQTT mode → core-mosquitto, IP 192.168.10.90) |
@@ -984,6 +985,7 @@ Example configs for the card types above, in the style of the archived YAML in
 | Inverter pending clear | Clear pending flag when ping state changes |
 | Bootstrap ducking / Scream | Start audio ducking + Scream receiver on HA boot |
 | `dvr_proxy_start_on_boot` | Start DVR camera proxy daemon 40s after HA boot |
+| `ha_box_power_on_after_power_loss` | At every HA start, clears the stay-off-after-power-loss bit the BIOS sets, so the box boots by itself after an outage (`docs/ha-box.md`) |
 
 ---
 

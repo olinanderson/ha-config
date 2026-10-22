@@ -17,3 +17,4 @@ The original copilot-instructions.md is kept as the canonical source for VSCode 
 | `heating.md` | Hydronic heater architecture, coolant loop, retry logic |
 | `vehicle-obd.md` | WiCAN Pro, OBD PIDs, fuel estimation, computed sensors |
 | `access.md` | SSH, web UI login, network addresses, credentials |
+| `ha-box.md` | The HA box (Beelink MINI S): hardware, BIOS, booting by itself after a power loss |

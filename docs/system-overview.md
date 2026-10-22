@@ -16,6 +16,7 @@
 
 | Device | Role | Protocol |
 |---|---|---|
+| **HA box** (Beelink MINI S, Intel N95) | Runs Home Assistant OS. Boots by itself after a power loss through a startup hook, because its BIOS is set to stay off (`ha-box.md`) | Host |
 | **Simarine A32 Pro** (ESP32-S3) | Primary controller — switches, sensors, MPPT, tank levels, BME280s, S5140 current sensors, DAC outputs | ESPHome via WiFi |
 | **AG Pro** (ESPHome) | Roof fan (speed, direction, lid), additional controls | ESPHome via WiFi |
 | **WiCAN Pro** (v4.48) | Vehicle OBD2 data — speed, fuel, RPM, coolant, tire pressure, gear, trans temp | MQTT |

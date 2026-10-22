@@ -152,6 +152,7 @@ with the 1200-baud rule above.
 | `shore_power_seen` | Keeps `input_datetime.shore_power_last_seen` for `binary_sensor.shore_power_present` (charger drew power within 3 h) |
 | `water_winterized_*` (×3) | Winterized: everything off when it turns on, the guard that switches back off whatever turns on (during a blow-out it holds only the pumps, UV lamp and tank heaters), applied again after a restart, which also ends a blow-out the restart cut short (`docs/winterizing.md`) |
 | `dvr_proxy_start_on_boot` | Start DVR proxy 40s after HA boot |
+| `ha_box_power_on_after_power_loss` | At every HA start, clears the stay-off-after-power-loss bit the BIOS sets, so the box boots by itself after an outage (`ha-box.md`) |
 
 ## Voice Assistant
 
