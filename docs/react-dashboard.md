@@ -169,6 +169,25 @@ the phone height is known: "▲ Heating to 22.0° · heater", "▼ Cooling to 22
 of `sensor.night_climate_status`, whose full text is the line's tooltip. Tests:
 `src/components/LivingSpaceCard.test.tsx`.
 
+## Winterize Card
+
+`src/components/WinterizeCard.tsx` sits on the **Water page** between Water Controls and Valves & Pumps
+(`docs/winterizing.md`). The top row is the **Winterized** switch (`input_boolean.water_winterized`): one
+tap turns it on; turning it off asks first, since the water can then come on again. Below it, idle, the
+blow-out: minutes per mode and rounds steppers (`input_number.water_blowout_minutes`, 1–10, and
+`_rounds`, 1–5), the checklist (both pump fuses out, the compressor on an air port at about 30 psi, the
+shower mixer open) and **Start blow-out · N min**, which calls `script.turn_on` so the call returns at once
+(calling the script itself would hold it open for the whole run). Start is greyed out under Shop Mode and
+for 5 s after a tap. The last run's status shows with its time in the phone's own clock. While it runs
+(`input_boolean.water_blowout_running` or the script on, so a Stop that is still finishing counts) the card
+shows the status ("Recirc · round 1 of 2"), Main / Recirc / Flush pills lit from the a32's own mode
+switches, the step's time left (a 1 Hz local tick against `input_datetime.water_blowout_step_ends`), a
+progress bar for the whole run (from the script's `last_triggered` to `input_datetime.water_blowout_ends`),
+"Done at" and **Stop** (`script.water_blowout_stop`). The Winterized switch is held while it runs.
+Water Controls greys out the master switch while Winterized is on and no blow-out runs. The Fresh chips
+on the Home and Van pages read **Winterized** in cyan with a snowflake while it is on, instead of the
+drained tank's 0 %. Tests: `src/components/WinterizeCard.test.tsx`.
+
 ## Van Page Badges and Tank Levels
 
 `src/components/VanBadges.tsx` is the one-line row at the top of the Van page: Fuel, Fresh, Grey and

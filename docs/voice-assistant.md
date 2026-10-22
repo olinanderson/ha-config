@@ -75,6 +75,7 @@ for the same jobs.
 | `InsideTemperature` | "what's the temperature (inside)" | Speaks Living Space Temperature |
 | `LocalTime` | "what time is it" | Speaks the time where the van is, with the zone: "It's 10:26 PM Pacific time." |
 | `LocalDate` | "what's the date", "what day is it" | Speaks the date where the van is |
+| `WaterSystemOn` | "turn on the water (system/pump)", "water on" | The water master on; while Winterized (`docs/winterizing.md`) it stays off and says so. HA's own sentence would say "Turned on" before the guard switched it back off |
 
 HA's own sentences cover named devices: "turn off the main lights", "set the
 lights to 30 percent", "turn on the heater".
@@ -223,6 +224,9 @@ the model think when a request needs it.
   sentence; `LightWarmth` takes those now (a custom sentence wins a tie).
 - The propane and grey water valves stay exposed on purpose; the prompt tells
   Claude to open them only when the user names that valve.
+- While the water is winterized (`input_boolean.water_winterized`) the prompt
+  gets a line telling Claude not to turn the water system on and to say it is
+  winterized. The guard would switch it back off anyway.
 - Hidden from Assist: `script.all_lights_toggle` (it toggles, so "turn off"
   could turn the lights on) and BME280 1 (warmed by the inverter).
 - The ChatGPT integration is still installed but the pipeline doesn't use it.

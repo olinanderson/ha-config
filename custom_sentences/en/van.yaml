@@ -129,6 +129,16 @@ intents:
           - "(what's|what is) today"
           - "[can you] (tell|give) me (the|today's) date"
 
+  # HA's own "turn on the water system" would switch it on and say so, and
+  # while the water is winterized the guard switches it straight back off.
+  # This one refuses instead, and otherwise switches it on the same way.
+  WaterSystemOn:
+    data:
+      - sentences:
+          - "(turn|switch) on [the] water [system|pump]"
+          - "(turn|switch) [the] water [system|pump] on"
+          - "water [system|pump] on"
+
 lists:
   fan_direction:
     values:

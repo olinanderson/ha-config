@@ -48,3 +48,11 @@ shop_mode_prev_disabled:
   name: "Shop Mode – Previously Disabled Automations"
   icon: mdi:playlist-remove
   max: 255
+
+# Winterize blow-out (script.water_blowout): the step it is on ("Recirc ·
+# round 1 of 2") while it runs, then how the last run ended. The Water page
+# shows when from last_changed, in the phone's own time.
+water_blowout_status:
+  name: "Water blow-out status"
+  icon: mdi:weather-windy
+  max: 255

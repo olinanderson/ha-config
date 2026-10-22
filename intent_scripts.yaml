@@ -157,3 +157,21 @@ LocalDate:
       {%- set off = state_attr('sensor.van_time_zone', 'utc_offset_seconds') | int(none) %}
       {%- set t = utcnow() + timedelta(seconds=off) if off is not none else now() -%}
       It's {{ t.strftime('%A, %B') }} {{ t.day }}.
+
+# Water on, unless it is winterized for the winter (docs/winterizing.md):
+# then it stays off and says so, instead of HA's "Turned on" before
+# water_winterized_guard switches it back off.
+WaterSystemOn:
+  platforms: *local_only
+  action:
+    - if:
+        - condition: state
+          entity_id: input_boolean.water_winterized
+          state: "off"
+      then:
+        - action: switch.turn_on
+          target:
+            entity_id: switch.a32_pro_water_system_master_switch
+  speech:
+    text: >-
+      {% if is_state('input_boolean.water_winterized', 'on') %}The water is winterized, so it stays off. Turn Winterized off on the Water page first.{% else %}Water system on.{% endif %}

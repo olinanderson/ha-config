@@ -1,8 +1,9 @@
-import { BatteryWarning, Droplets, Flame, Fuel, Trash2 } from 'lucide-react';
-import { useEntityNumeric } from '@/hooks/useEntity';
+import { BatteryWarning, Droplets, Flame, Fuel, Snowflake, Trash2 } from 'lucide-react';
+import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useTankLevel } from '@/hooks/useTankLevel';
 import { usePropane, propaneProblemText, PROPANE_PCT_ID } from '@/hooks/usePropane';
 import { useHistoryDialog } from '@/components/EntityHistoryDialog';
+import { WINTERIZED_ID } from '@/components/WinterizeCard';
 import { cn, fmt } from '@/lib/utils';
 
 const FUEL_ID = 'sensor.stable_fuel_level';
@@ -17,6 +18,7 @@ function Chip({
   title,
   onClick,
   alert,
+  alertColor = 'text-orange-400',
   warn,
 }: {
   label: string;
@@ -27,6 +29,8 @@ function Chip({
   onClick: () => void;
   /** The value is a problem, not a reading: it takes the label's room on a phone. */
   alert?: boolean;
+  /** The alert value's colour: orange for a problem, cyan for Winterized. */
+  alertColor?: string;
   /** A reading with a problem beside it (low sensor battery). */
   warn?: boolean;
 }) {
@@ -43,7 +47,7 @@ function Chip({
       <span
         className={cn(
           'font-semibold tabular-nums',
-          alert ? 'truncate text-xs text-orange-400' : 'text-sm',
+          alert ? cn('truncate text-xs', alertColor) : 'text-sm',
         )}
       >
         {value}
@@ -61,6 +65,8 @@ export function VanBadges() {
   const { value: fresh, entityId: freshId } = useTankLevel('fresh');
   const { value: grey, entityId: greyId } = useTankLevel('grey');
   const { value: propane, problem: propaneProblem, battery: propaneBattery } = usePropane();
+  // A drained tank reads 0 %: say why instead (docs/winterizing.md)
+  const winterized = useEntity(WINTERIZED_ID)?.state === 'on';
   const { open } = useHistoryDialog();
 
   return (
@@ -83,18 +89,22 @@ export function VanBadges() {
       />
       <Chip
         label="Fresh"
-        value={pct(fresh)}
+        value={winterized ? 'Winterized' : pct(fresh)}
+        alert={winterized}
+        alertColor="text-cyan-400"
         color={
-          fresh == null
-            ? 'text-muted-foreground'
-            : fresh < 20
-              ? 'text-red-500'
-              : fresh < 50
-                ? 'text-orange-500'
-                : 'text-blue-500'
+          winterized
+            ? 'text-cyan-400'
+            : fresh == null
+              ? 'text-muted-foreground'
+              : fresh < 20
+                ? 'text-red-500'
+                : fresh < 50
+                  ? 'text-orange-500'
+                  : 'text-blue-500'
         }
-        icon={Droplets}
-        title="Fresh water history"
+        icon={winterized ? Snowflake : Droplets}
+        title={winterized ? 'Water winterized: locked off for the winter' : 'Fresh water history'}
         onClick={() => open(freshId, 'Fresh Water', '%')}
       />
       <Chip

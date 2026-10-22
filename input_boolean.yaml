@@ -173,3 +173,23 @@ night_climate_sleep_in:
 starlink_duty_cycle:
   name: "Starlink duty cycle"
   icon: mdi:satellite-uplink
+
+# ─── Water winterized (docs/winterizing.md) ───
+# The lock: while on, the water system stays off for the winter.
+# water_winterized_guard switches back off anything that turns on (master,
+# pumps, valves, UV lamp, the fresh and shower tank heaters), whoever turned
+# it on: a routine, the dashboard, voice or the DI27 rocker. Bedtime, Shower
+# Mode and the morning restore skip the water while it is on. Turned on by
+# hand, or by script.water_blowout as it ends. No `initial:`: it must survive
+# restarts.
+water_winterized:
+  name: "Water Winterized"
+  icon: mdi:snowflake-alert
+
+# On while script.water_blowout runs: the blow-out owns the master and the
+# valves, the guard holds the pumps and the UV lamp off, and Power Saving and
+# Sleep leave the water on. No `initial:`: after a restart mid-run,
+# water_winterized_on_start sees it and ends the run safely.
+water_blowout_running:
+  name: "Water blow-out running"
+  icon: mdi:weather-windy

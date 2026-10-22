@@ -2,6 +2,7 @@ import { PageContainer } from '@/components/layout/PageContainer';
 import { TankLevel } from '@/components/TankLevel';
 import { ToggleButton } from '@/components/ToggleButton';
 import { SparklineStat } from '@/components/ClickableValue';
+import { WinterizeCard, WINTERIZED_ID, BLOWOUT_RUNNING_ID } from '@/components/WinterizeCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
@@ -79,6 +80,11 @@ function WaterControls() {
 
   const toggleMaster = useToggle('switch.a32_pro_water_system_master_switch');
   const callService = useService();
+  // Winterized holds the water off (docs/winterizing.md); a blow-out runs it
+  // with the lock on, and switching the master off is how to stop one.
+  const winterized = useEntity(WINTERIZED_ID);
+  const blowout = useEntity(BLOWOUT_RUNNING_ID);
+  const locked = winterized?.state === 'on' && blowout?.state !== 'on';
 
   const masterOn = master?.state === 'on';
   const activeMode =
@@ -101,8 +107,13 @@ function WaterControls() {
       <CardContent className="space-y-3">
         <div className="flex items-center justify-between">
           <span className="text-sm font-medium">Master Switch</span>
-          <Switch checked={masterOn} onCheckedChange={toggleMaster} />
+          <Switch checked={masterOn} onCheckedChange={toggleMaster} disabled={locked} aria-label="Water master switch" />
         </div>
+        {locked && (
+          <p className="text-[11px] leading-snug text-cyan-400">
+            Winterized: the water stays off until Winterized is turned off below.
+          </p>
+        )}
         {masterOn && (
           <div className="space-y-1.5">
             <span className="text-xs text-muted-foreground">Mode</span>
@@ -314,9 +325,10 @@ export default function Water() {
           <ModeButtons />
         </div>
 
-        {/* Column 2: Controls + Valve Status */}
+        {/* Column 2: Controls, Winterize + Valve Status */}
         <div className="space-y-4">
           <WaterControls />
+          <WinterizeCard />
           <ValveStatus />
         </div>
 

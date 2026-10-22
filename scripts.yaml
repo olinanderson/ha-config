@@ -156,10 +156,14 @@ power_saving_mode_on:
           - switch.a32_pro_do8_switch06_top_monitor
           - switch.a32_pro_do8_switch07_bottom_monitor
 
-    # Turn OFF water system while away (but NOT if shower mode is on)
+    # Turn OFF water system while away (but NOT if shower mode is on, or
+    # while a winterize blow-out runs: switching it off would end the run)
     - if:
         - condition: state
           entity_id: input_boolean.shower_mode
+          state: "off"
+        - condition: state
+          entity_id: input_boolean.water_blowout_running
           state: "off"
       then:
         - action: switch.turn_off
@@ -350,13 +354,22 @@ bedtime_routine:
     # Starlink asleep from +30 min until the wake time (in the background)
     - action: script.starlink_sleep_start_after_30m
 
-    # Ensure water system is on and set to Main
-    - action: switch.turn_on
-      target:
-        entity_id: switch.a32_pro_water_system_master_switch
-    - action: switch.turn_on
-      target:
-        entity_id: switch.a32_pro_water_system_state_main
+    # Ensure water system is on and set to Main, unless it is winterized or
+    # being blown out (docs/winterizing.md)
+    - if:
+        - condition: state
+          entity_id: input_boolean.water_winterized
+          state: "off"
+        - condition: state
+          entity_id: input_boolean.water_blowout_running
+          state: "off"
+      then:
+        - action: switch.turn_on
+          target:
+            entity_id: switch.a32_pro_water_system_master_switch
+        - action: switch.turn_on
+          target:
+            entity_id: switch.a32_pro_water_system_state_main
 
     # Lighting pre-bed
     - action: light.turn_on
@@ -379,9 +392,15 @@ bedtime_routine:
     # After total of 10 minutes from start, do final shutdown
     - delay: "00:05:00"
     - action: script.inverter_ensure_off
-    - action: switch.turn_off
-      target:
-        entity_id: switch.a32_pro_water_system_master_switch
+    # The water off, except during a winterize blow-out
+    - if:
+        - condition: state
+          entity_id: input_boolean.water_blowout_running
+          state: "off"
+      then:
+        - action: switch.turn_off
+          target:
+            entity_id: switch.a32_pro_water_system_master_switch
     - action: light.turn_off
       target:
         entity_id:
@@ -1498,3 +1517,226 @@ voice_light_warmth:
               'say': s.t | trim} }}
     - stop: "done"
       response_variable: result
+
+########################################################################
+#  Water – winterize (docs/winterizing.md)                             #
+#  input_boolean.water_winterized is the lock: the water system stays  #
+#  off for the winter (automations water_winterized_*).                #
+#  script.water_blowout cycles the modes so the compressor's air       #
+#  reaches every branch, holds the pumps and the UV lamp off, and      #
+#  turns the lock on when it ends.                                     #
+########################################################################
+water_winterize_shutdown:
+  alias: "Water • winterized: all off"
+  description: >-
+    Everything that moves or heats water off for the winter: the master, both
+    pumps, the valves (Main, their resting position), the UV lamp, the panel
+    LEDs, and the fresh and shower tank heaters, whose tanks are empty. The
+    grey tank heater and the hydronic heater are left alone: the sink and the
+    toilet still drain into the grey tank, and the burner heats the van
+    (Hot Water Mode is also the Heater card's manual burner switch).
+  mode: queued
+  max: 5
+  sequence:
+    # The master's own off action drops the pumps, LEDs, UV and overall
+    # relay; they are listed too in case the a32 missed one. The valve
+    # relays are not in it: off is Main, all three closed.
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_water_system_master_switch
+          - switch.a32_pro_switch29_shower_system_water_pump
+          - switch.a32_pro_switch30_main_system_water_pump
+          - switch.a32_pro_switch10_water_system_overall
+          - switch.a32_pro_switch11_water_system_state_main
+          - switch.a32_pro_switch12_water_system_state_recirculating_shower
+          - switch.a32_pro_switch13_water_system_state_recirculating_shower_flush
+          - switch.a32_pro_switch01_water_system_valve_1
+          - switch.a32_pro_switch02_water_system_valve_2
+          - switch.a32_pro_switch03_water_system_valve_3
+          - switch.a32_pro_switch14_uv_filter
+          - switch.a32_pro_fresh_water_tank_heater_enable
+          - switch.a32_pro_shower_water_tank_heater_enable
+          - switch.a32_pro_switch17_silicone_heating_pads_shower_water_tank_x2
+          - switch.a32_pro_switch18_silicone_heating_pads_fresh_water_tank_x4
+      continue_on_error: true
+
+water_blowout:
+  alias: "Water • winterize blow-out"
+  description: >-
+    Blows the lines dry. With both pump fuses out and the compressor on a
+    pump's air port, it cycles Main, Recirc and Flush for a number of rounds,
+    so the air reaches every branch, and holds the pumps and the UV lamp off
+    (water_winterized_guard). At the end, or on Stop, the valves go back to
+    Main, the water goes off and Winterized goes on. It runs with Winterized
+    on too, so the second air port needs no unlocking. docs/winterizing.md.
+  mode: single
+  max_exceeded: silent
+  fields:
+    minutes:
+      description: "Minutes in each mode (default: input_number.water_blowout_minutes)"
+      required: false
+      example: 2
+    rounds:
+      description: "Rounds of Main, Recirc and Flush (default: input_number.water_blowout_rounds)"
+      required: false
+      example: 2
+  sequence:
+    - variables:
+        step_minutes: >-
+          {{ (minutes if minutes is defined else states('input_number.water_blowout_minutes')) | float(2) }}
+        n_rounds: >-
+          {{ (rounds if rounds is defined else states('input_number.water_blowout_rounds')) | int(2) }}
+    # Shop Mode's guard switches the water off within a second, so a blow-out
+    # under it would only flap. The dashboard greys Start out too.
+    - if:
+        - condition: state
+          entity_id: input_boolean.shop_mode
+          state: "on"
+      then:
+        - action: input_text.set_value
+          target:
+            entity_id: input_text.water_blowout_status
+          data:
+            value: "Not started: Shop Mode is armed."
+        - stop: "Shop Mode is armed"
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.water_blowout_running
+    - action: input_datetime.set_datetime
+      target:
+        entity_id: input_datetime.water_blowout_ends
+      data:
+        timestamp: "{{ as_timestamp(now()) + n_rounds * 3 * step_minutes * 60 + 12 }}"
+    # Pumps, UV lamp and tank heaters off before the water comes on. Every
+    # mode change switches the pumps on again; the guard switches them off.
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_switch29_shower_system_water_pump
+          - switch.a32_pro_switch30_main_system_water_pump
+          - switch.a32_pro_switch14_uv_filter
+          - switch.a32_pro_fresh_water_tank_heater_enable
+          - switch.a32_pro_shower_water_tank_heater_enable
+      continue_on_error: true
+    # The modes only move the valves while the master is on
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_water_system_master_switch
+    - wait_template: "{{ is_state('switch.a32_pro_water_system_master_switch', 'on') }}"
+      timeout: "00:00:15"
+    - if:
+        - "{{ not wait.completed }}"
+      then:
+        - action: script.water_blowout_finish
+          data:
+            reason: "Not started: the water system didn't switch on"
+        - stop: "The water system didn't switch on"
+    - repeat:
+        count: "{{ n_rounds }}"
+        sequence:
+          - variables:
+              round_no: "{{ repeat.index }}"
+          - repeat:
+              for_each:
+                - name: Main
+                  entity: switch.a32_pro_water_system_state_main
+                - name: Recirc
+                  entity: switch.a32_pro_water_system_state_recirculating_shower
+                - name: Flush
+                  entity: switch.a32_pro_water_system_state_recirculating_shower_flush
+              sequence:
+                - action: input_text.set_value
+                  target:
+                    entity_id: input_text.water_blowout_status
+                  data:
+                    value: "{{ repeat.item.name }} · round {{ round_no }} of {{ n_rounds }}"
+                - action: input_datetime.set_datetime
+                  target:
+                    entity_id: input_datetime.water_blowout_step_ends
+                  data:
+                    timestamp: "{{ as_timestamp(now()) + step_minutes * 60 }}"
+                - action: switch.turn_on
+                  target:
+                    entity_id: "{{ repeat.item.entity }}"
+                # The step's time, unless the water is switched off (the
+                # dashboard, the rocker, a routine) or Shop Mode is armed:
+                # either ends the run.
+                - wait_template: >-
+                    {{ is_state('switch.a32_pro_water_system_master_switch', 'off')
+                       or is_state('input_boolean.shop_mode', 'on') }}
+                  timeout: "{{ (step_minutes * 60) | int }}"
+                - if:
+                    - "{{ wait.completed }}"
+                  then:
+                    - action: script.water_blowout_finish
+                      data:
+                        reason: >-
+                          {{ 'Stopped when Shop Mode was armed' if is_state('input_boolean.shop_mode', 'on')
+                             else 'Stopped when the water was switched off' }}
+                    - stop: "The water was switched off or Shop Mode was armed"
+    - action: script.water_blowout_finish
+      data:
+        reason: "Done"
+
+water_blowout_finish:
+  alias: "Water • blow-out: finish"
+  description: >-
+    How every blow-out ends, done, stopped or cut short: the valves back to
+    Main, Winterized on, the water off, and how it ended in the status line.
+  mode: single
+  max_exceeded: silent
+  fields:
+    reason:
+      description: "How the run ended: the status line's first words"
+      required: false
+      example: "Done"
+  sequence:
+    - variables:
+        why: "{{ reason if reason is defined else 'Done' }}"
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.water_blowout_status
+      data:
+        value: "Finishing: valves back to Main, then the water off"
+    # Main is the valves' resting position and the mode the water comes back
+    # in when it is next switched on. A mode change does nothing with the
+    # master off, so only while it is on.
+    - if:
+        - condition: state
+          entity_id: switch.a32_pro_water_system_master_switch
+          state: "on"
+      then:
+        - action: switch.turn_on
+          target:
+            entity_id: switch.a32_pro_water_system_state_main
+        # set_water_state waits 10 s while the valves move, then starts the
+        # pumps; switching the master off inside that wait doesn't stop it.
+        - delay: "00:00:12"
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.water_winterized
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.water_blowout_running
+    - action: script.water_winterize_shutdown
+    - action: input_text.set_value
+      target:
+        entity_id: input_text.water_blowout_status
+      data:
+        value: "{{ why }}. Water off, Winterized on."
+
+water_blowout_stop:
+  alias: "Water • blow-out: stop"
+  description: "Ends a running blow-out the same way as a finished one."
+  mode: single
+  sequence:
+    # The finish too: one cut off halfway would leave the run flag on
+    - action: script.turn_off
+      target:
+        entity_id:
+          - script.water_blowout
+          - script.water_blowout_finish
+    - action: script.water_blowout_finish
+      data:
+        reason: "Stopped"

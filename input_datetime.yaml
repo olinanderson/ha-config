@@ -34,3 +34,15 @@ starlink_relay_hold_until:
   has_date: true
   has_time: true
   icon: mdi:timer-lock-outline
+# Winterize blow-out (script.water_blowout): when the current mode ends and
+# when the whole run ends; the Water page counts down to them.
+water_blowout_step_ends:
+  name: "Water blow-out step ends"
+  has_date: true
+  has_time: true
+  icon: mdi:timer-sand
+water_blowout_ends:
+  name: "Water blow-out ends"
+  has_date: true
+  has_time: true
+  icon: mdi:flag-checkered

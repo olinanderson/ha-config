@@ -395,7 +395,14 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 | `switch.a32_pro_water_system_master_switch` | Water master on/off |
 | `switch.a32_pro_water_system_state_main` | Water mode: main |
 | `switch.a32_pro_water_system_state_recirculating_shower` | Water mode: recirc shower |
+| `switch.a32_pro_water_system_state_recirculating_shower_flush` | Water mode: recirc flush |
 | `switch.a32_pro_switch06_grey_water_tank_valve` | Grey water dump valve |
+| `input_boolean.water_winterized` | Winterized: holds the water system off for the winter (`docs/winterizing.md`) |
+| `input_boolean.water_blowout_running` | On while `script.water_blowout` runs |
+| `input_number.water_blowout_minutes` / `_rounds` | Blow-out: minutes per mode (1–10) and rounds of the three (1–5), 2 and 2 |
+| `input_text.water_blowout_status` | Blow-out step ("Recirc · round 1 of 2") or how the last run ended |
+| `input_datetime.water_blowout_step_ends` / `_ends` | When the current step and the whole run end (the card's countdown) |
+| `script.water_blowout` / `_stop` / `_finish`, `script.water_winterize_shutdown` | Blow-out, its Stop, how every run ends, everything off |
 
 ### Climate / Heating
 | Entity | Description |

@@ -262,3 +262,18 @@ night_climate_fan_speed:
   step: 10
   unit_of_measurement: "%"
   icon: mdi:fan
+# Winterize blow-out (script.water_blowout): minutes in each of Main, Recirc
+# and Flush, and how many rounds of the three. Set to 2 and 2 on 2026-10-22.
+water_blowout_minutes:
+  name: "Water blow-out minutes per mode"
+  min: 1
+  max: 10
+  step: 1
+  unit_of_measurement: "min"
+  icon: mdi:timer-outline
+water_blowout_rounds:
+  name: "Water blow-out rounds"
+  min: 1
+  max: 5
+  step: 1
+  icon: mdi:repeat

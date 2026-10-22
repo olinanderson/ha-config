@@ -16,6 +16,7 @@ import { TodayTripsCard } from '@/components/TodayTripsCard';
 import { ReadyToDriveBanner } from '@/components/ReadyToDriveBanner';
 import { StarlinkBanner } from '@/components/StarlinkStatus';
 import { WeatherSummaryCard } from '@/components/WeatherSummaryCard';
+import { WINTERIZED_ID } from '@/components/WinterizeCard';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useTankLevel } from '@/hooks/useTankLevel';
 import { usePropane } from '@/hooks/usePropane';
@@ -41,6 +42,7 @@ import {
   LampDesk,
   AirVent,
   Fan,
+  Snowflake,
 } from 'lucide-react';
 
 // ─── Badge bar ───
@@ -91,6 +93,8 @@ function BadgeBar() {
   const light2 = useEntity('light.led_controller_cct_2');
   const light3 = useEntity('light.led_controller_sc_1');
   const light4 = useEntity('light.led_controller_sc_2');
+  // A drained tank reads 0 %: say why instead (docs/winterizing.md)
+  const winterized = useEntity(WINTERIZED_ID)?.state === 'on';
 
   const { open } = useHistoryDialog();
   const toggleGreyValve = useToggle('switch.a32_pro_switch06_grey_water_tank_valve');
@@ -169,9 +173,11 @@ function BadgeBar() {
       />
       <BadgeItem
         label="Fresh"
-        value={`${fmt(fresh, 0)}%`}
-        color={v(fresh) < 20 ? 'text-red-500' : v(fresh) < 50 ? 'text-orange-500' : 'text-blue-500'}
-        icon={Droplets}
+        value={winterized ? 'Winterized' : `${fmt(fresh, 0)}%`}
+        color={
+          winterized ? 'text-cyan-400' : v(fresh) < 20 ? 'text-red-500' : v(fresh) < 50 ? 'text-orange-500' : 'text-blue-500'
+        }
+        icon={winterized ? Snowflake : Droplets}
         onClick={() => open(freshId, 'Fresh Water', '%')}
       />
       <BadgeItem

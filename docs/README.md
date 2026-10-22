@@ -9,6 +9,7 @@ The original copilot-instructions.md is kept as the canonical source for VSCode 
 | `entities.md` | All known entity IDs (battery, solar, OBD, climate, etc.) |
 | `syncthing.md` | Syncthing config sync: removed 2026-09-25, kept for history (now commit + `deploy.sh`) |
 | `automations-modes.md` | Key automations, modes/routines |
+| `winterizing.md` | Winterizing the water system without antifreeze: the procedure, the Winterized lock, the blow-out, spring |
 | `voice-assistant.md` | Voice pipeline, local sentences, Claude, names and areas, model benchmark |
 | `dashboard-yaml.md` | Dashboard editing rules (all storage mode), card pattern examples, custom cards |
 | `react-dashboard.md` | React dashboard architecture, build, deploy |
