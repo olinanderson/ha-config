@@ -32,17 +32,19 @@ Two pumps, each with a small inline filter right before it:
   which takes the shower pan's water through the drain filter and the shower
   tank, pushes it through three filters (a 40 µm spin-down, then two large
   housings, 20 µm and 5 µm) and the UV lamp, then through HX-1 (heated) and
-  HX-3 (cooled) to the shower's hot/cold **mixer** and the head. That the
-  mixer blends loop water, not fresh, is read from the user's guide, which
-  blows the fresh side out without it.
+  HX-3 (cooled) to the shower's hot/cold **mixer** and the head. In Recirc
+  it is all loop water, one side cooled in HX-3 and the other heated in
+  HX-1; Flush is when fresh water is pumped into the shower (the user,
+  2026-10-22).
 
 The modes move three valves: Main closes all three, Recirc opens valve 1,
 Flush opens valves 2 and 3 (by the drawing, the loop to grey and the fresh
 trunk). The firmware starts the else pump in every mode and the recirc pump
 in Recirc and Flush, and turns the UV lamp on in Recirc and Flush. The drawing
 in `piping diagram/` was made on 2026-09-12 and corrected on 2026-10-22 from
-the user's description; the user says a valve stops the loop's cooling path
-(HX-3) in Main, which fits valve 1, but that is unverified.
+the user's description. Valve 1 gates the loop's cooling path (the fresh pass
+through HX-3), probably with a check valve after it: the user's reading, not
+checked at the pipes.
 
 ## The procedure
 
@@ -52,11 +54,12 @@ The walkthrough's twelve steps, the same text as the card
 **Drain**
 
 1. **Drain the fresh tank.** Open the tank's drain valve and leave it open
-   all winter. Wait until the flow stops. The card shows the live sender
+   all winter. Keep the water on and run the sink until nothing comes out
+   (the user's way, 2026-10-22). The card shows the live sender
    (`sensor.a32_pro_fresh_water_tank_level`, not the stable level, which lags
    minutes); **Drained** asks first while it still reads over 5 %. The sender
-   reads 0 % once the float is down, but the tank had never read below 30 %
-   before, so the empty end is untested.
+   reads 0 % once the float is down (the user confirms it reads 0 % when
+   drained; before 2026-10-22 it had never read below 30 %).
 2. **Open every outlet**, each to the middle, so hot and cold both drain:
    outdoor shower hot and cold, the shower fresh fill, the shower mixer hot
    and cold, the sink hot and cold, the drinking spigot.
@@ -81,8 +84,9 @@ The walkthrough's twelve steps, the same text as the card
 
 5. **Else pump's fuse out.**
 6. **Compressor on the else pump's air port** (the top one), its valve open,
-   about **30 psi**. Never above 40 to 50 psi, the usual limit for RV
-   plumbing and filter housings. The water stays off: after step 3 the valves
+   about **30 psi** on the compressor's regulator (my number; the system has
+   no pressure sensor HA could watch). Never above 40 to 50 psi, the usual
+   limit for RV plumbing and filter housings. The water stays off: after step 3 the valves
    are closed, which is what Main gives, and the pump's fuse is out anyway.
 7. **Blow out the fresh side, one outlet at a time.** Close every outlet.
    Take the drinking filter out first (under the right side of the sink,
@@ -144,9 +148,9 @@ Also, with no antifreeze:
 
 ## How the air goes
 
-By the corrected drawing, with the loop's cooling path unverified. The
-blow-out cycles all three modes on each port, so each valve's branch gets air
-whichever valve gates what.
+By the corrected drawing (the user's description of 2026-10-22). The
+blow-out cycles all three modes on each port, so every valve's branch gets
+air.
 
 | Compressor on | Main | Recirc | Flush |
 |---|---|---|---|

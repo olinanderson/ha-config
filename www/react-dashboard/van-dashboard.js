@@ -24308,7 +24308,7 @@ const Xc = "input_boolean.water_winterized", Zb = "input_boolean.water_blowout_r
   {
     title: "Drain the fresh tank",
     kind: "drain",
-    text: "Open the tank's drain valve and leave it open all winter. Wait until the flow stops."
+    text: "Open the tank's drain valve and leave it open all winter. Keep the water on and run the sink until nothing comes out."
   },
   {
     title: "Open every outlet",

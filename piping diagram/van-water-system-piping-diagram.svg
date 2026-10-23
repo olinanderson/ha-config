@@ -6,7 +6,7 @@
   <text x="1080" y="95" font-size="12.5" fill="#6b7280">Fresh water · recirculating shower · engine &amp; hydronic heat · grey water</text>
   <text x="1080" y="115" font-size="11" fill="#6b7280">Corrected 2026-10-22 from the owner's description: shower fresh fill, drinking spigot,</text>
   <text x="1080" y="131" font-size="11" fill="#6b7280">inline pre-pump filters, 40 / 20 / 5 µm shower filters, valve 1 on the cooling path.</text>
-  <text x="1080" y="147" font-size="11" fill="#6b7280">Unverified: valve 1 as the cooling-path valve; the shower tank's place in the loop.</text>
+  <text x="1080" y="147" font-size="11" fill="#6b7280">Valve 1 on the cooling path, probably with a check valve: the owner's reading (2026-10-22).</text>
 
   <!-- ============ UNDER-VAN COOLANT ZONE ============ -->
   <rect x="40" y="40" width="1000" height="190" rx="10" fill="#ddeaf6" stroke="#9db8d2" stroke-width="1"/>
@@ -213,8 +213,8 @@
   <circle cx="826" cy="530" r="11" fill="#1f2937"/>
   <text x="826" y="534" font-size="12" font-weight="700" text-anchor="middle" fill="#ffffff">3</text>
 
-  <!-- Valve 1: motorised, on the fresh pass through HX-3 (loop cooling): open in Recirc, shut in Main.
-       The owner says a valve stops the cooling path in Main (2026-10-22); that it is valve 1 is unverified. -->
+  <!-- Valve 1: motorised, on the fresh pass through HX-3 (loop cooling): open in Recirc, shut in Main,
+       probably with a check valve after it (the owner's reading, 2026-10-22). -->
   <polygon points="317,632 333,632 325,640" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
   <polygon points="317,648 333,648 325,640" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
   <line x1="333" y1="640" x2="341" y2="640" stroke="#1f2937" stroke-width="1.2"/>
@@ -222,6 +222,10 @@
   <text x="351" y="644" font-size="11" font-weight="700" text-anchor="middle" fill="#1f2937">M</text>
   <circle cx="300" cy="640" r="11" fill="#1f2937"/>
   <text x="300" y="644" font-size="12" font-weight="700" text-anchor="middle" fill="#ffffff">1</text>
+
+  <!-- Check valve after valve 1, toward the tank ("probably", the owner, 2026-10-22) -->
+  <polygon points="317,700 333,700 325,714" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
+  <line x1="317" y1="716" x2="333" y2="716" stroke="#1f2937" stroke-width="2"/>
 
   <!-- Shower fresh fill: a cold fresh line into the shower with a hand valve (owner, 2026-10-22) -->
   <polygon points="220,578 236,578 228,586" fill="#ffffff" stroke="#1f2937" stroke-width="1.5"/>
@@ -452,7 +456,7 @@
     <polygon points="796,496 786,500 796,504"/>
     <polygon points="1030,466 1040,470 1030,474"/>
     <polygon points="1191,414 1195,404 1199,414"/>
-    <polygon points="321,700 325,710 329,700"/>
+    <polygon points="321,686 325,696 329,686"/>
     <polygon points="700,731 710,735 700,739"/>
     <polygon points="856,731 866,735 856,739"/>
     <polygon points="916,762 920,772 924,762"/>
