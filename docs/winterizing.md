@@ -2,8 +2,12 @@
 
 Built 2026-10-22 for the user's own winterizing guide. No antifreeze goes in
 anywhere: every line is drained, then blown dry with the compressor, and the
-places air can't clear are emptied by hand. Home Assistant adds two things:
+places air can't clear are emptied by hand. Home Assistant adds three things:
 
+- **The walkthrough** (Water page, Winterize card, **Start winterizing**): the
+  twelve steps below, one at a time, the fresh tank first. It says what to do
+  and does the water part itself; while it runs nothing else touches the
+  water.
 - **Winterized** (`input_boolean.water_winterized`), a lock that holds the
   water system off all winter, whoever tries to switch it on.
 - **The blow-out** (`script.water_blowout`), which cycles Main, Recirc and
@@ -11,101 +15,165 @@ places air can't clear are emptied by hand. Home Assistant adds two things:
   reaches every branch. It ends with the valves in Main, the water off and
   Winterized on.
 
-Both pump fuses come out at the end and stay out. The fuses are the real lock;
-Winterized is the one on the dashboard. As of 2026-10-22 the blow-out had not
-yet run on the van.
+Both pump fuses come out along the way and stay out. The fuses are the real
+lock; Winterized is the one on the dashboard. As of 2026-10-22 neither the
+walkthrough nor the blow-out had run on the van.
+
+## The plumbing, as the user describes it
+
+Two pumps, each with a small inline filter right before it:
+
+- the **else pump** (`switch.a32_pro_switch30_main_system_water_pump`, "main"
+  in the firmware), which feeds everything but the shower loop from the fresh
+  tank: the sink hot and cold, the drinking spigot (off the sink's cold line,
+  its filter under the right side of the sink, drawer out), the outdoor
+  shower hot and cold, and in the shower a cold **fresh fill** and a hot/cold
+  **mixer**;
+- the **recirc pump** (`switch.a32_pro_switch29_shower_system_water_pump`),
+  which takes the shower pan's water through the drain filter and the shower
+  tank, pushes it through three filters (a 40 µm spin-down, then two large
+  housings, 20 µm and 5 µm) and the UV lamp, and back to the head.
+
+The modes move three valves: Main closes all three, Recirc opens valve 1,
+Flush opens valves 2 and 3 (by the drawing, the loop to grey and the fresh
+trunk). The firmware starts the else pump in every mode and the recirc pump
+in Recirc and Flush, and turns the UV lamp on in Recirc and Flush. The drawing
+in `piping diagram/` was made on 2026-09-12 and corrected on 2026-10-22 from
+the user's description; the user says a valve stops the loop's cooling path
+(HX-3) in Main, which fits valve 1, but that is unverified.
 
 ## The procedure
 
-The user's 22 steps, in order, with the corrections. The plumbing is in
-`piping diagram/`.
+The walkthrough's twelve steps, the same text as the card
+(`react-dashboard/src/components/WinterizeCard.tsx`, `STEPS`; change both).
 
 **Drain**
 
-1. Open the fresh tank's manual drain valve and leave it open all winter.
-2. Open every faucet, each to the middle so hot and cold both drain.
-3. Water on in Flush and wait until every outlet only spits: outdoor shower
-   hot and cold, the shower's fresh fill, the shower mixer hot and cold, the
-   sink hot and cold, the drinking spigot. Switch the water off as soon as
-   they spit, so the pumps don't run dry for long. A few seconds dry is what
-   empties the pump heads: the air ports are after the pumps' check valves,
-   so the blow-out never reaches them.
-4. Unscrew the shower filters (both large housings and the small spin-down)
-   and empty them into the drain.
-5. Put the empty housings back, without filters.
+1. **Drain the fresh tank.** Open the tank's drain valve and leave it open
+   all winter. Wait until the flow stops. The card shows the live sender
+   (`sensor.a32_pro_fresh_water_tank_level`, not the stable level, which lags
+   minutes); **Drained** asks first while it still reads over 5 %. The sender
+   reads 0 % once the float is down, but the tank had never read below 30 %
+   before, so the empty end is untested.
+2. **Open every outlet**, each to the middle, so hot and cold both drain:
+   outdoor shower hot and cold, the shower fresh fill, the shower mixer hot
+   and cold, the sink hot and cold, the drinking spigot.
+3. **Empty the lines and the shower tank.** **Water on in Flush**
+   (`script.water_winterize_drain_on`): the master on, Flush, and the UV lamp
+   off 12 s later (it would cook dry as the lines empty). Both pumps run with
+   the loop open to grey. Go round the outlets; when every one only spits,
+   **They only spit · water off** (`script.water_winterize_drain_off`): the
+   pumps and the UV lamp off, valves 2 and 3 closed through their relays while
+   the a32 still powers them, 10 s, the master off, on to step 4. The pumps
+   run dry for a few seconds on purpose: that empties the pump heads, which
+   the blow-out never reaches (by the drawing the air ports are after the
+   pumps' check valves). The valves go through the relays rather than Main
+   because a mode change restarts the pumps, dry. The card shows the water,
+   both pumps and the grey tank, and says to dump the grey tank first when it
+   reads over 80 %: the flush drains into it.
+4. **Shower filters out.** Unscrew the three housings in the shower: the
+   spin-down (40 µm), then the two large ones (20 and 5 µm). Empty them into
+   the drain and put the housings back empty.
 
-**Main side through the main port**
+**The fresh side through the else port**
 
-6. Pull the main ("else") pump fuse.
-7. Compressor on the main pump's air port (top), its valve open, at about
-   **30 psi**. Never above 40 to 50 psi, the usual limit for RV plumbing and
-   filter housings.
-8. Water on in Main. Main runs only the main pump, whose fuse is out, and
-   moves no valves.
-9. to 15. One outlet open at a time until only air comes out: outdoor shower
-   hot, outdoor shower cold, the shower's fresh fill, the drinking spigot,
-   sink cold, sink hot. **Pull the drinking filter before the spigot** (under
-   the right side of the sink, drawer out): a carbon block holds water and
-   cracks or tears when it freezes, and blowing through it only wets it.
-   Take the outdoor shower hose off and empty it.
+5. **Else pump's fuse out.**
+6. **Compressor on the else pump's air port** (the top one), its valve open,
+   about **30 psi**. Never above 40 to 50 psi, the usual limit for RV
+   plumbing and filter housings. The water stays off: after step 3 the valves
+   are closed, which is what Main gives, and the pump's fuse is out anyway.
+7. **Blow out the fresh side, one outlet at a time.** Close every outlet.
+   Take the drinking filter out first (under the right side of the sink,
+   drawer out): a carbon block holds water and cracks when it freezes, and
+   blowing through it only wets it. Then one outlet at a time until only air
+   comes: outdoor shower hot, outdoor shower cold, the shower fresh fill, the
+   shower mixer hot and cold, the drinking spigot, sink cold, sink hot. Go
+   round again until nothing comes out anywhere. Take the outdoor shower hose
+   off and empty it.
 
-**Every branch: the blow-out**
+**Every branch: the blow-out, once on each port**
 
-16. Pull the recirc pump fuse. Both fuses are now out.
-17. Compressor on the recirc pump's air port, its valve open, 30 psi.
-18. **Open the shower mixer to the middle** and close every other outlet.
-    Leave the tank drain open. On the Water page, Winterize card, press
-    **Start blow-out**. It runs Main, Recirc and Flush for the set minutes,
-    as many rounds as set (2 minutes and 2 rounds, 12 minutes in all), and
-    holds the pumps and the UV lamp off. The firmware turns the UV lamp on in
-    Recirc and Flush and it would cook dry; HA switches it straight back off.
-    When it ends the water is off and Winterized is on.
-    Then move the compressor to the main pump's air port and press **Start
-    blow-out** again: it runs with Winterized on. Afterwards, with the valves
-    back in Main, open each outlet once more (as in 9 to 15) until nothing
-    comes out.
-19. Move on only when nothing comes out anywhere.
+8. **Recirc pump's fuse out, compressor onto its port**, its valve open,
+   30 psi again. Both fuses are now out. Open the shower mixer to the middle
+   and close every other outlet. Leave the tank drain open.
+9. **Blow-out, recirc port.** Press **Start blow-out**. It runs Main, Recirc
+   and Flush for the set minutes, as many rounds as set (2 minutes and
+   2 rounds, 12 minutes in all), and holds the pumps and the UV lamp off. It
+   ends with the water off and Winterized on. Next waits until it has ended.
+10. **Blow-out, else port.** Move the compressor back to the else pump's air
+    port and press **Start blow-out** again; it runs with Winterized on. Then,
+    with the valves back in Main, open each outlet once more, one at a time,
+    until nothing comes out.
 
 **Filters and what air can't clear**
 
-20. Remove the drinking filter if it isn't out already.
-21. Remove the pre-pump filters (the small cylinders right before each pump)
-    and empty them. That drains the pumps' suction side.
-22. Remove the shower filters.
-
-Then, with no antifreeze:
-
-- **P-trap**: empty it by hand or with a wet-vac. Air can't push trap water
-  out: the A/C condensate line and the toilet urine line join above it at the
-  Y connectors, and the air escapes up them.
-- **Grey tank**: dump it, then close the dump valve once it is empty.
-- **Shower pan and loop pump**: sponge out the shower pan; the drain filter
-  before the loop pump comes out in step 21.
-- **Heat exchangers**: they are brazed plate and crack if water freezes in
-  them. Give them air time (more blow-out rounds if anything still spits).
-  Running the hydronic heater dries HX-1 and HX-2, which carry its coolant.
-  HX-3 gets air only.
-- **Pump heads**: the few seconds dry in step 3. The blow-out can't reach them.
+11. **Filters out.** The drinking filter if it is still in; both inline
+    filters before the pumps, emptied, which drains the pumps' suction side;
+    and the three shower housings opened once more and emptied.
+12. **What air can't clear.** The P-trap under the sink, by hand or with a
+    wet-vac: air can't push trap water out, since (by the drawing) the A/C
+    condensate and toilet lines join above it at the Y connectors and the air
+    escapes up them. Sponge out the shower pan. Dump the grey tank (the card
+    has the dump valve, `switch.a32_pro_switch06_grey_water_tank_valve`, which
+    the lock leaves alone) and close the valve once it reads empty.
+    Compressor off, both air-port valves closed. The tank drain stays open.
+    **Done** (`script.water_winterize_finish`) turns Winterized on, if the
+    blow-outs hadn't, and ends the walkthrough.
 
 It ends with the tank drain open, the water off, Winterized on and both pump
 fuses out.
+
+Also, with no antifreeze:
+
+- **Heat exchangers**: brazed plate, they crack if water freezes in them.
+  Give them air time (more blow-out rounds if anything still spits). By the
+  drawing HX-1 and HX-2 carry the hydronic heater's coolant, so a heater run
+  warms them; HX-3 gets air only.
+- **Pump heads**: the few seconds dry in step 3. The blow-out can't reach
+  them.
 
 | Where antifreeze usually goes | Instead |
 |---|---|
 | P-trap | Emptied by hand or wet-vac |
 | Grey tank | Dumped, valve closed once empty |
-| Pump heads | Run dry for a few seconds at the end of the drain, suction filters out |
-| Heat exchangers | Blow-out rounds; the hydronic heater dries HX-1 and HX-2 |
-| Lines and fixtures | The blow-out, then each outlet in turn |
+| Pump heads | Run dry for a few seconds at the end of the drain, inline filters out |
+| Heat exchangers | Blow-out rounds |
+| Lines and fixtures | The blow-out on each port, then each outlet in turn |
 
 ## How the air goes
 
+By the corrected drawing, with the loop's cooling path unverified. The
+blow-out cycles all three modes on each port, so each valve's branch gets air
+whichever valve gates what.
+
 | Compressor on | Main | Recirc | Flush |
 |---|---|---|---|
-| Recirc pump's air port | Filters, UV, HX-1 and HX-3 to the shower head (mixer open) | The same, plus valve 1 into the fresh side, out through HX-3 into the tank | Valve 2 down the flush line to grey, valve 3 into the fresh trunk |
-| Main pump's air port | Every fresh outlet, HX-2, and HX-3 back into the tank | Valve 1 into the loop, then the riser, filters and shower head | Valve 3 into the riser, filters and shower head |
+| Recirc pump's air port | The loop: filters, UV, HX-1 and HX-3 to the shower head (mixer open) | The same, plus what valve 1 opens: the fresh pass through HX-3, back into the tank | Valve 2 down the flush line to grey, valve 3 into the fresh trunk |
+| Else pump's air port | Every fresh outlet and HX-2 | Valve 1 into the fresh pass through HX-3 and the loop, then the riser, filters and shower head | Valve 3 into the riser, filters and shower head |
 
 That is why it runs once on each port, with the shower mixer open both times.
+
+## The walkthrough
+
+From the Winterize card, **Start winterizing** (`script.water_winterize_start`,
+only while Winterized is off and no blow-out runs):
+
+- `input_boolean.water_winterizing` is on from Start to Done or Stop, and
+  `input_number.water_winterize_step` (0 = none) holds the step, so the phone
+  and the laptop show the same one and it survives a reload.
+- While the flag is on, Power Saving, Bedtime, Shower Mode, Sleep Mode and
+  its morning restore leave the water alone, and the 1 Hz snapshot and the
+  pre-sleep scene leave the master out: the water is the walkthrough's. The
+  guard ignores the flag; it holds whatever Winterized holds, which is off
+  until step 9's blow-out turns it on.
+- Plain steps set the step from the card. The water-touching ones go through
+  `script.water_winterize_drain_on` and `_drain_off` (step 3; `_drain_on`
+  refuses once Winterized is on, the guard would undo it), the blow-out
+  (steps 9 and 10) and `script.water_winterize_finish` (step 12). **Stop
+  winterizing** asks, then `script.water_winterize_stop`: the water and the
+  UV lamp off, the flag off, step 0. Back works everywhere but during a run.
+- The card's checklists are the phone's own: they clear on a reload and at
+  every step.
 
 ## Winterized, the lock
 
@@ -129,8 +197,8 @@ While `input_boolean.water_winterized` is on:
 
 Left alone on purpose:
 
-- The **grey tank heater**: the sink and the toilet still drain into the grey
-  tank.
+- The **grey tank heater** and the **grey dump valve**: the sink and the
+  toilet still drain into the grey tank.
 - The **hydronic heater** and **Hot Water Mode**, which is also the Heater
   card's manual burner switch. The burner heats the van.
 
@@ -139,7 +207,8 @@ it can still switch the water on; with the fuses out nothing pumps.
 
 ## The blow-out
 
-`script.water_blowout`, from the Winterize card on the Water page:
+`script.water_blowout`, from the Winterize card on the Water page (on its own,
+or as steps 9 and 10 of the walkthrough):
 
 - **Settings**: `input_number.water_blowout_minutes` (1 to 10 per mode) and
   `input_number.water_blowout_rounds` (1 to 5), set to 2 and 2.
@@ -166,8 +235,8 @@ That's why the finish waits 12 s after setting Main.
 
 ## Spring: de-winterizing
 
-1. Put every filter back: the shower filters, the spin-down, the pre-pump
-   filters and the drinking filter.
+1. Put every filter back: the three shower filters (40 µm spin-down, 20 µm,
+   5 µm), both inline pre-pump filters and the drinking filter.
 2. Close the tank drain and the outlets, refit the outdoor shower hose, and
    fill the fresh tank.
 3. Put both pump fuses back.

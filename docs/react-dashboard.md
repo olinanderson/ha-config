@@ -172,18 +172,37 @@ of `sensor.night_climate_status`, whose full text is the line's tooltip. Tests:
 ## Winterize Card
 
 `src/components/WinterizeCard.tsx` sits on the **Water page** between Water Controls and Valves & Pumps
-(`docs/winterizing.md`). The top row is the **Winterized** switch (`input_boolean.water_winterized`): one
-tap turns it on; turning it off asks first, since the water can then come on again. Below it, idle, the
-blow-out: minutes per mode and rounds steppers (`input_number.water_blowout_minutes`, 1–10, and
-`_rounds`, 1–5), the checklist (both pump fuses out, the compressor on an air port at about 30 psi, the
-shower mixer open) and **Start blow-out · N min**, which calls `script.turn_on` so the call returns at once
-(calling the script itself would hold it open for the whole run). Start is greyed out under Shop Mode and
-for 5 s after a tap. The last run's status shows with its time in the phone's own clock. While it runs
-(`input_boolean.water_blowout_running` or the script on, so a Stop that is still finishing counts) the card
-shows the status ("Recirc · round 1 of 2"), Main / Recirc / Flush pills lit from the a32's own mode
+(`docs/winterizing.md`). It has three faces.
+
+**Idle.** The top row is the **Winterized** switch (`input_boolean.water_winterized`): one tap turns it
+on; turning it off asks first, since the water can then come on again; on, the row says since when. Below
+it, while Winterized is off, **Start winterizing** (`script.water_winterize_start` through `script.turn_on`,
+greyed for 5 s after a tap), then under a divider the blow-out on its own: minutes per mode and rounds
+steppers (`input_number.water_blowout_minutes`, 1–10, and `_rounds`, 1–5), the note (both pump fuses out,
+the compressor on an air port at about 30 psi, the shower mixer open) and **Start blow-out · N min**, which
+calls `script.turn_on` so the call returns at once (calling the script itself would hold it open for the
+whole run). Start is greyed out under Shop Mode and for 5 s after a tap. The last run's status shows with
+its time in the phone's own clock.
+
+**The walkthrough** (`input_boolean.water_winterizing` on and `input_number.water_winterize_step` 1–12):
+a "Step k of 12" badge, a progress bar, the step's title and text from `STEPS` (the same twelve as
+`docs/winterizing.md`; change both), a checklist where the step has one (ticks are local and keyed by the
+step, so they clear on a reload and at every step), then the step's own controls. Step 1 shows the live
+fresh sender (`sensor.a32_pro_fresh_water_tank_level`) and **Drained**, which asks first above 5 %. Step 3
+shows the water, both pumps and the grey sender as readings, **Water on in Flush**
+(`script.water_winterize_drain_on`) and **They only spit · water off** (`_drain_off`), both held while either
+script or a blow-out runs, and the grey dump valve with a warning when the tank reads over 80 %. Steps 9
+and 10 have the blow-out steppers and Start; while it runs the running face replaces them and Next and
+Stop winterizing are held. Step 12 has the grey dump valve and **Done** (`script.water_winterize_finish`).
+Every other step has **Next**, which sets the step. **Back** goes one step back; **Stop winterizing** asks,
+then calls `script.water_winterize_stop`. The lock row is hidden while the walkthrough runs.
+
+**Running** (`input_boolean.water_blowout_running` or the script on, so a Stop that is still finishing
+counts): the status ("Recirc · round 1 of 2"), Main / Recirc / Flush pills lit from the a32's own mode
 switches, the step's time left (a 1 Hz local tick against `input_datetime.water_blowout_step_ends`), a
 progress bar for the whole run (from the script's `last_triggered` to `input_datetime.water_blowout_ends`),
 "Done at" and **Stop** (`script.water_blowout_stop`). The Winterized switch is held while it runs.
+
 Water Controls greys out the master switch while Winterized is on and no blow-out runs. The Fresh chips
 on the Home and Van pages read **Winterized** in cyan with a snowflake while it is on, instead of the
 drained tank's 0 %. Tests: `src/components/WinterizeCard.test.tsx`.

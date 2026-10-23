@@ -1121,8 +1121,9 @@
     - action: scene.create
       data:
         scene_id: last_active_state
-        # The water master only while it isn't winterized or being blown
-        # out, so Power Saving off can't switch it on (docs/winterizing.md)
+        # The water master only while it isn't winterized, being blown out
+        # or being winterized, so Power Saving off can't switch it on
+        # (docs/winterizing.md)
         snapshot_entities: >-
           {{ ['light.led_controller_cct_1', 'light.led_controller_cct_2',
               'light.led_controller_sc_1', 'light.led_controller_sc_2',
@@ -1130,6 +1131,7 @@
               'switch.a32_pro_do8_switch07_bottom_monitor']
              + ([] if is_state('input_boolean.water_winterized', 'on')
                      or is_state('input_boolean.water_blowout_running', 'on')
+                     or is_state('input_boolean.water_winterizing', 'on')
                 else ['switch.a32_pro_water_system_master_switch']) }}
 
 # automation: rolling_snapshot_bootstrap_on_start
@@ -1146,8 +1148,9 @@
     - action: scene.create
       data:
         scene_id: last_active_state
-        # The water master only while it isn't winterized or being blown
-        # out, so Power Saving off can't switch it on (docs/winterizing.md)
+        # The water master only while it isn't winterized, being blown out
+        # or being winterized, so Power Saving off can't switch it on
+        # (docs/winterizing.md)
         snapshot_entities: >-
           {{ ['light.led_controller_cct_1', 'light.led_controller_cct_2',
               'light.led_controller_sc_1', 'light.led_controller_sc_2',
@@ -1155,6 +1158,7 @@
               'switch.a32_pro_do8_switch07_bottom_monitor']
              + ([] if is_state('input_boolean.water_winterized', 'on')
                      or is_state('input_boolean.water_blowout_running', 'on')
+                     or is_state('input_boolean.water_winterizing', 'on')
                 else ['switch.a32_pro_water_system_master_switch']) }}
 
 # ────────────────────────────────────────────────────────────────
@@ -1189,14 +1193,18 @@
       data:
         brightness_pct: 100
 
-    # The water on in Recirculating Shower, unless it is winterized or being
-    # blown out (docs/winterizing.md); the lights and the fan still come on
+    # The water on in Recirculating Shower, unless it is winterized, being
+    # blown out or being winterized (docs/winterizing.md); the lights and
+    # the fan still come on
     - if:
         - condition: state
           entity_id: input_boolean.water_winterized
           state: "off"
         - condition: state
           entity_id: input_boolean.water_blowout_running
+          state: "off"
+        - condition: state
+          entity_id: input_boolean.water_winterizing
           state: "off"
       then:
         # Ensure water system master is ON
@@ -1292,10 +1300,15 @@
     - action: scene.create
       data:
         scene_id: pre_sleep_mode_devices
-        snapshot_entities:
-          - switch.a32_pro_do8_switch06_top_monitor
-          - switch.a32_pro_do8_switch07_bottom_monitor
-          - switch.a32_pro_water_system_master_switch
+        # The water master only while it isn't winterized, being blown out
+        # or being winterized (docs/winterizing.md)
+        snapshot_entities: >-
+          {{ ['switch.a32_pro_do8_switch06_top_monitor',
+              'switch.a32_pro_do8_switch07_bottom_monitor']
+             + ([] if is_state('input_boolean.water_winterized', 'on')
+                     or is_state('input_boolean.water_blowout_running', 'on')
+                     or is_state('input_boolean.water_winterizing', 'on')
+                else ['switch.a32_pro_water_system_master_switch']) }}
 
     # The inverter is a toggle button and a ping, which a scene cannot hold.
     # A helper, so it also survives a restart in the night.
@@ -1322,14 +1335,17 @@
           - light.main_lighting_switch
           - light.under_cabinet_lighting_switch
 
-    # Water system off, unless someone is in the shower (as power saving) or
-    # a winterize blow-out is running
+    # Water system off, unless someone is in the shower (as power saving), a
+    # winterize blow-out is running or the winterizing walkthrough is
     - if:
         - condition: state
           entity_id: input_boolean.shower_mode
           state: "off"
         - condition: state
           entity_id: input_boolean.water_blowout_running
+          state: "off"
+        - condition: state
+          entity_id: input_boolean.water_winterizing
           state: "off"
       then:
         - action: switch.turn_off
@@ -1409,10 +1425,14 @@
             entity_id:
               - switch.a32_pro_do8_switch06_top_monitor
               - switch.a32_pro_do8_switch07_bottom_monitor
-        # The water too, unless it is winterized (docs/winterizing.md)
+        # The water too, unless it is winterized or being winterized
+        # (docs/winterizing.md)
         - if:
             - condition: state
               entity_id: input_boolean.water_winterized
+              state: "off"
+            - condition: state
+              entity_id: input_boolean.water_winterizing
               state: "off"
           then:
             - action: switch.turn_on
@@ -3225,7 +3245,9 @@
 # ════════════════════════════════════════════════════════════════
 #  Water winterized (docs/winterizing.md)
 #  input_boolean.water_winterized holds the water system off for the
-#  winter. script.water_blowout turns it on as it ends.
+#  winter. script.water_blowout turns it on as it ends. While the
+#  Winterize card's walkthrough runs (input_boolean.water_winterizing)
+#  the routines leave the water alone; the guard ignores it.
 # ════════════════════════════════════════════════════════════════
 
 # Turned on by hand: everything off at once. A blow-out's finish does its own

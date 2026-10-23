@@ -277,3 +277,13 @@ water_blowout_rounds:
   max: 5
   step: 1
   icon: mdi:repeat
+# The winterizing walkthrough's step, 1 to 12 (docs/winterizing.md), 0 when
+# none is running. The Winterize card sets it; it survives a restart, so the
+# phone and the laptop show the same step.
+water_winterize_step:
+  name: "Water winterize step"
+  min: 0
+  max: 12
+  step: 1
+  mode: box
+  icon: mdi:clipboard-list-outline

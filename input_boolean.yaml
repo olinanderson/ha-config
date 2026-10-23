@@ -193,3 +193,13 @@ water_winterized:
 water_blowout_running:
   name: "Water blow-out running"
   icon: mdi:weather-windy
+
+# On from Start winterizing on the Water page's Winterize card until the
+# walkthrough's Done or Stop. While it is on the water belongs to the
+# walkthrough: Power Saving, Bedtime, Sleep Mode, Shower Mode and the morning
+# restore leave the master alone and the snapshots leave it out, so none of
+# them switches the pumps on dry or off mid-step. The guard ignores it. No
+# `initial:`: with input_number.water_winterize_step it survives a restart.
+water_winterizing:
+  name: "Water winterizing walkthrough"
+  icon: mdi:clipboard-list-outline

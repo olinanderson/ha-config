@@ -157,13 +157,17 @@ power_saving_mode_on:
           - switch.a32_pro_do8_switch07_bottom_monitor
 
     # Turn OFF water system while away (but NOT if shower mode is on, or
-    # while a winterize blow-out runs: switching it off would end the run)
+    # while a winterize blow-out or the winterizing walkthrough runs: the
+    # water is theirs, docs/winterizing.md)
     - if:
         - condition: state
           entity_id: input_boolean.shower_mode
           state: "off"
         - condition: state
           entity_id: input_boolean.water_blowout_running
+          state: "off"
+        - condition: state
+          entity_id: input_boolean.water_winterizing
           state: "off"
       then:
         - action: switch.turn_off
@@ -354,14 +358,17 @@ bedtime_routine:
     # Starlink asleep from +30 min until the wake time (in the background)
     - action: script.starlink_sleep_start_after_30m
 
-    # Ensure water system is on and set to Main, unless it is winterized or
-    # being blown out (docs/winterizing.md)
+    # Ensure water system is on and set to Main, unless it is winterized,
+    # being blown out or being winterized (docs/winterizing.md)
     - if:
         - condition: state
           entity_id: input_boolean.water_winterized
           state: "off"
         - condition: state
           entity_id: input_boolean.water_blowout_running
+          state: "off"
+        - condition: state
+          entity_id: input_boolean.water_winterizing
           state: "off"
       then:
         - action: switch.turn_on
@@ -392,10 +399,14 @@ bedtime_routine:
     # After total of 10 minutes from start, do final shutdown
     - delay: "00:05:00"
     - action: script.inverter_ensure_off
-    # The water off, except during a winterize blow-out
+    # The water off, except during a winterize blow-out or the winterizing
+    # walkthrough
     - if:
         - condition: state
           entity_id: input_boolean.water_blowout_running
+          state: "off"
+        - condition: state
+          entity_id: input_boolean.water_winterizing
           state: "off"
       then:
         - action: switch.turn_off
@@ -1525,6 +1536,8 @@ voice_light_warmth:
 #  script.water_blowout cycles the modes so the compressor's air       #
 #  reaches every branch, holds the pumps and the UV lamp off, and      #
 #  turns the lock on when it ends.                                     #
+#  script.water_winterize_* run the Winterize card's walkthrough,      #
+#  which says what to do and owns the water while it runs.             #
 ########################################################################
 water_winterize_shutdown:
   alias: "Water • winterized: all off"
@@ -1740,3 +1753,147 @@ water_blowout_stop:
     - action: script.water_blowout_finish
       data:
         reason: "Stopped"
+
+# The walkthrough on the Winterize card: twelve steps that say what to do,
+# the fresh tank first, and do the water part (docs/winterizing.md). The
+# step is input_number.water_winterize_step; input_boolean.water_winterizing
+# is on from Start to Done or Stop, and while it is on the routines leave
+# the water alone. The card moves between the plain steps itself
+# (input_number.set_value); the steps that touch the water go through these.
+water_winterize_start:
+  alias: "Water • winterize: start the walkthrough"
+  description: >-
+    Step 1. Refused while Winterized is on (turn it off first) or a blow-out
+    runs.
+  mode: single
+  max_exceeded: silent
+  sequence:
+    - condition: state
+      entity_id: input_boolean.water_winterized
+      state: "off"
+    - condition: state
+      entity_id: input_boolean.water_blowout_running
+      state: "off"
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.water_winterizing
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.water_winterize_step
+      data:
+        value: 1
+
+water_winterize_drain_on:
+  alias: "Water • winterize: the water on in Flush"
+  description: >-
+    Step 3, the drain: the water on in Flush, so both pumps run with the loop
+    open to grey (valves 2 and 3) and every outlet opened in step 2 empties.
+    The UV lamp off once the mode has settled: it would cook dry as the lines
+    empty. Only while the walkthrough is on and before the blow-outs: once
+    Winterized is on (step 9) the guard would switch the water straight off.
+  mode: single
+  max_exceeded: silent
+  sequence:
+    - condition: state
+      entity_id: input_boolean.water_winterizing
+      state: "on"
+    - condition: state
+      entity_id: input_boolean.water_winterized
+      state: "off"
+    # The modes only move the valves while the master is on
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_water_system_master_switch
+    - wait_template: "{{ is_state('switch.a32_pro_water_system_master_switch', 'on') }}"
+      timeout: "00:00:15"
+    - action: switch.turn_on
+      target:
+        entity_id: switch.a32_pro_water_system_state_recirculating_shower_flush
+    # set_water_state turns the UV lamp on at once, moves the valves, waits
+    # 10 s and starts the pumps
+    - delay: "00:00:12"
+    - action: switch.turn_off
+      target:
+        entity_id: switch.a32_pro_switch14_uv_filter
+
+water_winterize_drain_off:
+  alias: "Water • winterize: drained, the water off"
+  description: >-
+    The end of step 3, "they only spit": the pumps off at once, valves 2 and
+    3 closed through their relays while the system still has power (a mode
+    change would start the pumps again), then the water off and the
+    walkthrough on to step 4.
+  mode: single
+  max_exceeded: silent
+  sequence:
+    - action: script.turn_off
+      target:
+        entity_id: script.water_winterize_drain_on
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_switch30_main_system_water_pump
+          - switch.a32_pro_switch29_shower_system_water_pump
+          - switch.a32_pro_switch14_uv_filter
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_switch02_water_system_valve_2
+          - switch.a32_pro_switch03_water_system_valve_3
+    # The valves take up to 10 s
+    - delay: "00:00:10"
+    - action: switch.turn_off
+      target:
+        entity_id: switch.a32_pro_water_system_master_switch
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.water_winterize_step
+      data:
+        value: 4
+
+water_winterize_finish:
+  alias: "Water • winterize: the walkthrough done"
+  description: >-
+    Step 12's Done: Winterized on (the blow-outs turned it on already; this
+    covers a walkthrough that skipped them), the walkthrough off, the step
+    back to 0.
+  mode: single
+  max_exceeded: silent
+  sequence:
+    - action: input_boolean.turn_on
+      target:
+        entity_id: input_boolean.water_winterized
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.water_winterizing
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.water_winterize_step
+      data:
+        value: 0
+
+water_winterize_stop:
+  alias: "Water • winterize: stop the walkthrough"
+  description: >-
+    Leaves the walkthrough wherever it is: the water off (step 3 may have
+    left it on), the walkthrough off, the step back to 0. Winterized stays
+    as it is.
+  mode: single
+  max_exceeded: silent
+  sequence:
+    - action: script.turn_off
+      target:
+        entity_id: script.water_winterize_drain_on
+    - action: switch.turn_off
+      target:
+        entity_id:
+          - switch.a32_pro_water_system_master_switch
+          - switch.a32_pro_switch14_uv_filter
+    - action: input_boolean.turn_off
+      target:
+        entity_id: input_boolean.water_winterizing
+    - action: input_number.set_value
+      target:
+        entity_id: input_number.water_winterize_step
+      data:
+        value: 0

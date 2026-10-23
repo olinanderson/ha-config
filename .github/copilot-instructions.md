@@ -404,6 +404,9 @@ Pattern: `sensor.*_energy_wh` — one for each power sensor above, plus `sensor.
 | `input_text.water_blowout_status` | Blow-out step ("Recirc · round 1 of 2") or how the last run ended |
 | `input_datetime.water_blowout_step_ends` / `_ends` | When the current step and the whole run end (the card's countdown) |
 | `script.water_blowout` / `_stop` / `_finish`, `script.water_winterize_shutdown` | Blow-out, its Stop, how every run ends, everything off |
+| `input_boolean.water_winterizing` | On while the Winterize card's walkthrough runs: Power Saving, Bedtime, Shower Mode, Sleep Mode and the snapshots leave the water alone |
+| `input_number.water_winterize_step` | The walkthrough's step, 1–12 (0 = none), so every screen shows the same one |
+| `script.water_winterize_start` / `_drain_on` / `_drain_off` / `_finish` / `_stop` | The walkthrough: start, the water on in Flush and off again (step 3), done (Winterized on), stop |
 
 ### Climate / Heating
 | Entity | Description |
