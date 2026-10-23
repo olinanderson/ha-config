@@ -27,12 +27,14 @@ Two pumps, each with a small inline filter right before it:
   in the firmware), which feeds everything but the shower loop from the fresh
   tank: the sink hot and cold, the drinking spigot (off the sink's cold line,
   its filter under the right side of the sink, drawer out), the outdoor
-  shower hot and cold, and in the shower a cold **fresh fill** and a hot/cold
-  **mixer**;
+  shower hot and cold, and a cold **fresh fill** in the shower;
 - the **recirc pump** (`switch.a32_pro_switch29_shower_system_water_pump`),
   which takes the shower pan's water through the drain filter and the shower
   tank, pushes it through three filters (a 40 µm spin-down, then two large
-  housings, 20 µm and 5 µm) and the UV lamp, and back to the head.
+  housings, 20 µm and 5 µm) and the UV lamp, then through HX-1 (heated) and
+  HX-3 (cooled) to the shower's hot/cold **mixer** and the head. That the
+  mixer blends loop water, not fresh, is read from the user's guide, which
+  blows the fresh side out without it.
 
 The modes move three valves: Main closes all three, Recirc opens valve 1,
 Flush opens valves 2 and 3 (by the drawing, the loop to grey and the fresh
@@ -87,9 +89,9 @@ The walkthrough's twelve steps, the same text as the card
    drawer out): a carbon block holds water and cracks when it freezes, and
    blowing through it only wets it. Then one outlet at a time until only air
    comes: outdoor shower hot, outdoor shower cold, the shower fresh fill, the
-   shower mixer hot and cold, the drinking spigot, sink cold, sink hot. Go
-   round again until nothing comes out anywhere. Take the outdoor shower hose
-   off and empty it.
+   drinking spigot, sink cold, sink hot (the shower mixer is on the loop: it
+   gets its air in step 9). Go round again until nothing comes out anywhere.
+   Take the outdoor shower hose off and empty it.
 
 **Every branch: the blow-out, once on each port**
 
@@ -148,8 +150,8 @@ whichever valve gates what.
 
 | Compressor on | Main | Recirc | Flush |
 |---|---|---|---|
-| Recirc pump's air port | The loop: filters, UV, HX-1 and HX-3 to the shower head (mixer open) | The same, plus what valve 1 opens: the fresh pass through HX-3, back into the tank | Valve 2 down the flush line to grey, valve 3 into the fresh trunk |
-| Else pump's air port | Every fresh outlet and HX-2 | Valve 1 into the fresh pass through HX-3 and the loop, then the riser, filters and shower head | Valve 3 into the riser, filters and shower head |
+| Recirc pump's air port | The loop: filters, UV, HX-1 and HX-3 to the shower head (mixer open) | The same (valve 1 is on the fresh side) | Valve 2 down the flush line to grey, valve 3 into the fresh trunk |
+| Else pump's air port | Every fresh outlet (the fresh fill too) and HX-2 | The same, plus valve 1: the fresh pass through HX-3, back into the tank | Valve 3 into the riser, filters and shower head |
 
 That is why it runs once on each port, with the shower mixer open both times.
 

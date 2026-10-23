@@ -24345,14 +24345,12 @@ const Xc = "input_boolean.water_winterized", Zb = "input_boolean.water_blowout_r
   {
     title: "Blow out the fresh side, one outlet at a time",
     kind: "plain",
-    text: "Close every outlet. Take the drinking filter out first (under the right side of the sink, drawer out): a carbon block holds water. Then open one outlet at a time until only air comes, and go round again until nothing comes out anywhere.",
+    text: "Close every outlet. Take the drinking filter out first (under the right side of the sink, drawer out): a carbon block holds water. Then open one outlet at a time until only air comes, and go round again until nothing comes out anywhere. The shower mixer is on the loop: it gets its air in step 9.",
     checklist: [
       "Drinking filter out",
       "Outdoor shower hot",
       "Outdoor shower cold",
       "Shower fresh fill",
-      "Shower mixer hot",
-      "Shower mixer cold",
       "Drinking spigot",
       "Sink cold",
       "Sink hot",
