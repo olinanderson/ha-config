@@ -69,8 +69,8 @@ The walkthrough's twelve steps, the same text as the card
    the loop open to grey. Go round the outlets; when every one only spits,
    **They only spit · water off** (`script.water_winterize_drain_off`): the
    pumps and the UV lamp off, valves 2 and 3 closed through their relays while
-   the a32 still powers them, 10 s, the master off, on to step 4. The pumps
-   run dry for a few seconds on purpose: that empties the pump heads, which
+   the a32 still powers them, 10 s, the master off, on to the next step (4;
+   from step 5, 6). The pumps run dry for a few seconds on purpose: that empties the pump heads, which
    the blow-out never reaches (by the drawing the air ports are after the
    pumps' check valves). The valves go through the relays rather than Main
    because a mode change restarts the pumps, dry. The card shows the water,
@@ -79,23 +79,38 @@ The walkthrough's twelve steps, the same text as the card
 4. **Shower filters out.** Unscrew the three housings in the shower: the
    spin-down (40 µm), then the two large ones (20 and 5 µm). Empty them into
    the drain and put the housings back empty.
+5. **Flush the shower tank again.** What ran out of the housings went down
+   the drain into the shower tank. **Water on in Flush** again (the same
+   `_drain_on`): the recirc pump sends it to grey; the else pump runs dry
+   meanwhile, which a diaphragm pump takes for a minute or two. When the
+   recirc pump only spits, **Shower tank empty · water off** (`_drain_off`,
+   on to step 6). The button, not the rocker: the rocker cuts the power with
+   valves 2 and 3 still open, which gives the else port's air a way into the
+   loop and out to grey (the rocker left them open on 2026-10-22 19:34 MDT);
+   the button closes them first. Asked by the user 2026-10-22, after a hand
+   flush at this point.
 
 **The fresh side through the else port**
 
-5. **Else pump's fuse out.**
-6. **Compressor on the else pump's air port** (the top one), its valve open,
-   about **30 psi** on the compressor's regulator (my number; the system has
-   no pressure sensor HA could watch). Never above 40 to 50 psi, the usual
-   limit for RV plumbing and filter housings. The water stays off: after step 3 the valves
-   are closed, which is what Main gives, and the pump's fuse is out anyway.
+6. **Else pump's fuse out, compressor on its port** (the top one), its valve
+   open, about **30 psi** on the compressor's regulator (my number; the
+   system has no pressure sensor HA could watch). Never above 40 to 50 psi,
+   the usual limit for RV plumbing and filter housings. The water stays off:
+   after step 5 the valves are closed, which is what Main gives, and the
+   pump's fuse is out anyway. The compressor's switch
+   (`switch.a32_pro_switch28_compressor`, also a Home tile) is on the card:
+   every step, the running face and the idle blow-out controls (asked
+   2026-10-22); Shop Mode greys it and would re-shut it.
 7. **Blow out the fresh side, one outlet at a time.** Close every outlet.
-   Take the drinking filter out first (under the right side of the sink,
-   drawer out): a carbon block holds water and cracks when it freezes, and
-   blowing through it only wets it. Then one outlet at a time until only air
-   comes: outdoor shower hot, outdoor shower cold, the shower fresh fill, the
-   drinking spigot, sink cold, sink hot (the shower mixer is on the loop: it
-   gets its air in step 9). Go round again until nothing comes out anywhere.
-   Take the outdoor shower hose off and empty it.
+   Then one outlet at a time until only air comes: outdoor shower hot,
+   outdoor shower cold, the shower fresh fill, the drinking spigot, sink
+   cold, sink hot (the shower mixer is on the loop: it gets its air in
+   step 9). Go round again until nothing comes out anywhere. Take the
+   outdoor shower hose off and empty it. The drinking filter stays in until
+   step 11, after the blow-outs: the user's order (2026-10-22); once it is
+   off its lines are open, so it can't come out before the air. Open the
+   spigot like the others; a wet carbon block may pass little air at 30 psi,
+   and the line past it drains when the filter comes off.
 
 **Every branch: the blow-out, once on each port**
 
@@ -113,9 +128,11 @@ The walkthrough's twelve steps, the same text as the card
 
 **Filters and what air can't clear**
 
-11. **Filters out.** The drinking filter if it is still in; both inline
-    filters before the pumps, emptied, which drains the pumps' suction side;
-    and the three shower housings opened once more and emptied.
+11. **Filters out.** The drinking filter: take the top drawer next to the
+    sink out, un-velcro the filter behind it and unscrew it, with the spigot
+    open so the line to it drains (the user's directions, 2026-10-22). Then
+    both inline filters before the pumps, emptied, which drains the pumps'
+    suction side; and the three shower housings opened once more and emptied.
 12. **What air can't clear.** The P-trap under the sink, by hand or with a
     wet-vac: air can't push trap water out, since (by the drawing) the A/C
     condensate and toilet lines join above it at the Y connectors and the air
@@ -135,8 +152,8 @@ Also, with no antifreeze:
   Give them air time (more blow-out rounds if anything still spits). By the
   drawing HX-1 and HX-2 carry the hydronic heater's coolant, so a heater run
   warms them; HX-3 gets air only.
-- **Pump heads**: the few seconds dry in step 3. The blow-out can't reach
-  them.
+- **Pump heads**: the few seconds dry in steps 3 and 5. The blow-out can't
+  reach them.
 
 | Where antifreeze usually goes | Instead |
 |---|---|
@@ -173,11 +190,14 @@ only while Winterized is off and no blow-out runs):
   guard ignores the flag; it holds whatever Winterized holds, which is off
   until step 9's blow-out turns it on.
 - Plain steps set the step from the card. The water-touching ones go through
-  `script.water_winterize_drain_on` and `_drain_off` (step 3; `_drain_on`
-  refuses once Winterized is on, the guard would undo it), the blow-out
-  (steps 9 and 10) and `script.water_winterize_finish` (step 12). **Stop
+  `script.water_winterize_drain_on` and `_drain_off` (steps 3 and 5;
+  `_drain_off` moves the step on, 3 to 4 and 5 to 6; `_drain_on` refuses
+  once Winterized is on, the guard would undo it), the blow-out (steps 9
+  and 10) and `script.water_winterize_finish` (step 12). **Stop
   winterizing** asks, then `script.water_winterize_stop`: the water and the
   UV lamp off, the flag off, step 0. Back works everywhere but during a run.
+- The compressor's switch (`switch.a32_pro_switch28_compressor`) is on the
+  card: every step, the running face and the idle blow-out controls.
 - The card's checklists are the phone's own: they clear on a reload and at
   every step.
 

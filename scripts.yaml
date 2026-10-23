@@ -1786,8 +1786,9 @@ water_winterize_start:
 water_winterize_drain_on:
   alias: "Water • winterize: the water on in Flush"
   description: >-
-    Step 3, the drain: the water on in Flush, so both pumps run with the loop
-    open to grey (valves 2 and 3) and every outlet opened in step 2 empties.
+    Steps 3 and 5, the flushes: the water on in Flush, so both pumps run with
+    the loop open to grey (valves 2 and 3); in step 3 every outlet opened in
+    step 2 empties, in step 5 the shower tank again, after the filters.
     The UV lamp off once the mode has settled: it would cook dry as the lines
     empty. Only while the walkthrough is on and before the blow-outs: once
     Winterized is on (step 9) the guard would switch the water straight off.
@@ -1819,10 +1820,10 @@ water_winterize_drain_on:
 water_winterize_drain_off:
   alias: "Water • winterize: drained, the water off"
   description: >-
-    The end of step 3, "they only spit": the pumps off at once, valves 2 and
-    3 closed through their relays while the system still has power (a mode
-    change would start the pumps again), then the water off and the
-    walkthrough on to step 4.
+    The end of step 3 or 5 ("they only spit", "shower tank empty"): the pumps
+    off at once, valves 2 and 3 closed through their relays while the system
+    still has power (a mode change would start the pumps again), then the
+    water off and the walkthrough on to the next step (3 to 4, 5 to 6).
   mode: single
   max_exceeded: silent
   sequence:
@@ -1849,7 +1850,8 @@ water_winterize_drain_off:
       target:
         entity_id: input_number.water_winterize_step
       data:
-        value: 4
+        value: >-
+          {% set s = states('input_number.water_winterize_step') | int(0) %}{{ s + 1 if s in [3, 5] else s }}
 
 water_winterize_finish:
   alias: "Water • winterize: the walkthrough done"
@@ -1875,8 +1877,8 @@ water_winterize_finish:
 water_winterize_stop:
   alias: "Water • winterize: stop the walkthrough"
   description: >-
-    Leaves the walkthrough wherever it is: the water off (step 3 may have
-    left it on), the walkthrough off, the step back to 0. Winterized stays
+    Leaves the walkthrough wherever it is: the water off (steps 3 and 5 may
+    have left it on), the walkthrough off, the step back to 0. Winterized stays
     as it is.
   mode: single
   max_exceeded: silent

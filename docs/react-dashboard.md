@@ -188,10 +188,13 @@ its time in the phone's own clock.
 a "Step k of 12" badge, a progress bar, the step's title and text from `STEPS` (the same twelve as
 `docs/winterizing.md`; change both), a checklist where the step has one (ticks are local and keyed by the
 step, so they clear on a reload and at every step), then the step's own controls. Step 1 shows the live
-fresh sender (`sensor.a32_pro_fresh_water_tank_level`) and **Drained**, which asks first above 5 %. Step 3
-shows the water, both pumps and the grey sender as readings, **Water on in Flush**
-(`script.water_winterize_drain_on`) and **They only spit · water off** (`_drain_off`), both held while either
-script or a blow-out runs, and the grey dump valve with a warning when the tank reads over 80 %. Steps 9
+fresh sender (`sensor.a32_pro_fresh_water_tank_level`) and **Drained**, which asks first above 5 %. Steps 3
+and 5 show the water, both pumps and the grey sender as readings, **Water on in Flush**
+(`script.water_winterize_drain_on`) and **They only spit · water off** (step 5: **Shower tank empty · water
+off**; `_drain_off`, which moves the step on), both held while either script or a blow-out runs, and the grey
+dump valve with a warning when the tank reads over 80 %. A **Compressor** switch row
+(`switch.a32_pro_switch28_compressor`) sits above the footer on every step, on the running face and under the
+idle blow-out controls; Shop Mode greys it. Steps 9
 and 10 have the blow-out steppers and Start; while it runs the running face replaces them and Next and
 Stop winterizing are held. Step 12 has the grey dump valve and **Done** (`script.water_winterize_finish`).
 Every other step has **Next**, which sets the step. **Back** goes one step back; **Stop winterizing** asks,

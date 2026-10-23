@@ -41,6 +41,9 @@ const ELSE_PUMP_ID = 'switch.a32_pro_switch30_main_system_water_pump';
 const RECIRC_PUMP_ID = 'switch.a32_pro_switch29_shower_system_water_pump';
 const DUMP_VALVE_ID = 'switch.a32_pro_switch06_grey_water_tank_valve';
 const MODE_FLUSH_ID = 'switch.a32_pro_water_system_state_recirculating_shower_flush';
+// The air compressor (also a tile on the Home page): on this card too, so it
+// is at hand through the compressor steps and the blow-outs (asked 2026-10-22)
+const COMPRESSOR_ID = 'switch.a32_pro_switch28_compressor';
 
 const MODES = [
   { label: 'Main', entityId: 'switch.a32_pro_water_system_state_main' },
@@ -60,6 +63,8 @@ interface Step {
   text: string;
   kind: StepKind;
   checklist?: string[];
+  /** A flush step's off button; "They only spit · water off" unless set. */
+  offLabel?: string;
 }
 
 // The user's own procedure, in order, with the fresh tank first. The same
@@ -99,26 +104,32 @@ export const STEPS: Step[] = [
       'Empty them into the drain and put the housings back empty.',
   },
   {
-    title: "Else pump's fuse out",
-    kind: 'plain',
-    text: 'Pull the fuse of the else pump, the one for everything but the shower loop.',
+    title: 'Flush the shower tank again',
+    kind: 'flush',
+    text:
+      'What ran out of the housings went down the drain into the shower tank. Water on in Flush: the recirc pump ' +
+      'sends it to grey; the else pump runs dry meanwhile, which it takes for a minute or two. When the recirc ' +
+      'pump only spits, press the button below: it closes valves 2 and 3 before the water goes off. The rocker ' +
+      'leaves them open.',
+    offLabel: 'Shower tank empty · water off',
   },
   {
-    title: "Compressor on the else pump's air port",
+    title: "Else pump's fuse out, compressor on its port",
     kind: 'plain',
     text:
-      "Connect the compressor to the air port by the else pump (the top one), open the port's valve and set " +
-      'about 30 psi. Never above 40 to 50.',
+      'Pull the fuse of the else pump, the one for everything but the shower loop. Connect the compressor to ' +
+      "the air port by the else pump (the top one), open the port's valve and set about 30 psi, never above " +
+      '40 to 50. The water stays off.',
+    checklist: ['Else fuse out', 'Compressor on the else port', 'About 30 psi'],
   },
   {
     title: 'Blow out the fresh side, one outlet at a time',
     kind: 'plain',
     text:
-      'Close every outlet. Take the drinking filter out first (under the right side of the sink, drawer out): a ' +
-      'carbon block holds water. Then open one outlet at a time until only air comes, and go round again until ' +
-      'nothing comes out anywhere. The shower mixer is on the loop: it gets its air in step 9.',
+      'Close every outlet. Open one outlet at a time until only air comes, and go round again until nothing ' +
+      'comes out anywhere. The drinking filter stays in until step 11, after the blow-outs: open the spigot ' +
+      'like the others. The shower mixer is on the loop: it gets its air in step 9.',
     checklist: [
-      'Drinking filter out',
       'Outdoor shower hot',
       'Outdoor shower cold',
       'Shower fresh fill',
@@ -154,9 +165,15 @@ export const STEPS: Step[] = [
     title: 'Filters out',
     kind: 'plain',
     text:
-      "The drinking filter if it is still in; both inline filters before the pumps, emptied, which drains the " +
-      "pumps' suction side; and the three shower housings opened once more and emptied.",
-    checklist: ['Drinking filter', "Else pump's inline filter", "Recirc pump's inline filter", 'Shower housings emptied'],
+      'The drinking filter: take the top drawer next to the sink out, un-velcro the filter behind it and ' +
+      'unscrew it, with the spigot open so the line to it drains. Then both inline filters before the pumps, ' +
+      "emptied, which drains the pumps' suction side; and the three shower housings opened once more and emptied.",
+    checklist: [
+      'Drinking filter: drawer out, un-velcro, unscrew',
+      "Else pump's inline filter",
+      "Recirc pump's inline filter",
+      'Shower housings emptied',
+    ],
   },
   {
     title: "What air can't clear",
@@ -314,6 +331,7 @@ export function WinterizeCard() {
   const recircPumpOn = useEntity(RECIRC_PUMP_ID)?.state === 'on';
   const flushOn = useEntity(MODE_FLUSH_ID)?.state === 'on';
   const dumpOpen = useEntity(DUMP_VALVE_ID)?.state === 'on';
+  const compressorOn = useEntity(COMPRESSOR_ID)?.state === 'on';
   const call = useService();
 
   // The flag comes on a moment after the script starts, and the script is
@@ -427,6 +445,22 @@ export function WinterizeCard() {
   const setDump = (open: boolean) =>
     call('switch', open ? 'turn_on' : 'turn_off', undefined, { entity_id: DUMP_VALVE_ID });
 
+  const setCompressor = (on: boolean) =>
+    call('switch', on ? 'turn_on' : 'turn_off', undefined, { entity_id: COMPRESSOR_ID });
+  // On every walkthrough step, the running face and under the idle blow-out
+  // controls; Shop Mode would re-shut it (automation shop_mode_guard)
+  const compressorRow = (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0">
+        <p className="text-sm font-medium">Compressor</p>
+        <p className="text-[11px] text-muted-foreground">
+          {compressorOn ? 'Running' : 'Off'}
+          {shopModeOn && ' · Shop Mode holds it off'}
+        </p>
+      </div>
+      <Switch aria-label="Compressor" checked={compressorOn} disabled={shopModeOn} onCheckedChange={setCompressor} />
+    </div>
+  );
   const blowoutRunning = (
     <>
       <div className="flex items-center justify-center gap-2">
@@ -454,6 +488,7 @@ export function WinterizeCard() {
         <Square className="h-4 w-4" />
         Stop
       </button>
+      {compressorRow}
       <p className="text-[11px] leading-snug text-muted-foreground">
         The pumps and the UV lamp are held off. Stop, or the end of the last round, puts the valves back to Main,
         switches the water off and turns Winterized on.
@@ -482,6 +517,7 @@ export function WinterizeCard() {
           shower mixer open. It cycles Main, Recirc and Flush so the air reaches every line.
         </p>
       )}
+      {note && compressorRow}
       <button onClick={start} disabled={shopModeOn || pending} className={primaryBtn}>
         {pending ? 'Starting…' : `Start blow-out · ${totalMin} min`}
       </button>
@@ -593,7 +629,7 @@ export function WinterizeCard() {
                 {drainOnRunning ? 'Starting…' : masterOn && flushOn ? 'The water is on in Flush' : 'Water on in Flush'}
               </button>
               <button onClick={() => runScript(DRAIN_OFF_ID)} disabled={busy} className={primaryBtn}>
-                {drainOffRunning ? 'Switching off…' : 'They only spit · water off'}
+                {drainOffRunning ? 'Switching off…' : (current.offLabel ?? 'They only spit · water off')}
               </button>
             </>
           ) : current.kind === 'blowout' ? (
@@ -601,6 +637,8 @@ export function WinterizeCard() {
           ) : current.kind === 'grey' ? (
             greyDumpRow
           ) : null}
+
+          {!running && compressorRow}
 
           <div className="flex gap-2">
             <button

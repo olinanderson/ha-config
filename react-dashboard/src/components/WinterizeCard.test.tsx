@@ -34,6 +34,7 @@ const ELSE_PUMP = 'switch.a32_pro_switch30_main_system_water_pump';
 const RECIRC_PUMP = 'switch.a32_pro_switch29_shower_system_water_pump';
 const DUMP = 'switch.a32_pro_switch06_grey_water_tank_valve';
 const DRAIN_ON = 'script.water_winterize_drain_on';
+const COMPRESSOR = 'switch.a32_pro_switch28_compressor';
 
 const NOW = new Date('2026-10-22T22:00:00Z');
 const nowSec = NOW.getTime() / 1000;
@@ -58,6 +59,7 @@ function makeEntities({
   pumps = 'off',
   dump = 'off',
   drainOn = 'off',
+  compressor = 'off',
 } = {}) {
   const sw = (id: string, on: boolean) => ({ entity_id: id, state: on ? 'on' : 'off', attributes: {} });
   return {
@@ -86,6 +88,7 @@ function makeEntities({
     [ELSE_PUMP]: sw(ELSE_PUMP, pumps === 'on'),
     [RECIRC_PUMP]: sw(RECIRC_PUMP, pumps === 'on'),
     [DUMP]: sw(DUMP, dump === 'on'),
+    [COMPRESSOR]: sw(COMPRESSOR, compressor === 'on'),
   } as Record<string, any>;
 }
 
@@ -238,15 +241,18 @@ describe('WinterizeCard walkthrough', () => {
     expect(STEPS.length).toBe(12);
     expect(STEPS[0].title).toBe('Drain the fresh tank');
     expect(STEPS.map((s) => s.kind)).toEqual([
-      'drain', 'plain', 'flush', 'plain', 'plain', 'plain', 'plain', 'plain', 'blowout', 'blowout', 'plain', 'grey',
+      'drain', 'plain', 'flush', 'plain', 'flush', 'plain', 'plain', 'plain', 'blowout', 'blowout', 'plain', 'grey',
     ]);
+    // The drinking filter comes out after the blow-outs, not before them
+    expect(STEPS[6].checklist).not.toContain('Drinking filter out');
+    expect(STEPS[10].checklist?.[0]).toMatch(/^Drinking filter/);
   });
 
   it('shows the step out of twelve, its title and no lock switch', () => {
-    entityRef.current = makeEntities({ walk: 'on', step: 5 });
+    entityRef.current = makeEntities({ walk: 'on', step: 6 });
     render(<WinterizeCard />);
-    expect(screen.getByText('Step 5 of 12')).toBeTruthy();
-    expect(screen.getByText("Else pump's fuse out")).toBeTruthy();
+    expect(screen.getByText('Step 6 of 12')).toBeTruthy();
+    expect(screen.getByText("Else pump's fuse out, compressor on its port")).toBeTruthy();
     expect(screen.queryByLabelText('Winterized')).toBeNull();
   });
 
@@ -319,6 +325,41 @@ describe('WinterizeCard walkthrough', () => {
     entityRef.current = makeEntities({ walk: 'on', step: 3, grey: '40' });
     render(<WinterizeCard />);
     expect(screen.queryByText(/nearly full/)).toBeNull();
+  });
+
+  it('step 5 flushes the shower tank again through the same drain scripts, with its own off button', () => {
+    entityRef.current = makeEntities({ walk: 'on', step: 5 });
+    render(<WinterizeCard />);
+    expect(screen.getByText('Flush the shower tank again')).toBeTruthy();
+    expect(screen.queryByText('Next')).toBeNull();
+    fireEvent.click(screen.getByText('Water on in Flush'));
+    expect(callService).toHaveBeenCalledWith(...scriptCall('script.water_winterize_drain_on'));
+    fireEvent.click(screen.getByText('Shower tank empty · water off'));
+    expect(callService).toHaveBeenCalledWith(...scriptCall('script.water_winterize_drain_off'));
+  });
+
+  it('has the compressor switch on a step, once while a blow-out runs, on the idle card, greyed under Shop Mode', () => {
+    entityRef.current = makeEntities({ walk: 'on', step: 7, compressor: 'on' });
+    render(<WinterizeCard />);
+    expect(screen.getByText('Running')).toBeTruthy();
+    fireEvent.click(screen.getByLabelText('Compressor'));
+    expect(callService).toHaveBeenCalledWith('switch', 'turn_off', undefined, { entity_id: COMPRESSOR });
+
+    cleanup();
+    entityRef.current = makeEntities({ walk: 'on', step: 9, flag: 'on', script: 'on', status: 'Main · round 1 of 2' });
+    render(<WinterizeCard />);
+    expect(screen.getAllByLabelText('Compressor').length).toBe(1);
+
+    cleanup();
+    entityRef.current = makeEntities();
+    render(<WinterizeCard />);
+    fireEvent.click(screen.getByLabelText('Compressor'));
+    expect(callService).toHaveBeenCalledWith('switch', 'turn_on', undefined, { entity_id: COMPRESSOR });
+
+    cleanup();
+    entityRef.current = makeEntities({ shopMode: 'on' });
+    render(<WinterizeCard />);
+    expect((screen.getByLabelText('Compressor') as HTMLButtonElement).disabled).toBe(true);
   });
 
   it('step 9 starts the blow-out and holds Next while it runs', () => {
