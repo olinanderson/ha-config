@@ -22,6 +22,7 @@ react-dashboard/
       useEntity.ts         # useEntity, useEntityNumeric, useEntities
       useHistory.ts        # Entity history from HA REST API
       useService.ts        # useToggle, useButtonPress
+      useBangBangSetpoints.ts  # the − / + set points of a bang_bang climate (BangBangControl, TankTempsCard)
     lib/panel-host.ts      # Keeps the React tree on screen through HA's panel lifecycle
     pages/                 # Home, Power, Climate, Water, Van, Cameras, System, etc.
     components/            # BatteryCard, SolarCard, WeatherCard, Chart, etc.
@@ -209,6 +210,22 @@ progress bar for the whole run (from the script's `last_triggered` to `input_dat
 Water Controls greys out the master switch while Winterized is on and no blow-out runs. The Fresh chips
 on the Home and Van pages read **Winterized** in cyan with a snowflake while it is on, instead of the
 drained tank's 0 %. Tests: `src/components/WinterizeCard.test.tsx`.
+
+## Tank Temperatures Card
+
+`src/components/TankTempsCard.tsx` is the **Water page** card under the tank levels: one row per tank
+(Fresh, Grey, Shower) with the tank's temperature sparkline (`sensor.a32_pro_s5140_channel_38/39/40_…`)
+and its **Heat** switch (`switch.a32_pro_*_water_tank_heater_enable`, the a32's enable for the bang_bang
+thermostat `climate.a32_pro_*_water_tank_thermostat`). While a heater is on, the label next to the switch
+reads **Heating** in orange when the pads are on (`hvac_action`) and **Idle** otherwise, and the line under
+the row has the thermostat's two set points as − / + steppers: **On ≤** (`target_temp_low`, the pads come
+on below it) and **Off ≥** (`target_temp_high`, they go off above it). A tap shows at once and goes to
+`climate.set_temperature` 400 ms after the last one (`src/hooks/useBangBangSetpoints.ts`, shared with
+`BangBangControl` on the Climate page); On stays under Off and both stay inside the thermostat's
+`min_temp` / `max_temp`. While Winterized is on, or a blow-out runs, the Fresh and Shower switches are held
+off with a note that says why: `water_winterized_guard` would switch them straight back off
+(`docs/winterizing.md`). Grey is never held: the sink and the toilet still drain into it. Tests:
+`src/components/TankTempsCard.test.tsx`.
 
 ## Van Page Badges and Tank Levels
 

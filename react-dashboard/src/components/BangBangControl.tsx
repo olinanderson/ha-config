@@ -1,11 +1,11 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
-import { useService, useToggle } from '@/hooks/useService';
+import { useToggle } from '@/hooks/useService';
+import { useBangBangSetpoints } from '@/hooks/useBangBangSetpoints';
 import { cn, fmt } from '@/lib/utils';
 import { SparklineStat } from '@/components/ClickableValue';
 import { type LucideIcon } from 'lucide-react';
-import { useState, useRef, useCallback, useEffect } from 'react';
 
 interface BangBangControlProps {
   /** Entity ID of the bang_bang climate entity */
@@ -36,59 +36,17 @@ export function BangBangControl({
   color,
   isCooling = false,
 }: BangBangControlProps) {
-  const thermostat = useEntity(climateEntity);
   const enableSwitch = useEntity(enableEntity ?? '');
   const toggleEnable = useToggle(enableEntity ?? '');
   const { value: temp } = useEntityNumeric(tempEntity);
   const { value: power } = useEntityNumeric(powerEntity ?? '');
-  const callService = useService();
+  const { thermostat, targetLow, targetHigh, displayLow, displayHigh, adjustLow, adjustHigh } =
+    useBangBangSetpoints(climateEntity);
 
-  const attrs = thermostat?.attributes ?? {};
-  const targetLow = attrs.target_temp_low as number | undefined;
-  const targetHigh = attrs.target_temp_high as number | undefined;
-  const hvacMode = thermostat?.state; // 'heat', 'cool', 'off'
-  const isActive = hvacMode === 'heat' || hvacMode === 'cool';
-
-  // Local state for smooth adjustments
-  const [localLow, setLocalLow] = useState<number | null>(null);
-  const [localHigh, setLocalHigh] = useState<number | null>(null);
-  const commitTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
-
-  // Clear local override when backend catches up
-  useEffect(() => { setLocalLow(null); }, [targetLow]);
-  useEffect(() => { setLocalHigh(null); }, [targetHigh]);
-
-  const displayLow = localLow ?? targetLow ?? 0;
-  const displayHigh = localHigh ?? targetHigh ?? 0;
-
-  const commitTemps = useCallback(
-    (low: number, high: number) => {
-      if (commitTimer.current) clearTimeout(commitTimer.current);
-      commitTimer.current = setTimeout(() => {
-        callService('climate', 'set_temperature', {
-          target_temp_low: low,
-          target_temp_high: high,
-        }, { entity_id: climateEntity });
-      }, 400);
-    },
-    [callService, climateEntity],
-  );
-
-  const adjustLow = (delta: number) => {
-    const newLow = Math.round((displayLow + delta) * 10) / 10;
-    // Ensure low < high (at least 0.5 gap)
-    if (newLow >= displayHigh - 0.4) return;
-    setLocalLow(newLow);
-    commitTemps(newLow, displayHigh);
-  };
-
-  const adjustHigh = (delta: number) => {
-    const newHigh = Math.round((displayHigh + delta) * 10) / 10;
-    // Ensure high > low
-    if (newHigh <= displayLow + 0.4) return;
-    setLocalHigh(newHigh);
-    commitTemps(displayLow, newHigh);
-  };
+  // hvac_action is what the relay is doing now ('heating', 'cooling', 'idle',
+  // 'off'); the state ('heat', 'cool', 'off') is only the mode it is enabled in
+  const action = thermostat?.attributes?.hvac_action;
+  const isActive = action === 'heating' || action === 'cooling';
 
   const activeLabel = isCooling
     ? (isActive ? 'Cooling' : 'Idle')

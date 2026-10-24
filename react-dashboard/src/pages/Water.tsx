@@ -3,12 +3,13 @@ import { TankLevel } from '@/components/TankLevel';
 import { ToggleButton } from '@/components/ToggleButton';
 import { SparklineStat } from '@/components/ClickableValue';
 import { WinterizeCard, WINTERIZED_ID, BLOWOUT_RUNNING_ID } from '@/components/WinterizeCard';
+import { TankTempsCard } from '@/components/TankTempsCard';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useToggle, useService } from '@/hooks/useService';
 import { fmt, cn } from '@/lib/utils';
-import { Droplets, Waves, ShowerHead, Flame, Trash2, CircleDot, Thermometer, BatteryWarning } from 'lucide-react';
+import { Droplets, Waves, ShowerHead, Flame, Trash2, CircleDot, BatteryWarning } from 'lucide-react';
 import { usePropane, propaneProblemText } from '@/hooks/usePropane';
 
 const valves = [
@@ -207,77 +208,6 @@ function PropaneCard() {
   );
 }
 
-function TankTemps() {
-  const { value: freshTemp } = useEntityNumeric('sensor.a32_pro_s5140_channel_38_temperature_fresh_water_tank');
-  const { value: greyTemp } = useEntityNumeric('sensor.a32_pro_s5140_channel_39_temperature_grey_water_tank');
-  const { value: showerTemp } = useEntityNumeric('sensor.a32_pro_s5140_channel_40_temperature_shower_water_tank');
-
-  const freshHeater = useEntity('switch.a32_pro_fresh_water_tank_heater_enable');
-  const greyHeater = useEntity('switch.a32_pro_grey_water_tank_heater_enable');
-  const showerHeater = useEntity('switch.a32_pro_shower_water_tank_heater_enable');
-  const toggleFreshHeater = useToggle('switch.a32_pro_fresh_water_tank_heater_enable');
-  const toggleGreyHeater = useToggle('switch.a32_pro_grey_water_tank_heater_enable');
-  const toggleShowerHeater = useToggle('switch.a32_pro_shower_water_tank_heater_enable');
-
-  const freshThermostat = useEntity('climate.a32_pro_fresh_water_tank_thermostat');
-  const greyThermostat = useEntity('climate.a32_pro_grey_water_tank_thermostat');
-  const showerThermostat = useEntity('climate.a32_pro_shower_water_tank_thermostat');
-
-  const tanks = [
-    { name: 'Fresh', temp: freshTemp, entityId: 'sensor.a32_pro_s5140_channel_38_temperature_fresh_water_tank', heater: freshHeater, toggleHeater: toggleFreshHeater, thermostat: freshThermostat },
-    { name: 'Grey', temp: greyTemp, entityId: 'sensor.a32_pro_s5140_channel_39_temperature_grey_water_tank', heater: greyHeater, toggleHeater: toggleGreyHeater, thermostat: greyThermostat },
-    { name: 'Shower', temp: showerTemp, entityId: 'sensor.a32_pro_s5140_channel_40_temperature_shower_water_tank', heater: showerHeater, toggleHeater: toggleShowerHeater, thermostat: showerThermostat },
-  ];
-
-  return (
-    <Card>
-      <CardHeader className="pb-2">
-        <CardTitle className="flex items-center gap-2 text-base">
-          <Thermometer className="h-4 w-4" />
-          Tank Temperatures
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="space-y-2">
-        {tanks.map((t) => {
-          const targetHigh = t.thermostat?.attributes?.target_temp_high;
-          const isHeating = t.thermostat?.state === 'heat';
-          return (
-            <div key={t.name} className="space-y-0.5">
-              <div className="flex items-center justify-between">
-                <SparklineStat
-                  entityId={t.entityId}
-                  label={t.name}
-                  value={fmt(t.temp, 1)}
-                  unit="°C"
-                  color={t.temp != null && t.temp < 3 ? '#ef4444' : '#3b82f6'}
-                  className="flex-1"
-                />
-                <div className="flex items-center gap-1.5 ml-2 shrink-0">
-                  <span className="text-[10px] text-muted-foreground">Heat</span>
-                  <Switch
-                    checked={t.heater?.state === 'on'}
-                    onCheckedChange={t.toggleHeater}
-                  />
-                </div>
-              </div>
-              {t.heater?.state === 'on' && targetHigh != null && (
-                <div className="flex items-center gap-1 ml-1 text-[10px]">
-                  <span className={cn(
-                    'font-medium',
-                    isHeating ? 'text-orange-400' : 'text-muted-foreground',
-                  )}>
-                    {isHeating ? 'Heating' : 'Idle'} → {targetHigh}°C
-                  </span>
-                </div>
-              )}
-            </div>
-          );
-        })}
-      </CardContent>
-    </Card>
-  );
-}
-
 function ModeButtons() {
   return (
     <Card>
@@ -321,7 +251,7 @@ export default function Water() {
             invertWarning
             icon={<Trash2 className="h-4 w-4 text-orange-500" />}
           />
-          <TankTemps />
+          <TankTempsCard />
           <ModeButtons />
         </div>
 

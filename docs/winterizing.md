@@ -218,8 +218,10 @@ While `input_boolean.water_winterized` is on:
 - The 1 Hz snapshot that Power Saving restores leaves the master out.
 - Voice: "turn on the water (system)" answers that it is winterized
   (`WaterSystemOn` sentence), and Claude's prompt says the same.
-- The Water page greys out the master switch, and the Fresh chips on the Home
-  and Van pages read **Winterized** instead of an empty tank.
+- The Water page greys out the master switch and, on the Tank Temperatures
+  card, the Fresh and Shower heat switches, each with a note that says why. The
+  Fresh chips on the Home and Van pages read **Winterized** instead of an empty
+  tank.
 
 Left alone on purpose:
 
