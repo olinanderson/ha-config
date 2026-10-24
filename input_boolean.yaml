@@ -177,8 +177,8 @@ starlink_duty_cycle:
 # ─── Water winterized (docs/winterizing.md) ───
 # The lock: while on, the water system stays off for the winter.
 # water_winterized_guard switches back off anything that turns on (master,
-# pumps, valves, UV lamp, the fresh and shower tank heaters), whoever turned
-# it on: a routine, the dashboard, voice or the DI27 rocker. Bedtime, Shower
+# pumps, valves, UV lamp; not the tank heaters), whoever turned it on: a
+# routine, the dashboard, voice or the DI27 rocker. Bedtime, Shower
 # Mode and the morning restore skip the water while it is on. Turned on by
 # hand, or by script.water_blowout as it ends. No `initial:`: it must survive
 # restarts.

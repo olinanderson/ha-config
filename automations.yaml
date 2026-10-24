@@ -3270,8 +3270,9 @@
 # Whatever turns on while Winterized is on goes straight back off, whoever
 # turned it on: a routine, the dashboard, voice, the DI27 rocker, the a32
 # coming back from a reboot. During a blow-out the master and the valves
-# belong to the blow-out; the pumps, the UV lamp (it would cook dry) and the
-# tank heaters are held off.
+# belong to the blow-out; the pumps and the UV lamp (it would cook dry) are
+# held off. The tank heaters and their pads are not the lock's: they stay
+# usable all winter (the user's call, 2026-10-23).
 - id: water_winterized_guard
   alias: "Water winterized • switch back off whatever turns on"
   # queued: one mode change turns several relays on within a second
@@ -3292,10 +3293,6 @@
         - switch.a32_pro_switch29_shower_system_water_pump
         - switch.a32_pro_switch30_main_system_water_pump
         - switch.a32_pro_switch14_uv_filter
-        - switch.a32_pro_fresh_water_tank_heater_enable
-        - switch.a32_pro_shower_water_tank_heater_enable
-        - switch.a32_pro_switch17_silicone_heating_pads_shower_water_tank_x2
-        - switch.a32_pro_switch18_silicone_heating_pads_fresh_water_tank_x4
       to: "on"
   variables:
     blowout_owns:

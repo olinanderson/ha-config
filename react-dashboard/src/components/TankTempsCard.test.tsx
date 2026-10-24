@@ -111,29 +111,18 @@ describe('TankTempsCard', () => {
     expect(callService).toHaveBeenLastCalledWith(...heaterCall(FRESH_H, true));
   });
 
-  it('holds the Fresh and Shower heaters while Winterized is on, and says why', () => {
-    entityRef.current = makeEntities({ locked: 'on' });
-    render(<TankTempsCard />);
-    expect(button('Fresh tank heater').disabled).toBe(true);
-    expect(button('Shower tank heater').disabled).toBe(true);
-    expect(button('Grey tank heater').disabled).toBe(false);
-    expect(screen.getByText(/Winterized: the fresh and shower tanks are drained/)).toBeTruthy();
-    fireEvent.click(button('Fresh tank heater'));
-    expect(callService).not.toHaveBeenCalled();
-  });
-
-  it('holds them during a blow-out too', () => {
-    entityRef.current = makeEntities({ flag: 'on' });
-    render(<TankTempsCard />);
-    expect(button('Shower tank heater').disabled).toBe(true);
-    expect(button('Grey tank heater').disabled).toBe(false);
-    expect(screen.getByText(/Blow-out running/)).toBeTruthy();
-  });
-
-  it('leaves everything free when neither is on', () => {
-    render(<TankTempsCard />);
-    expect(screen.getAllByRole('switch').every((s) => !(s as HTMLButtonElement).disabled)).toBe(true);
-    expect(screen.queryByText(/Winterized/)).toBeNull();
+  it('leaves every heater live while Winterized is on or a blow-out runs', () => {
+    // The heaters are not the lock's (docs/winterizing.md, the user's call of 2026-10-23)
+    for (const flags of [{ locked: 'on' }, { flag: 'on' }]) {
+      cleanup();
+      callService.mockClear();
+      entityRef.current = makeEntities(flags);
+      render(<TankTempsCard />);
+      expect(screen.getAllByRole('switch').every((s) => !(s as HTMLButtonElement).disabled)).toBe(true);
+      expect(screen.queryByText(/Winterized|Blow-out/)).toBeNull();
+      fireEvent.click(button('Fresh tank heater'));
+      expect(callService).toHaveBeenLastCalledWith(...heaterCall(FRESH_H, true));
+    }
   });
 
   it('shows the set points of a heater that is on, and steps them', () => {

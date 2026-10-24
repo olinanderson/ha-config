@@ -222,10 +222,8 @@ the row has the thermostat's two set points as − / + steppers: **On ≤** (`ta
 on below it) and **Off ≥** (`target_temp_high`, they go off above it). A tap shows at once and goes to
 `climate.set_temperature` 400 ms after the last one (`src/hooks/useBangBangSetpoints.ts`, shared with
 `BangBangControl` on the Climate page); On stays under Off and both stay inside the thermostat's
-`min_temp` / `max_temp`. While Winterized is on, or a blow-out runs, the Fresh and Shower switches are held
-off with a note that says why: `water_winterized_guard` would switch them straight back off
-(`docs/winterizing.md`). Grey is never held: the sink and the toilet still drain into it. Tests:
-`src/components/TankTempsCard.test.tsx`.
+`min_temp` / `max_temp`. The heaters are not part of the Winterized lock: the switches stay live all winter
+(`docs/winterizing.md`, the user's call of 2026-10-23). Tests: `src/components/TankTempsCard.test.tsx`.
 
 ## Van Page Badges and Tank Levels
 

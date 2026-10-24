@@ -206,9 +206,9 @@ only while Winterized is off and no blow-out runs):
 While `input_boolean.water_winterized` is on:
 
 - `water_winterized_guard` switches straight back off whatever turns on: the
-  master, both pumps, the valves, switch10 to 13, the UV lamp, the fresh and
-  shower tank heaters and their pads. That covers routines, the dashboard,
-  voice, the DI27 rocker and the a32 coming back from a reboot.
+  master, both pumps, the valves, switch10 to 13 and the UV lamp. That covers
+  routines, the dashboard, voice, the DI27 rocker and the a32 coming back from
+  a reboot.
 - `water_winterized_on` switches all of that off at once when it is turned on
   by hand (`script.water_winterize_shutdown`).
 - `water_winterized_on_start` applies it again after an HA restart, once the
@@ -218,15 +218,17 @@ While `input_boolean.water_winterized` is on:
 - The 1 Hz snapshot that Power Saving restores leaves the master out.
 - Voice: "turn on the water (system)" answers that it is winterized
   (`WaterSystemOn` sentence), and Claude's prompt says the same.
-- The Water page greys out the master switch and, on the Tank Temperatures
-  card, the Fresh and Shower heat switches, each with a note that says why. The
-  Fresh chips on the Home and Van pages read **Winterized** instead of an empty
-  tank.
+- The Water page greys out the master switch, and the Fresh chips on the Home
+  and Van pages read **Winterized** instead of an empty tank.
 
 Left alone on purpose:
 
-- The **grey tank heater** and the **grey dump valve**: the sink and the
-  toilet still drain into the grey tank.
+- All three **tank heaters** and their pads, on or off as they were: they
+  stay usable all winter, from the Tank Temperatures card as always (the
+  user's call, 2026-10-23; until then the lock held the fresh and shower ones
+  off as drained).
+- The **grey dump valve**: the sink and the toilet still drain into the grey
+  tank.
 - The **hydronic heater** and **Hot Water Mode**, which is also the Heater
   card's manual burner switch. The burner heats the van.
 
@@ -241,8 +243,8 @@ or as steps 9 and 10 of the walkthrough):
 - **Settings**: `input_number.water_blowout_minutes` (1 to 10 per mode) and
   `input_number.water_blowout_rounds` (1 to 5), set to 2 and 2.
 - **While it runs** `input_boolean.water_blowout_running` is on. The guard
-  leaves the master and the valves to the blow-out and holds the pumps, the UV
-  lamp and the tank heaters off. Power Saving, Sleep Mode and Bedtime leave
+  leaves the master and the valves to the blow-out and holds the pumps and the
+  UV lamp off. Power Saving, Sleep Mode and Bedtime leave
   the water on, so the run isn't cut short.
 - **Status**: `input_text.water_blowout_status` ("Recirc · round 1 of 2"),
   `input_datetime.water_blowout_step_ends` and `input_datetime.water_blowout_ends`
@@ -273,4 +275,3 @@ That's why the finish waits 12 s after setting Main.
    that ended normally; press Main if it shows another. Open each outlet
    until the water runs without air, then run Recirc and Flush for a minute
    each.
-6. Turn the fresh and shower tank heaters back on if they are wanted.

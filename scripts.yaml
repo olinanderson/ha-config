@@ -1542,12 +1542,11 @@ voice_light_warmth:
 water_winterize_shutdown:
   alias: "Water • winterized: all off"
   description: >-
-    Everything that moves or heats water off for the winter: the master, both
-    pumps, the valves (Main, their resting position), the UV lamp, the panel
-    LEDs, and the fresh and shower tank heaters, whose tanks are empty. The
-    grey tank heater and the hydronic heater are left alone: the sink and the
-    toilet still drain into the grey tank, and the burner heats the van
-    (Hot Water Mode is also the Heater card's manual burner switch).
+    Everything that moves water off for the winter: the master, both pumps,
+    the valves (Main, their resting position), the UV lamp and the panel LEDs.
+    The tank heaters and the hydronic heater are left alone: the heaters stay
+    usable all winter (the user's call, 2026-10-23), and the burner heats the
+    van (Hot Water Mode is also the Heater card's manual burner switch).
   mode: queued
   max: 5
   sequence:
@@ -1568,10 +1567,6 @@ water_winterize_shutdown:
           - switch.a32_pro_switch02_water_system_valve_2
           - switch.a32_pro_switch03_water_system_valve_3
           - switch.a32_pro_switch14_uv_filter
-          - switch.a32_pro_fresh_water_tank_heater_enable
-          - switch.a32_pro_shower_water_tank_heater_enable
-          - switch.a32_pro_switch17_silicone_heating_pads_shower_water_tank_x2
-          - switch.a32_pro_switch18_silicone_heating_pads_fresh_water_tank_x4
       continue_on_error: true
 
 water_blowout:
@@ -1621,16 +1616,14 @@ water_blowout:
         entity_id: input_datetime.water_blowout_ends
       data:
         timestamp: "{{ as_timestamp(now()) + n_rounds * 3 * step_minutes * 60 + 12 }}"
-    # Pumps, UV lamp and tank heaters off before the water comes on. Every
-    # mode change switches the pumps on again; the guard switches them off.
+    # Pumps and the UV lamp off before the water comes on. Every mode change
+    # switches the pumps on again; the guard switches them off.
     - action: switch.turn_off
       target:
         entity_id:
           - switch.a32_pro_switch29_shower_system_water_pump
           - switch.a32_pro_switch30_main_system_water_pump
           - switch.a32_pro_switch14_uv_filter
-          - switch.a32_pro_fresh_water_tank_heater_enable
-          - switch.a32_pro_shower_water_tank_heater_enable
       continue_on_error: true
     # The modes only move the valves while the master is on
     - action: switch.turn_on

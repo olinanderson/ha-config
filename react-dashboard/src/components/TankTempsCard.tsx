@@ -1,7 +1,6 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Switch } from '@/components/ui/switch';
 import { SparklineStat } from '@/components/ClickableValue';
-import { WINTERIZED_ID, BLOWOUT_RUNNING_ID } from '@/components/WinterizeCard';
 import { useEntity, useEntityNumeric } from '@/hooks/useEntity';
 import { useService } from '@/hooks/useService';
 import { useBangBangSetpoints } from '@/hooks/useBangBangSetpoints';
@@ -17,21 +16,18 @@ const TANKS = [
     sensor: 'sensor.a32_pro_s5140_channel_38_temperature_fresh_water_tank',
     heater: 'switch.a32_pro_fresh_water_tank_heater_enable',
     thermostat: 'climate.a32_pro_fresh_water_tank_thermostat',
-    drainedForWinter: true,
   },
   {
     name: 'Grey',
     sensor: 'sensor.a32_pro_s5140_channel_39_temperature_grey_water_tank',
     heater: 'switch.a32_pro_grey_water_tank_heater_enable',
     thermostat: 'climate.a32_pro_grey_water_tank_thermostat',
-    drainedForWinter: false,
   },
   {
     name: 'Shower',
     sensor: 'sensor.a32_pro_s5140_channel_40_temperature_shower_water_tank',
     heater: 'switch.a32_pro_shower_water_tank_heater_enable',
     thermostat: 'climate.a32_pro_shower_water_tank_thermostat',
-    drainedForWinter: true,
   },
 ] as const;
 
@@ -60,7 +56,7 @@ function Setpoint({
   );
 }
 
-function TankRow({ tank, held }: { tank: Tank; held: boolean }) {
+function TankRow({ tank }: { tank: Tank }) {
   const { value: temp } = useEntityNumeric(tank.sensor);
   const heater = useEntity(tank.heater);
   const callService = useService();
@@ -93,12 +89,7 @@ function TankRow({ tank, held }: { tank: Tank; held: boolean }) {
           >
             {on ? (heating ? 'Heating' : 'Idle') : 'Heat'}
           </span>
-          <Switch
-            checked={on}
-            onCheckedChange={setHeater}
-            disabled={held}
-            aria-label={`${tank.name} tank heater`}
-          />
+          <Switch checked={on} onCheckedChange={setHeater} aria-label={`${tank.name} tank heater`} />
         </div>
       </div>
       {on && targetLow != null && targetHigh != null && (
@@ -115,17 +106,10 @@ function TankRow({ tank, held }: { tank: Tank; held: boolean }) {
  * The Water page's Tank Temperatures card: each tank's temperature, its
  * heater's switch and, while the heater is on, the thermostat's set points.
  *
- * While Winterized is on, or a blow-out runs, water_winterized_guard switches
- * the fresh and shower heaters straight back off (docs/winterizing.md): their
- * tanks are drained. So their switches are held here, with a note that says
- * why. The grey tank still takes the sink and the toilet; its heater is left
- * alone.
+ * The heaters are not part of the Winterized lock (docs/winterizing.md): the
+ * switches stay live all winter, the user's call of 2026-10-23.
  */
 export function TankTempsCard() {
-  const winterized = useEntity(WINTERIZED_ID)?.state === 'on';
-  const blowout = useEntity(BLOWOUT_RUNNING_ID)?.state === 'on';
-  const held = winterized || blowout;
-
   return (
     <Card>
       <CardHeader className="pb-2">
@@ -136,15 +120,8 @@ export function TankTempsCard() {
       </CardHeader>
       <CardContent className="space-y-2">
         {TANKS.map((t) => (
-          <TankRow key={t.name} tank={t} held={held && t.drainedForWinter} />
+          <TankRow key={t.name} tank={t} />
         ))}
-        {held && (
-          <p className="text-[11px] leading-snug text-cyan-400">
-            {winterized
-              ? 'Winterized: the fresh and shower tanks are drained, so their heaters stay off until Winterized is turned off on the Winterize card.'
-              : 'Blow-out running: the fresh and shower tank heaters stay off until it ends.'}
-          </p>
-        )}
       </CardContent>
     </Card>
   );
